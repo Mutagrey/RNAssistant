@@ -2,6 +2,7 @@
   "use strict";
   // A transient presentation only: callers own validation, commands and their outcomes.
   var active = null, sequence = 0;
+  function overlayChanged() { document.dispatchEvent(new CustomEvent("rnassistant:overlay-change")); }
   function open(options) {
     if (active) active.close(false);
     var origin = document.activeElement, disposed = false, pending = false, failed = false, composing = false;
@@ -61,6 +62,7 @@
       disposed = true; events.abort(); observer.disconnect();
       // Removal exits the top layer without the native close() restoring an obsolete target.
       root.remove(); if (active === handle) active = null;
+      overlayChanged();
       if (options.onClose) options.onClose();
       if (restoreFocus !== false) {
         var target = options.restoreFocus ? options.restoreFocus() : origin;
@@ -118,7 +120,7 @@
       on(input, "input", function () { if (!failed) { input.removeAttribute("aria-invalid"); message("", false); } });
     }
     var observer = new ResizeObserver(fit), handle = { close: close };
-    active = handle; document.body.appendChild(root); root.showModal(); fit();
+    active = handle; document.body.appendChild(root); root.showModal(); fit(); overlayChanged();
     observer.observe(root); observer.observe(document.documentElement);
     on(window, "resize", fit); on(window, "pagehide", function () { close(false); });
     if (input) { input.focus(); input.select(); } else cancel.focus();

@@ -17,28 +17,45 @@
     var completion = document.createElement("div"); completion.className = "preview-surface-completion"; completion.hidden = true;
     completion.setAttribute("role", "listbox"); completion.id = "browser-completion-" + crypto.randomUUID();
     address.setAttribute("role", "combobox"); address.setAttribute("aria-autocomplete", "list"); address.setAttribute("aria-controls", completion.id);
-    var suggestions = [], selectedSuggestion = -1, completionGeneration = 0;
-    function closeCompletion() { completionGeneration++; suggestions = []; selectedSuggestion = -1; completion.hidden = true; completion.replaceChildren();
-      address.setAttribute("aria-expanded", "false"); address.removeAttribute("aria-activedescendant"); }
+    var suggestions = [], selectedSuggestion = -1, completionGeneration = 0, suggestTimer = 0;
+    function overlayChanged() { document.dispatchEvent(new CustomEvent("rnassistant:overlay-change")); }
+    function closeCompletion() { if (suggestTimer) { clearTimeout(suggestTimer); suggestTimer = 0; }
+      completionGeneration++; suggestions = []; selectedSuggestion = -1;
+      var changed = !completion.hidden; completion.hidden = true; completion.replaceChildren();
+      address.setAttribute("aria-expanded", "false"); address.removeAttribute("aria-activedescendant"); if (changed) overlayChanged(); }
     function selectSuggestion(index) { selectedSuggestion = index;
       Array.from(completion.children).forEach(function (item, i) { item.setAttribute("aria-selected", String(index === i)); });
       if (completion.children[index]) address.setAttribute("aria-activedescendant", completion.children[index].id); }
-    address.oninput = async function () {
+    function showCompletion(items, epoch, owner) {
+      if (epoch !== completionGeneration || owner !== presentation || document.activeElement !== address || !completion.isConnected) return;
+      suggestions = (items || []).slice(0, 20);
+      completion.replaceChildren();
+      suggestions.forEach(function (item, index) {
+        var option = document.createElement("button"); option.type = "button"; option.setAttribute("role", "option"); option.id = completion.id + "-" + index;
+        option.textContent = (item.title || item.displayLocator) + " · " + item.displayLocator; option.title = item.sourceLabel || "";
+        option.onpointerdown = function (event) { event.preventDefault(); };
+        option.onclick = function () { var locator = item.displayLocator; closeCompletion(); invoke(function () { return owner.navigate(locator); }); };
+        completion.appendChild(option);
+      });
+      var changed = completion.hidden !== !suggestions.length; completion.hidden = !suggestions.length;
+      address.setAttribute("aria-expanded", String(!!suggestions.length)); if (changed) overlayChanged();
+    }
+    function requestSuggestions(prefix, immediate) {
       closeCompletion(); var epoch = completionGeneration, owner = presentation;
       if (!owner || !owner.suggest) return;
-      try {
-        var result = await owner.suggest(address.value, epoch);
-        if (epoch !== completionGeneration || owner !== presentation || document.activeElement !== address || result.requestGeneration !== epoch) return;
-        suggestions = (result.items || []).slice(0, 20);
-        suggestions.forEach(function (item, index) {
-          var option = document.createElement("button"); option.type = "button"; option.setAttribute("role", "option"); option.id = completion.id + "-" + index;
-          option.textContent = (item.title || item.displayLocator) + " · " + item.displayLocator; option.title = item.sourceLabel || "";
-          option.onpointerdown = function (event) { event.preventDefault(); };
-          option.onclick = function () { var locator = item.displayLocator; closeCompletion(); invoke(function () { return owner.navigate(locator); }); };
-          completion.appendChild(option);
-        });
-        completion.hidden = !suggestions.length; address.setAttribute("aria-expanded", String(!!suggestions.length));
-      } catch (error) { if (epoch === completionGeneration) closeCompletion(); }
+      var local = typeof owner.localSuggest === "function" ? owner.localSuggest(prefix) : [];
+      if (local && local.length) showCompletion(local, epoch, owner);
+      function query() {
+        suggestTimer = 0;
+        owner.suggest(prefix, epoch).then(function (result) {
+          if (!result || result.requestGeneration !== epoch) return;
+          showCompletion(result.items || [], epoch, owner);
+        }, function () {});
+      }
+      if (immediate) query(); else suggestTimer = setTimeout(query, 120);
+    }
+    address.oninput = function () {
+      requestSuggestions(address.value, false);
     };
     address.onblur = function () { closeCompletion(); address.value = currentAddress(); };
     function iconButton(name, label) {
@@ -83,11 +100,13 @@
     function leaveWindow() { expand(false); }
     function expand(value) {
       if (!value) closeCompletion();
+      var wasFocused = toolbar.classList.contains("is-address-focused");
       toolbar.classList.toggle("is-address-focused", value); tools.setAttribute("aria-expanded", String(value));
       document.removeEventListener("pointerdown", outsidePointer, true); window.removeEventListener("blur", leaveWindow);
       if (value) { document.addEventListener("pointerdown", outsidePointer, true); window.addEventListener("blur", leaveWindow); }
+      if (wasFocused !== !!value) overlayChanged();
     }
-    address.onfocus = function () { expand(true); address.select(); };
+    address.onfocus = function () { expand(true); address.select(); requestSuggestions("", true); };
     toolbar.addEventListener("focusout", function (event) { if (!toolbar.contains(event.relatedTarget) && !inOwnMenu(event.relatedTarget)) expand(false); });
     toolbar.addEventListener("keydown", function (event) {
       if (event.target === address && (event.key === "ArrowDown" || event.key === "ArrowUp") && suggestions.length) {
@@ -137,7 +156,7 @@
     }
     var modes = null, modeButtons = {};
     function setDocument(value, onModeChange) {
-      closeCompletion();
+      if (document.activeElement !== address || presentation && value.address !== presentation.address) closeCompletion();
       presentation = value; modeChange = onModeChange;
       if (value.supportedModes && value.supportedModes.length && !modes) {
         modes = document.createElement("div"); modes.className = "view-switch"; modes.setAttribute("role", "group"); modes.setAttribute("aria-label", "Представление страницы");

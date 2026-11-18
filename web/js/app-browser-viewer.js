@@ -23,16 +23,15 @@
       queued = 0;
       if (disposed) return;
       var rect = anchor.getBoundingClientRect(), shown = active && anchor.isConnected && rect.width > 0 && rect.height > 0 && !anchor.closest("[inert]");
-      surface.hidden = !shown; surface.inert = !shown;
-      if (!shown) { last = ""; if (options.onLayout) options.onLayout(); return; }
+      var visibilityChanged = surface.hidden !== !shown; surface.hidden = !shown; surface.inert = !shown;
+      if (!shown) { var restore = visibilityChanged || !!last; last = ""; if (restore && options.onLayout) options.onLayout(); return; }
       var box = container.getBoundingClientRect(), scale = box.width / container.clientWidth || 1;
       var values = [(rect.left - box.left) / scale, (rect.top - box.top) / scale, rect.width / scale, rect.height / scale];
       var key = values.map(function (value) { return value.toFixed(2); }).join("|");
       if (key !== last) {
         ["left", "top", "width", "height"].forEach(function (name, i) { surface.style[name] = values[i] + "px"; });
-        last = key;
+        last = key; if (options.onLayout) options.onLayout();
       }
-      if (options.onLayout) options.onLayout();
     }
     function layout() { if (!disposed && !queued) queued = requestAnimationFrame(place); }
     var observer = new ResizeObserver(layout); observer.observe(anchor);
@@ -40,7 +39,12 @@
       if (!event.persisted) { cancelAnimationFrame(queued); observer.disconnect(); listeners.abort(); }
     }, { signal: listeners.signal });
     window.addEventListener("resize", layout, { signal: listeners.signal });
-    document.addEventListener("scroll", layout, { capture: true, signal: listeners.signal });
+    document.addEventListener("scroll", function (event) {
+      var target = event.target;
+      // A chat/tree scroll does not move this placeholder. Only follow scrolling
+      // ancestors that can actually change the anchor bounds.
+      if (target === document || target === document.documentElement || target === window || target.contains && target.contains(anchor)) layout();
+    }, { capture: true, signal: listeners.signal });
     anchor.addEventListener("keydown", function (event) {
       if (event.key !== "Enter" || !active) return;
       if (options.onEnter && options.onEnter()) { event.preventDefault(); return; }

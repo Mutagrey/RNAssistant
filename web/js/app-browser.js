@@ -1,7 +1,35 @@
 (function () {
   "use strict";
   var live = new Map(), versionViews = new Map(), available = false, discussionIntent = 0;
+  var overlayLayouts = new Set(), overlayFrame = 0, overlayObserver = null;
   var unavailable = "Native Browser недоступен. Исходники и версии доступны; подробности — в состоянии страницы.";
+  function overlayChanged() {
+    if (!overlayLayouts.size || overlayFrame) return;
+    overlayFrame = requestAnimationFrame(function () {
+      overlayFrame = 0;
+      overlayLayouts.forEach(function (layout) { try { layout(true); } catch (_) {} });
+    });
+  }
+  // Shell and Dock create transient overlays in body. Watch only direct children;
+  // chat/tree mutations no longer wake every open Browser tab.
+  function watchOverlayLayout(layout) {
+    overlayLayouts.add(layout);
+    if (!overlayObserver) {
+      overlayObserver = new MutationObserver(function (changes) {
+        var selector = 'dialog, [aria-modal="true"], .rna-action-menu-popup';
+        if (changes.some(function (change) {
+          return Array.prototype.some.call(change.addedNodes, function (node) { return node.nodeType === 1 && node.matches(selector); }) ||
+            Array.prototype.some.call(change.removedNodes, function (node) { return node.nodeType === 1 && node.matches(selector); });
+        })) overlayChanged();
+      });
+      overlayObserver.observe(document.body, { childList: true });
+    }
+    return function () {
+      overlayLayouts.delete(layout);
+      if (!overlayLayouts.size && overlayObserver) { overlayObserver.disconnect(); overlayObserver = null; }
+    };
+  }
+  document.addEventListener("rnassistant:overlay-change", overlayChanged);
   function id() { return "browser-" + crypto.randomUUID(); }
   function key(target) { return "browser:" + target.browserTabId; }
   function accepts(target) {
@@ -166,7 +194,10 @@
         first.right > second.left && first.top < second.bottom && first.bottom > second.top;
     }
     function nativeOverlayOpen(rect) {
-      var selector = 'dialog[open], [aria-modal="true"], .rna-action-menu-popup, .preview-surface-completion:not([hidden]), .visual-annotation-editor';
+      // Focusing the address means the Shell dropdown owns this area. The native
+      // child HWND must yield before suggestions are painted, as in the old surface.
+      if (root.querySelector('.preview-surface-toolbar.is-address-focused, .preview-surface-completion:not([hidden]), .visual-annotation-editor')) return true;
+      var selector = 'dialog[open], [aria-modal="true"], .rna-action-menu-popup';
       return Array.prototype.some.call(document.querySelectorAll(selector), function (node) {
         return overlaps(node.getBoundingClientRect(), rect);
       });
@@ -189,24 +220,14 @@
         var bounds = nativeBounds(), key = JSON.stringify(bounds);
         if (key === placementKey && !placementForce) return;
         placementForce = false; placementKey = key;
-        command("Layout", { bounds: bounds }).catch(function (error) {
+        command("Layout", { bounds: bounds }, true).catch(function (error) {
           if (placementKey === key) placementKey = "";
           fail(error);
         });
       });
     }
     var nativeSize = new ResizeObserver(function () { layoutNative(); }); nativeSize.observe(viewport);
-    var overlayListeners = new AbortController();
-    document.addEventListener("rnassistant:overlay-change", function () { layoutNative(true); }, { signal: overlayListeners.signal });
-    var overlays = new MutationObserver(function (changes) {
-      var selector = 'dialog, [aria-modal], .rna-action-menu-popup, .preview-surface-completion, .visual-annotation-editor';
-      if (changes.some(function (change) {
-        if (change.type === "attributes") return change.target.matches(selector);
-        return Array.from(change.addedNodes).concat(Array.from(change.removedNodes)).some(function (node) {
-          return node.nodeType === 1 && (node.matches(selector) || !!node.querySelector(selector));
-        });
-      })) layoutNative(true);
-    }); overlays.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["open", "aria-modal", "hidden", "class"] });
+    var stopOverlayWatch = watchOverlayLayout(layoutNative);
     var comparison = null;
     var pageFind = RNAssistantBrowserFind.create({ root: shell.workspace, content: content, command: command, layout: layoutNative,
       isCurrent: function () { return active && !disposed && selectedMode === 'preview'; },
@@ -232,7 +253,7 @@
         if (!exact()) throw new Error("Страница снимка изменилась.");
         // The menu/picker hid the native HWND; acknowledge its visible placement before capture.
         surface.collapse();
-        await command("Layout", { bounds: nativeBounds() });
+        await command("Layout", { bounds: nativeBounds() }, true);
         if (!exact()) throw new Error("Страница снимка изменилась.");
         return send("captureBrowserScreenshot", request);
       } });
@@ -381,11 +402,15 @@
       if (definitionDialog) definitionDialog.close(false);
       pending.forEach(function (task) { if (task.requestId) cancelBridgeRequest(task.requestId).catch(function () {}); }); pending.clear();
     }
+    function localSuggestions(prefix) {
+      var scope = current && current.ownerScope || target.ownerScope;
+      return RNAssistantDockWorkspace.recentNavigation(scope, prefix, 8);
+    }
     async function suggestions(prefix, epoch) {
       var scope = current && current.ownerScope || target.ownerScope;
       var result = await request("queryNavigationSuggestions", { ownerScope: scope, prefix: prefix, requestGeneration: epoch, limit: 12 });
       var seen = new Set();
-      return { requestGeneration: result.requestGeneration, items: (result.items || []).concat(RNAssistantDockWorkspace.recentNavigation(scope, prefix, 8))
+      return { requestGeneration: result.requestGeneration, items: (result.items || []).concat(localSuggestions(prefix))
         .filter(function (entry) { if (!RNAssistantBrowserTarget.preferenceLocator(entry.displayLocator) || seen.has(entry.displayLocator)) return false; seen.add(entry.displayLocator); return true; }).slice(0, 20) };
     }
     function createHome(parent) {
@@ -427,7 +452,7 @@
         back: function () { return command("Back"); }, forward: function () { return command("Forward"); },
         home: function () { return command("Home"); }, stop: function () { stopReads(); return command("Stop"); },
         navigate: function (locator) { return command("Navigate", { locator: locator }); },
-        suggest: suggestions
+        localSuggest: localSuggestions, suggest: suggestions
       }, selectMode);
     }
     function selectMode(mode) { if (mode !== "preview") { annotationHost.deactivate(); pageFind.deactivate(); } selectedMode = mode; updateSearchAdapter(); presentation(); render(); if (current) { annotationHost.update(current); pageFind.update(current); } layoutNative(); }
@@ -513,13 +538,15 @@
       if (value.status === "Unavailable" && targetGeneration === value.documentGeneration && selectedMode === "preview") selectedMode = "source";
       pageFind.update(value); surface.waiting(label(), value.message || " "); presentation(); render();
     }
-    async function command(action, extra) {
+    async function command(action, extra, silent) {
       if (!session) throw new Error("Страница ещё не открыта.");
       var observedAuthority = authorityRevision;
       var runtimeAction = action === "Navigate" ? "NavigateUser" : action;
       var binding = session, value = await send("browserCommand", Object.assign({ action: runtimeAction, browserTabId: target.browserTabId,
         sessionId: binding, operationId: operationId }, extra || {}));
-      if (!disposed && binding === session) { apply(value);
+      var changed = !current || !value || value.status !== current.status || value.documentGeneration !== current.documentGeneration ||
+        value.url !== current.url || value.attached !== current.attached;
+      if (!disposed && binding === session && (!silent || changed)) { apply(value);
         if (["Navigate", "Back", "Forward", "Reload", "Home"].includes(action)) {
           if (observedAuthority === authorityRevision) sourceInvalidated = false;
           else if (sourceInvalidated) refreshSource();
@@ -571,7 +598,7 @@
       route: function () { return { view: "browser", browserTabId: target.browserTabId, ownerScope: current && current.ownerScope || target.ownerScope, chatBound: current ? current.chatBound : target.chatBound, locator: current && current.url || target.locator, title: current && current.title || target.title }; },
       activate: function () { if (disposed || active) return; active = true; renderer.activate(); if (session) { if (targetInvalidated) reloadInvalidated(); else { render(); if (current) annotationHost.update(current); if (sourceInvalidated) refreshSource(); else versionControls.refresh(); } } else open().catch(fail); },
       deactivate: function () { if (!active) return; pageFind.deactivate(); annotationHost.deactivate(); active = false; stopReads(); versionControls.deactivate(); providerActions.deactivate(); if (comparison) comparison.deactivate(); if (homeView) homeView.deactivate(); surface.collapse(); renderer.deactivate(); layoutNative(); },
-      dispose: function () { if (disposed) return; disposed = true; active = false; handoverListeners.abort(); overlayListeners.abort(); cancelAnimationFrame(placementQueued); nativeSize.disconnect(); overlays.disconnect(); stopReads();
+      dispose: function () { if (disposed) return; disposed = true; active = false; handoverListeners.abort(); stopOverlayWatch(); cancelAnimationFrame(placementQueued); nativeSize.disconnect(); stopReads();
         if (live.get(target.browserTabId) === apply) live.delete(target.browserTabId);
         if (versionViews.get(target.browserTabId) === versionView) versionViews.delete(target.browserTabId);
         versionControls.dispose(); providerActions.dispose(); if (comparison) comparison.dispose();

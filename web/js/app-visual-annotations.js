@@ -3,6 +3,7 @@
 
   function annotation(item) { return item && (item.visualAnnotation || item.VisualAnnotation); }
   function value(item, camel, pascal) { return item && (item[camel] !== undefined ? item[camel] : item[pascal]); }
+  function overlayChanged() { document.dispatchEvent(new CustomEvent("rnassistant:overlay-change")); }
   function targetLabel(selection) {
     return selection.tag + (selection.stableUiId ? " · " + selection.stableUiId : "") +
       (selection.textExcerpt ? " · " + selection.textExcerpt.slice(0, 55) : "");
@@ -104,7 +105,7 @@
     }
     function closeSent() {
       if (!sentPopup) return;
-      sentPopup.root.remove(); sentPopup = null;
+      sentPopup.root.remove(); sentPopup = null; overlayChanged();
     }
     function placeSent() {
       if (!sentPopup) return;
@@ -134,12 +135,13 @@
       var close = document.createElement("button"); close.type = "button"; close.textContent = "Закрыть";
       close.addEventListener("click", closeSent); actions.appendChild(close);
       root.append(head, comment, actions); layer.appendChild(root);
-      sentPopup = { root: root, item: item }; placeSent(); close.focus();
+      sentPopup = { root: root, item: item }; placeSent(); close.focus(); overlayChanged();
     }
     function closeEditor(cancel) {
       if (!editor) return;
       var number = editor.number;
       editor.root.remove(); editor = null;
+      overlayChanged();
       if (cancel && pending() && pending().Number === number) {
         context.setPending(null);
         context.updated();
@@ -203,6 +205,7 @@
       actions.append(cancel, done); root.append(head, textarea, actions); layer.appendChild(root);
       editor = { root: root, textarea: textarea, record: record, number: number,
         item: item || null, cancel: cancel, done: done, busy: false };
+      overlayChanged();
       cancel.addEventListener("click", function () { closeEditor(true); });
       done.addEventListener("click", finish);
       textarea.addEventListener("input", function () {
