@@ -707,6 +707,7 @@ namespace RNAssistant.Harness
                 Test("storage: sqlite audit repairs divergent projection", SqliteAuditRepairsDivergentProjection),
                 Test("chat sessions: activity ignores navigation and metadata", ChatActivityIgnoresNavigationAndMetadata),
                 Test("chat sessions: catalog avoids active history", ChatCatalogDoesNotLoadActiveHistory),
+                Test("chat sessions: office catalog excludes project chats", OfficeCatalogExcludesWorkspaceChats),
                 Test("chat sessions: selection loads and binds once", ChatSelectionLoadsAndBindsOnce),
                 Test("storage: json save remains atomic", JsonFileStoreWritesAtomicUtf8),
                 Test("storage: jsonl byte offsets are exact", JsonlByteOffsetsAreExact),

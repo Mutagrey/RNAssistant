@@ -2119,6 +2119,29 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void OfficeCatalogExcludesWorkspaceChats()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var adapter = new FakeOfficeAdapter();
+                var store = new ChatStore(paths);
+                var service = new ChatSessionService(adapter, ConversationStore(store));
+                var documentChat = service.LoadSession(null);
+                store.Save(documentChat);
+                service.NotifySaved(documentChat);
+                var projectChat = store.Create("Workspace", "paint", "Paint", "Рисовка");
+                projectChat.WorkspaceId = "paint";
+                projectChat.Messages.Add(new ChatMessage { Role = "user", Content = "project history" });
+                store.Save(projectChat);
+
+                var summaries = service.GetChatCatalogForOfficeState(out var activeId);
+                AssertEqual(documentChat.Id, activeId, "Office catalog keeps the document selection");
+                AssertTrue(summaries.Any(item => item.Id == documentChat.Id), "Office catalog lists document chats");
+                AssertTrue(summaries.All(item => item.Id != projectChat.Id),
+                    "Office catalog does not duplicate project chats from the project tree");
+            });
+        }
+
         private static void LoadingActiveChatRefreshesPersistedState()
         {
             WithTempPaths(delegate(AppDataPaths paths)

@@ -830,7 +830,10 @@ namespace RNAssistant.Office.Services
         public IReadOnlyList<ChatSessionSummary> GetChatSummaries(string activeId)
         {
             var timer = Stopwatch.StartNew();
-            var headers = _conversations.ListHeaders();
+            // The Office catalog owns document chats only. Workspace/plugin chats
+            // are rendered from the project catalog and must not appear a second
+            // time under an Office "document" titled by their workspace name.
+            var headers = _conversations.ListHeaders().Where(header => header != null && !IsWorkspaceChat(header)).ToArray();
             var headerMs = timer.ElapsedMilliseconds;
             var currentHost = _adapter.HostName;
             var currentDocumentKey = _adapter.DocumentKey;
@@ -856,9 +859,14 @@ namespace RNAssistant.Office.Services
                     "Chat headers timing: scan=" + headerMs + "ms, currentDocument=" +
                     currentDocumentMs + "ms, summaries=" + summaryMs + "ms, running=" +
                     (timer.ElapsedMilliseconds - headerMs - currentDocumentMs - summaryMs) +
-                    "ms, chats=" + headers.Count +
+                    "ms, chats=" + headers.Length +
                     ", jsonlBytes=" + headers.Sum(item => item.JsonlByteLength) + ".");
             return summaries;
+        }
+
+        private static bool IsWorkspaceChat(ChatSessionHeader header)
+        {
+            return string.Equals(header.Host, "Workspace", StringComparison.OrdinalIgnoreCase);
         }
 
         public IReadOnlyList<ChatSessionSummary> GetChatCatalogForOfficeState(out string activeId)
