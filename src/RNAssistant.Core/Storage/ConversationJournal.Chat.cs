@@ -21,8 +21,12 @@ namespace RNAssistant.Core.Storage
         private static bool IsChatFact(string kind) { return kind == "chat.committed" || kind == "chat.imported" || kind == "chat.selected" || IsChatDeletion(kind) || IsChatMove(kind); }
 
         private static string ChatFingerprint(ConversationChatCommit fact)
+        { return ChatFingerprint(JObject.FromObject(fact)); }
+
+        private static string ChatFingerprint(JToken payload)
         {
-            var data = JObject.FromObject(fact); data.Remove("CreatedUtc");
+            if (!(payload is JObject)) throw new InvalidDataException("Chat commit payload is not an object.");
+            var data = (JObject)payload.DeepClone(); data.Remove("CreatedUtc");
             return TextPatternEngine.Sha256(data.ToString(Formatting.None));
         }
 
@@ -30,7 +34,7 @@ namespace RNAssistant.Core.Storage
         {
             if (record.Kind == "agent.spawned") return DecodeSpawn(record).Chat ?? throw new InvalidDataException("Spawn has no integrated chat.");
             var fact = DeliveryData<ConversationChatCommit>(record);
-            if (record.Kind != "chat.committed" && record.Kind != "chat.imported" || fact == null || record.Fingerprint != ChatFingerprint(fact))
+            if (record.Kind != "chat.committed" && record.Kind != "chat.imported" || fact == null || record.Fingerprint != ChatFingerprint(record.Data))
                 throw new InvalidDataException("Invalid chat commit.");
             return fact;
         }

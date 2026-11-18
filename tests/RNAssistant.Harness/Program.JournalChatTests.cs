@@ -5,6 +5,7 @@ using System.IO;
 using System.Diagnostics;
 using System.Linq;
 using System.Globalization;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
@@ -140,6 +141,38 @@ namespace RNAssistant.Harness
                 AssertEqual(session.Id, store.ReadMetadata(session.Id).Id, "missing text body does not hide metadata");
                 RuntimeThrows<InvalidDataException>(() => store.ReadMessageWindow(session.Id, 1, 1));
                 AssertTrue(before.All(item => item.Value.SequenceEqual(File.ReadAllBytes(item.Key))), "missing body preserves canonical history");
+            });
+        }
+
+        private static void JournalTextChatRawFingerprintRebuild()
+        {
+            WithTempPaths(paths => {
+                const string scope = "document:text-raw-fingerprint";
+                var journal = new ConversationJournal(paths, scope);
+                IConversationStore store = journal;
+                var blobs = new ChatBlobStore(paths);
+                var session = store.CreateTransient("Word", "legacy", "Document", "Legacy");
+                store.Commit(session, new ConversationCommit());
+                var message = new ChatMessage { Role = "user", Content = "Legacy question" };
+                session.Messages.Add(message); var commit = ConversationCommit.UserInput(message);
+                store.Commit(session, commit);
+                var card = new ConversationCard(session.Id, session.Title, ConversationRunPolicy.ForSession(session), session.CreatedUtc,
+                    address: new ConversationMetadata(session.Id, 0, session.Host, session.DocumentKey, null, scope.Substring(9)));
+                var header = new ChatMessage { Id = message.Id, Role = message.Role, Content = null, CreatedUtc = message.CreatedUtc };
+                var body = PayloadRef.FromBlob(blobs.StoreText(message.Content, "text/plain"));
+                var context = PayloadRef.FromBlob(blobs.StoreText("{}", "application/json"));
+                var fact = new ConversationChatCommit(card, session.Revision, 1,
+                    new[] { new ConversationTextEntry(header, body, null) }, context, DateTime.UtcNow);
+                var payload = JObject.FromObject(fact);
+                AssertTrue(((JObject)((JArray)payload["Messages"])[0]["Header"]).Remove("ResourceModelReferences"),
+                    "fixture omits a default collection added after the accepted frame");
+                var fingerprintData = (JObject)payload.DeepClone(); fingerprintData.Remove("CreatedUtc");
+                var fingerprint = RNAssistant.Core.Tools.TextPatternEngine.Sha256(fingerprintData.ToString(Newtonsoft.Json.Formatting.None));
+                var tail = journal.Journal.CatchUp(null, (record, position) => { }, null);
+                journal.Journal.Append(tail, "legacy-metadata", fingerprint, "chat.committed", payload);
+                journal.Rebuild();
+                AssertEqual("Legacy question", store.Load(session.Id).Messages.Single().Content,
+                    "index rebuild validates the accepted raw payload after typed defaults are applied");
             });
         }
 

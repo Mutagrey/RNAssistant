@@ -263,6 +263,11 @@ three scopes, addressed restart/index-loss recovery and host/key mismatch refusa
 Production roots now use this router. Windows/Office evidence and cross-process old
 writer quiescence remain open.
 
+Accepted chat-frame fingerprints are checked against the stored raw object payload,
+not a typed deserialize/reserialize round-trip. Optional/default properties added to
+current model types therefore cannot invalidate an already accepted frame during
+index repair. The outer journal hash and typed semantic validation still apply.
+
 ## Retained model attempts — 2026-11-14
 
 Each HTTP request has one immutable AttemptId. The shared accumulator freezes one

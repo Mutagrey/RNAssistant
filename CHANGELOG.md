@@ -11,6 +11,13 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.4.3-dev
+
+- Исправлен запуск после создания или пересборки общего индекса: fingerprint
+  принятого `chat.committed` теперь проверяется по исходному payload, а не после
+  JSON round-trip через текущие типы. Добавленные позже default-поля больше не
+  превращают сохранённый chat frame в `Invalid chat commit` и не блокируют панель.
+
 ### 17.4.2-dev
 
 - Model-facing `core.search` теперь принимает `detail=context` для двух ограниченных

@@ -867,6 +867,7 @@ namespace RNAssistant.Harness
                 Test("journal fork: finish evidence prefix removal and scope", JournalForkFinishMembership),
                 Test("patch: completion failure retains inspection target and replay guard", UniversalPatchCompletionFailureRetainsInspection),
                 Test("journal text: lost acknowledgement rebuild and restore", JournalTextChatRecovery),
+                Test("journal text: raw fingerprint survives rebuild", JournalTextChatRawFingerprintRebuild),
                 Test("journal text: bounded metadata header and append", JournalTextChatCostCurve),
                 Test("storage optimization: retained results queries and context", RetainedResultsQueriesAndContext),
                 Test("storage optimization: shared index repair and processes", ConversationJournalRepairAndProcesses),
