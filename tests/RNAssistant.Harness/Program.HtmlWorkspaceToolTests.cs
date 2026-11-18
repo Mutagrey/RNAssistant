@@ -24,8 +24,10 @@ namespace RNAssistant.Harness
             AssertTrue(created.Success, "explicit HTML fixture created: " + created.Message);
             var store = new ChatStore(FixturePaths.Value);
             var artifact = session.Artifacts.Last(item => item.Kind == ChatArtifactKinds.HtmlWorkspace);
-            var target = HtmlWorkspaceTargets.Workspace(store.DocumentArtifacts, session, artifact);
-            new ArtifactWorkingSetService(store.DocumentArtifacts, new ResourceMutationJournal(FixturePaths.Value))
+            var owner = new DocumentArtifactStore(executor.ResourceAuthority.Store,
+                executor.ResourceAuthority.Revisions, executor.ResourceAuthority.Payloads);
+            var target = HtmlWorkspaceTargets.Workspace(owner, session, artifact);
+            new ArtifactWorkingSetService(owner, new ResourceMutationJournal(FixturePaths.Value))
                 .Change(session, LinkRequest(session, ChatResourceUri.CreateArtifactRevision(session, artifact).Uri, false), store.Save);
             return target;
         }

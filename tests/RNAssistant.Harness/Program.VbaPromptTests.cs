@@ -3491,9 +3491,12 @@ namespace RNAssistant.Harness
                 adapter.VbaModuleCode = original;
                 var selected = ReadVbaSource(executor, session, "Module1").Resource.Reference;
                 AssertTrue(first.Revision != selected.Revision, "equal bytes after observed drift have distinct lineage");
-                var write = executor.ExecuteManual(Command(VbaToolCatalog.WriteModule, "moduleName", "Module1", "code", "Sub Current()\nEnd Sub"),
-                    executor.GetControllerTools().ToList(), new AppSettings { AutoConfirmToolActions = true }, false, false, session);
-                AssertTrue(write.Success, "guarded source mutation succeeded: " + write.Message);
+                var writePending = PrepareVbaNative(executor, session,
+                    Command(VbaToolCatalog.WriteModule, "moduleName", "Module1", "code", "Sub Current()\nEnd Sub"));
+                AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, writePending.Record.Outcome,
+                    "guarded source mutation requires confirmation: " + writePending.Record.Result?.Message);
+                var write = ConfirmVbaNative(writePending);
+                AssertEqual(ToolExecutionOutcome.Ok, write.Outcome, "guarded source mutation succeeded: " + write.Message);
                 var backup = journal.List(adapter.HostName, adapter.DocumentKey).First();
                 AssertEqual(selected.Revision, backup.SourceResource.Revision, "prepared journal pins the exact pre-image, not the first matching hash");
                 var scope = executor.ResourceAuthority.Scope(session, true);
@@ -3577,16 +3580,12 @@ namespace RNAssistant.Harness
                 command.ToolCallId = "call-vba";
                 command.RuntimeStepId = "step-vba";
 
-                var result = executor.ExecuteManual(
-                    command,
-                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(),
-                    new AppSettings { AutoConfirmToolActions = true },
-                    false,
-                    false,
-                    session);
-
-                AssertTrue(result.Success, "journaled mutation succeeds");
-                AssertContains(result.DataJson, "mutationId", "tool result exposes mutation correlation");
+                var pending = PrepareVbaNative(executor, session, command);
+                AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, pending.Record.Outcome,
+                    "journaled mutation requires confirmation: " + pending.Record.Result?.Message);
+                var result = ConfirmVbaNative(pending);
+                AssertEqual(ToolExecutionOutcome.Ok, result.Outcome, "journaled mutation succeeds: " + result.Result?.Message);
+                AssertContains(result.Result.DataJson, "mutationId", "tool result exposes mutation correlation");
                 var record = store.ListMutations("Excel", "doc").Single();
                 AssertEqual("write", record.Prepared.Operation, "prepared operation");
                 AssertEqual(session.Id, record.Prepared.SessionId, "prepared chat id");
@@ -4224,7 +4223,8 @@ namespace RNAssistant.Harness
                 string.IsNullOrWhiteSpace(session.LastRun.TurnId)
                     ? "turn-vba-native" : session.LastRun.TurnId;
             var executionContext = new ToolExecutionContext(
-                call, policy, runId, turnId, runId + ":1",
+                call, policy, runId, turnId,
+                string.IsNullOrWhiteSpace(command.RuntimeStepId) ? runId + ":1" : command.RuntimeStepId,
                 DateTime.UtcNow, false, 5);
             var record = runtime.ExecuteAsync(
                 executionContext, CancellationToken.None).GetAwaiter().GetResult();

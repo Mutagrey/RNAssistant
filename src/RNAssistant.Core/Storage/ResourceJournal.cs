@@ -249,7 +249,7 @@ namespace RNAssistant.Core.Storage
 
         private bool AllowsAggregatePreparation(SqliteConnection db, ResourceJournalFact fact)
         {
-            if (fact.Call == null || !IsAggregatePreparation(fact.Attempt)) return false;
+            if (!IsAggregatePreparation(fact.Attempt)) return false;
             var previous = HeadReceipt(db, fact.Scope, fact.Attempt.Target);
             // Coarse invalidation after a verified change is not an unresolved
             // effect. Exact targets and version-pinned preparations stay closed.
@@ -257,7 +257,7 @@ namespace RNAssistant.Core.Storage
             if (previous.Effect.Outcome == ResourceEffectOutcome.VerifiedChanged || previous.Effect.Outcome == ResourceEffectOutcome.Restored)
                 return fact.PreviousInvocation == null;
             var completion = fact.PreviousInvocation;
-            return previous.Unknown && previous.Fact.Call != null && completion != null &&
+            return previous.Unknown && previous.Fact.Call != null && fact.Call != null && completion != null &&
                 JsonConvert.SerializeObject(previous.Fact.Call.Origin) == JsonConvert.SerializeObject(completion.Origin) &&
                 JsonConvert.SerializeObject(fact.Call.Origin) != JsonConvert.SerializeObject(completion.Origin) &&
                 JsonConvert.SerializeObject(ResourceOutcomeLink.From(previous)) == JsonConvert.SerializeObject(completion.Outcome);

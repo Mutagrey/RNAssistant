@@ -11,6 +11,17 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.4.4-dev
+
+- Исправлена совместимость journal replay с .NET Framework 4.8: outcomes больше
+  не копируются через отсутствующий в net48 конструктор `Dictionary`.
+- Metadata и queue-input commits сохраняют canonical run checkpoint вместо
+  устаревшего `LastRun` из UI-снимка, поэтому edit/cancel и peer input не
+  конфликтуют с уже записанным состоянием run.
+- Aggregate package operation после подтверждённого изменения больше не требует
+  model origin для продолжения; неизвестный результат по-прежнему закрыт от
+  автоматического повтора.
+
 ### 17.4.3-dev
 
 - Исправлен запуск после создания или пересборки общего индекса: fingerprint

@@ -15,14 +15,17 @@ namespace RNAssistant.Core.Persistence
         internal long JournalRevision { get; private set; }
         internal int JournalMessageCount { get; private set; }
 
-        internal void BindJournal(ChatSession session)
+        internal void BindJournal(ChatSession session, int? messageCount = null)
         {
             if (_journalChat != null && _journalChat != session.Id)
                 throw new InvalidOperationException("The commit belongs to another chat.");
-            if (_journalChat != null) return;
-            _journalChat = session.Id;
-            JournalRevision = session.Revision;
-            JournalMessageCount = this is ConversationRunCommit run ? run.ExpectedMessageCount : session.Messages.Count;
+            if (_journalChat == null)
+            {
+                _journalChat = session.Id;
+                JournalRevision = session.Revision;
+                JournalMessageCount = this is ConversationRunCommit run ? run.ExpectedMessageCount : session.Messages.Count;
+            }
+            if (messageCount.HasValue) JournalMessageCount = messageCount.Value;
         }
 
         public IReadOnlyList<ConversationMessageWrite> Messages { get; protected set; }

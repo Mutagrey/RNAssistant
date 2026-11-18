@@ -309,6 +309,26 @@ namespace RNAssistant.Core.Storage
                         ChatEntry(db, session.Id, item.Header.Id) == null && !IsCheckpointMessage(item.Header, tasks))) throw TextStoreScope();
                     ValidateLocalOriginals(db, session, messages);
                     var prior = FindChatWrite(db, commit.OperationId);
+                    var canonicalChat = CurrentChat(db, session.Id);
+                    if (!creatingFork && !(commit is ConversationRunCommit) && canonicalChat != null)
+                    {
+                        // A metadata/input commit must preserve the canonical run
+                        // checkpoint. The caller's session may precede a runtime
+                        // checkpoint and is not authority for LastRun state.
+                        var canonicalRun = CurrentRun(db, session.Id);
+                        if (canonicalRun != null && canonicalChat.Fact.Run?.RunId == canonicalRun.Fact.RunId)
+                        {
+                            run = CopyRunHeader(canonicalChat.Fact.Run);
+                            runBody = canonicalRun.Fact.Body;
+                        }
+                    }
+                    if (!creatingFork && !(commit is ConversationRunCommit) && commit.Messages.Count == 0 && queueControl?.Input != null)
+                    {
+                        // Message edits trim the caller's transient projection before
+                        // input admission. A queue-control fact belongs to the current
+                        // canonical chat head, not that provisional transcript view.
+                        commit.BindJournal(session, canonicalChat?.Fact.MessageCount ?? 0);
+                    }
                     PayloadRef history;
                     var fork = PrepareFork(db, session, commit, prior, ref messages, out history);
                     if (!creatingFork) history = PrepareHistory(db, session, commit, prior, ref messages);

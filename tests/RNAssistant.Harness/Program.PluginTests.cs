@@ -274,7 +274,7 @@ namespace RNAssistant.Harness
                             var cancelledBeforeAdmission = false;
                             try { blocked.GetAwaiter().GetResult(); }
                             catch (OperationCanceledException) { cancelledBeforeAdmission = true; }
-                            AssertTrue(cancelledBeforeAdmission && new ChatStore(paths).Load(chat.SessionId).Messages.Count == 0,
+                            AssertTrue(cancelledBeforeAdmission && service.Conversations.ConversationStore.Load(chat.SessionId).Messages.Count == 0,
                                 "cancel before admission records no input and starts no model");
                         }
                         var accepted = service.SubmitProjectChatAsync(request, settings, () => "", transport.Token).GetAwaiter().GetResult();
@@ -302,14 +302,22 @@ namespace RNAssistant.Harness
                             AssertEqual(WorkspaceCancellationStatus.Requested, cancelled.CancelStatus.Value, "explicit Stop reaches the exact run owner");
                             AssertTrue(worker.Wait(5000), "cancelled run drains");
                         }
-                        var durable = new ChatStore(paths).Load(chat.SessionId);
+                        var durable = service.Conversations.ConversationStore.Load(chat.SessionId);
                         AssertEqual(RunLifecycle.Cancelled, durable.LastRun.KernelState.Summary.Lifecycle, "kernel stores terminal cancellation");
                         AssertEqual(1, durable.Messages.Count(item => item.Role == "user"), "one accepted input survives cancellation");
                         using (PluginStore.AcquireRuntimeUse(paths, exclusive: true)) { }
                         var lease = Path.Combine(paths.WorkspaceDirectory, "run-leases", TextPatternEngine.Sha256(chat.SessionId) + ".lck");
                         using (new FileStream(lease, FileMode.Open, FileAccess.ReadWrite, FileShare.None)) { }
                     }
-                    finally { release.Set(); server.GetAwaiter().GetResult(); service.CloseAsync().GetAwaiter().GetResult(); }
+                    finally
+                    {
+                        release.Set();
+                        listener.Stop();
+                        try { server.Wait(5000); }
+                        catch (AggregateException error) when (error.InnerExceptions.All(item =>
+                            item is HttpListenerException || item is ObjectDisposedException || item is IOException)) { }
+                        service.CloseAsync().Wait(5000);
+                    }
                 }
             });
         }
@@ -1124,10 +1132,11 @@ namespace RNAssistant.Harness
                                 Encoding.UTF8.GetBytes("Сохранить файл"), created.SessionId));
                             attachments.CommitToCas(first);
                             session.Messages.Add(first); ChatMessageAttachmentService.Link(session, first);
-                            var store = new ChatStore(paths); store.Commit(session, ConversationCommit.UserInput(first));
+                            var store = service.Conversations.ConversationStore;
                             var later = new ChatMessage { Role = "user", Content = "Будущий запрос" };
-                            session.Messages.Add(later); store.Commit(session, ConversationCommit.UserInput(later));
-                            PublishWorkspaceTask(paths, new ChatConversationStoreAdapter(store), session);
+                            session.Messages.Add(later);
+                            store.Commit(session, new ConversationCommit(session.Messages));
+                            PublishWorkspaceTask(paths, store, session);
                             var revision = session.Revision;
                             var settings = new AppSettings { BaseUrl = "http://127.0.0.1:" + port,
                                 Model = "test-model", StreamResponses = false, SmartChatTitles = false,
@@ -1149,10 +1158,10 @@ namespace RNAssistant.Harness
                             AssertEqual(users[0].Id, after.Artifacts.Single(item => item.Id ==
                                 "attachment_" + users[0].Attachments[0].Id).SourceMessageId,
                                 "edited attachment remains bound to the new message");
-                            var authority = new ResourceAuthorityStore(paths);
+                            var authority = service.Conversations.ResourceAuthority;
                             AssertEqual(HeadKnowledge.Unavailable, authority.GetHead(TaskListPublication.Scope(after),
                                 TaskListPublication.Identity(after)).Knowledge, "actual edit publishes cleared Task selection before the run");
-                            PublishWorkspaceTask(paths, new ChatConversationStoreAdapter(store), after);
+                            PublishWorkspaceTask(paths, store, after);
                             AssertTrue(service.Conversations.GetTaskList(after).Available, "Tasks remain editable after the edited run");
                         }
                         server.GetAwaiter().GetResult();

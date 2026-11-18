@@ -379,7 +379,7 @@ namespace RNAssistant.Harness
                 var installed = executor.InstallVbaTool(
                     ToolPackageSource.Capture(tool), false, session);
 
-                AssertTrue(installed.Success, "journaled package install succeeds");
+                AssertTrue(installed.Success, "journaled package install succeeds: " + installed.Message);
                 var installData = JObject.Parse(installed.DataJson);
                 AssertTrue((bool)installData["packageJournaled"], "package install result exposes journal boundary");
                 AssertTrue(installData["packageJournalStatus"] == null,

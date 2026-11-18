@@ -333,7 +333,9 @@ namespace RNAssistant.Harness
                 AssertTrue(move.Success, "VBA rename: " + move.Message);
                 var delete = executor.ExecuteManual(Command("resources.delete", "target", "VBA module: Renamed"), catalog, settings, false, true, session);
                 AssertTrue(delete.Success, "VBA delete: " + delete.Message);
-                var backupTarget = executor.ResourceGateway.Find(session, "Renamed", "backups").Items.Last().Target;
+                var backup = new VbaJournalStore(FixturePaths.Value).List(session.Host, session.DocumentKey)
+                    .Where(item => item.ModuleName == "Renamed").OrderByDescending(item => item.CreatedUtc).First();
+                var backupTarget = VbaResourceProvider.BackupSemanticTarget(backup);
                 var restore = executor.ExecuteManual(Command("resources.restore", "target", backupTarget), catalog, settings, false, true, session);
                 AssertTrue(restore.Success, "deleted VBA restores from a discovered backup: " + restore.Message);
                 AssertTrue(executor.ExecuteManual(Command("core.write", "target", "VBA module: Klass", "resourceType", "ClassModule", "content", "Public Value As Long"), catalog, settings, false, true, session).Success, "class creation");
@@ -356,9 +358,10 @@ namespace RNAssistant.Harness
                 var terminalMixed = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = mixedResult.Context.Call.Id, ToolId = "core.patch" }, mixedResult.Result, ToolResultRoles.User);
                 acceptedMixed.RunId = terminalMixed.RunId = mixedResult.Context.RunId; terminalMixed.ResourceEffect = mixedResult.ResourceEffect;
                 session.Messages.Add(acceptedMixed); session.Messages.Add(terminalMixed);
-                var authorityStore = new ResourceAuthorityStore(FixturePaths.Value);
+                var authorityStore = executor.ResourceAuthority.Store;
                 var payloads = new ChatBlobStore(FixturePaths.Value);
-                var authority = new ResourceAuthorityService(authorityStore, authorityStore, new ResourceMutationJournal(FixturePaths.Value), payloads);
+                var authority = new ResourceAuthorityService(authorityStore, executor.ResourceAuthority.Revisions,
+                    new ResourceMutationJournal(FixturePaths.Value), payloads);
                 var presentation = PatchChangesProjection.Read(session, mixedResult.Context.RunId, mixedResult.Context.Call.Id, payloads,
                     (reference, maximum) => PatchChangesProjection.ReadSource(authority, reference, maximum),
                     (reference, after, body) => PatchChangesProjection.ReadFragments(authority, reference, after, body));

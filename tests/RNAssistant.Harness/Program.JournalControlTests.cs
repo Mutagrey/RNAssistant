@@ -191,6 +191,7 @@ namespace RNAssistant.Harness
                             target = store.Load(target.Id); journal.Rebuild(); inbox = new ConversationInboxService(journal);
                             AssertTrue(ConversationInboxService.HasPendingWait(target), "cold cancellation starts from a saved wait");
                         }
+                        target = store.Load(target.Id);
                         if (cancel) inbox.Submit(target, InboxInput("cancel-retains-input", "Keep this queued", InputDelivery.Queue));
                         var beforeCancel = journal.CurrentRun(target.Id).Fact;
                         if (scenario == "cancel-cold-busy") heldLease = leases.Reserve(target.Id);
@@ -279,6 +280,7 @@ namespace RNAssistant.Harness
                             // Real peer delivery while paused must preserve authority and FIFO.
                             sourceRound = 0; tool = AgentCommunicationToolCatalog.Send; run(source, null);
                             AssertEqual(QueueControlAction.AgentPauseAcknowledged, journal.QueueControl(target.Id).Fact.Action, "peer input cannot clear a pause");
+                            target = store.Load(target.Id);
                             AssertEqual(1, inbox.ReadUndelivered(target).Count, "queued peer input remains pending");
                         }
                         sourceRound = 0; tool = AgentCommunicationToolCatalog.Resume; run(source, null);
@@ -286,6 +288,7 @@ namespace RNAssistant.Harness
                         if (!rejected || manualResume != null)
                         {
                             AssertTrue(peer.Wait(5000), "same live target finishes after peer release");
+                            target = store.Load(target.Id);
                             AssertEqual(paused.RunId, target.LastRun.RunId, "release preserves the target run");
                             AssertEqual(RunLifecycle.Completed, target.LastRun.KernelState.Summary.Lifecycle, "kernel completes the released target");
                             AssertEqual(2, targetRound, "one model continuation follows release");

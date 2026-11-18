@@ -281,8 +281,11 @@ namespace RNAssistant.Harness
                 AssertEqual(ToolExecutionOutcome.Ok, record.Outcome, "native ToolRuntime admits new scoped contract");
                 AssertEqual(1, JObject.Parse(record.Result.DataJson)["matches"].Count(), "native result retained");
                 var catalog = executor.GetControllerTools().ToList();
-                AssertTrue(executor.ExecuteManual(Command(ResourceMutationToolCatalog.Write, "target", "HTML file: index.html",
-                    "content", "<main>needleHtml</main>"), catalog, new AppSettings { AutoConfirmToolActions = true }, false, true, session).Success, "publish HTML fixture");
+                var workspace = CreateHtmlToolWorkspace(executor, session);
+                var published = executor.ExecuteManual(Command(ResourceMutationToolCatalog.Write,
+                    "target", "HTML file: index.html in " + workspace, "content", "<main>needleHtml</main>"),
+                    catalog, new AppSettings { AutoConfirmToolActions = true }, false, true, session);
+                AssertTrue(published.Success, "publish HTML fixture: " + published.Message);
                 var html = executor.ResourceGateway.SearchText(session, new ResourceTextSearchRequest { Scope = "html", Query = "needleHtml", Mode = "regex" },
                     new ResourceTextSearch(), CancellationToken.None);
                 AssertTrue(html.ScanComplete && html.Matches.Count >= 1 && html.Matches.All(x => x.StartLine.HasValue), "HTML scope uses the same matcher and coordinates");

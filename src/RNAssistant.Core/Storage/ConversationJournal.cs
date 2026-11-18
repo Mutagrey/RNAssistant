@@ -293,12 +293,12 @@ namespace RNAssistant.Core.Storage
         }
 
 
-        private JournalCursor CatchUp(SqliteConnection db, HashSet<string> verified, IReadOnlyDictionary<string, ResourceJournalReceipt> outcomes, Dictionary<string, ContextCallKey> contextKeys, CancellationToken token, bool recover = true)
+        private JournalCursor CatchUp(SqliteConnection db, HashSet<string> verified, Dictionary<string, ResourceJournalReceipt> outcomes, Dictionary<string, ContextCallKey> contextKeys, CancellationToken token, bool recover = true)
         {
             var cursor = JournalIndex.LoadCursor(db, _scope);
             var applied = cursor;
             var current = Journal.CatchUp(cursor, (record, position) => {
-                if (IsChatFact(record.Kind)) ApplyChatFact(db, record, position, contextKeys, new Dictionary<string, ResourceJournalReceipt>(outcomes, StringComparer.Ordinal));
+                if (IsChatFact(record.Kind)) ApplyChatFact(db, record, position, contextKeys, outcomes);
                 else if (record.Kind == "queue.control") ApplyControl(db, record, position);
                 else if (record.Kind == "run.checkpoint") ApplyRun(db, record, position);
                 else if (IsDeliveryFact(record.Kind)) ApplyDeliveryRecord(db, record, position);
@@ -324,8 +324,7 @@ namespace RNAssistant.Core.Storage
                     var missing = LegacyImportReferences(DecodeChatCommit(record)).Where(reference => !verified.Contains(ReferenceKey(reference))).ToArray();
                     if (missing.Length != 0) throw new TailReferenceNeeded(missing);
                 }
-                if (IsChatFact(record.Kind)) references = ValidateChatFact(db, record, contextKeys,
-                    new Dictionary<string, ResourceJournalReceipt>(outcomes, StringComparer.Ordinal));
+                if (IsChatFact(record.Kind)) references = ValidateChatFact(db, record, contextKeys, outcomes);
                 else if (record.Kind == "queue.control")
                 { var control = DecodeControl(record); ValidateControl(db, record.Operation, control);
                     ValidatePeerControl(db, record, control); references = new PayloadRef[0]; }

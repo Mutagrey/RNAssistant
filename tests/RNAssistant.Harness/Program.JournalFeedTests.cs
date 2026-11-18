@@ -23,11 +23,10 @@ namespace RNAssistant.Harness
 
         private static void WorkspaceFeedUsesOnlyMetadata()
         {
-            WithTempPaths(paths => {
+            WithJournalInput(false, (paths, journal, chat, scope) => {
+                IConversationStore store = journal;
                 var workspaceStore = new WorkspaceStore(paths);
-                var workspace = workspaceStore.Open(Path.Combine(paths.Root, "workspace"));
-                var chats = new ChatStore(paths); var store = ConversationStore(chats);
-                var chat = workspaceStore.CreateSession(store, workspace, "Metadata feed");
+                var workspace = workspaceStore.OpenConnected(chat.WorkspaceId);
                 var start = ConversationEventFeed.Cursor(chat);
                 AppendFeedMessage(store, chat, new string('x', 12000));
                 var other = workspaceStore.Open(Path.Combine(paths.Root, "other"));
@@ -38,7 +37,8 @@ namespace RNAssistant.Harness
                     using (var service = new WorkspaceConversationService(paths))
                     {
                         var page = service.ReadEvents(workspace, chat.Id, start);
-                        AssertTrue(!page.ResyncRequired && page.Events.Count == 1, "Workspace feed does not hydrate unavailable message CAS");
+                        AssertTrue(!page.ResyncRequired && page.Events.Count == 1,
+                            "Workspace feed does not hydrate unavailable message CAS: reason=" + page.Reason + " events=" + page.Events.Count);
                         AssertEqual(ConversationEventFeed.Cursor(chat), page.NextCursor, "metadata route retains the saved cursor");
                         AssertEqual(ConversationResyncReason.HistoryUnavailable, service.ReadEvents(other, chat.Id, start).Reason,
                             "metadata lookup cannot cross Workspace ownership");

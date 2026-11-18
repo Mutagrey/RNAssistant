@@ -106,7 +106,7 @@ namespace RNAssistant.Harness
             var store = new PluginStore(paths); var registration = store.Get(id);
             var release = store.Capture(new PluginSourceWorkspace(new WorkspaceStore(paths).Open(registration.SourceRoot, false)), service.Vendors);
             registration.ActiveReleaseId = release.ReleaseId; registration.Enabled = true;
-            var authority = new ResourceAuthorityStore(paths); var scope = new ResourceAuthorityScopeId("plugins", "local");
+            var authority = new ResourceJournal(paths); var scope = new ResourceAuthorityScopeId("plugins", "local");
             var exact = new ResourceRef(ResourceUri.Create("plugin", id, "registration", "current"), "legacy_" + Guid.NewGuid().ToString("N"));
             var payload = PayloadRef.FromBlob(new ChatBlobStore(paths).StoreText(Newtonsoft.Json.JsonConvert.SerializeObject(registration), "application/json"));
             var frozen = authority.Capture(scope); var before = frozen.GetHead(exact.Identity);

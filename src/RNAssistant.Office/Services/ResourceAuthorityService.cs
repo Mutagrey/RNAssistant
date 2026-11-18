@@ -483,7 +483,7 @@ namespace RNAssistant.Office.Services
             if (_origin != null && TaskListToolCatalog.Owns(operation) && _persistResources == null)
                 throw new ToolMutationPreparationException("task_list_persistence_unavailable", "Task-list persistence is unavailable.");
             if (route != null) { arguments = route.RoutingArguments; preparedStateJson = route.OwnerState; }
-            if (_origin != null && operation.StartsWith("vba.module.", StringComparison.Ordinal))
+            if (operation.StartsWith("vba.module.", StringComparison.Ordinal) && !string.IsNullOrWhiteSpace(preparedStateJson))
             {
                 // Restore is addressed by a backup, while its existing VBA owner
                 // pins the live component. Use that prepared target for authority

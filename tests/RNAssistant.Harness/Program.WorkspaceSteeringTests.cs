@@ -54,35 +54,52 @@ namespace RNAssistant.Harness
                         RootPath = Path.Combine(paths.Root, "steer") }).SelectedWorkspaceId;
                     var workspace = new WorkspaceStore(paths).OpenConnected(workspaceId);
                     var chat = application.CreateProjectChat(new ProjectChatRequest { WorkspaceId = workspaceId });
-                    JObject secondRequest = null;
+                    JObject lastRequest = null;
                     var requests = 0;
+                    var expectedRequests = scenario == "model" ? 2 : 3;
                     listener.Prefixes.Add("http://127.0.0.1:" + port + "/"); listener.Start();
                     var server = Task.Run(async () =>
                     {
-                        var first = await listener.GetContextAsync().ConfigureAwait(false);
-                        using (var reader = new StreamReader(first.Request.InputStream)) await reader.ReadToEndAsync().ConfigureAwait(false);
-                        Interlocked.Increment(ref requests); firstModel.Set();
-                        if (scenario != "model") await SteeringReply(first, new ConversationResponse(ConversationResponse.ExecuteAction,
-                            "Read before answering.", "Читаю.", calls: new[] { new ConversationToolCall {
-                                Name = "fixture.wait", Arguments = new JObject() } }).ToJson()).ConfigureAwait(false);
-                        var next = await listener.GetContextAsync().ConfigureAwait(false);
-                        using (var reader = new StreamReader(next.Request.InputStream))
-                            secondRequest = JObject.Parse(await reader.ReadToEndAsync().ConfigureAwait(false));
-                        Interlocked.Increment(ref requests); secondModel.Set();
-                        if (!finish.Wait(10000)) throw new TimeoutException("Steering test did not release response.");
-                        if (scenario == "model")
+                        HttpListenerContext first = null;
+                        for (var index = 0; index < expectedRequests; index++)
                         {
-                            // A late tool proposal from the cancelled request must never execute.
-                            try { await SteeringReply(first, new ConversationResponse(ConversationResponse.ExecuteAction,
-                                "Late response.", "Create.", calls: new[] { new ConversationToolCall { Name = "files.create",
-                                    Arguments = new JObject { ["relativePath"] = "late.txt", ["text"] = "WRONG" } } }).ToJson()).ConfigureAwait(false); }
-                            catch (Exception error) when (error is HttpListenerException || error is IOException || error is ObjectDisposedException) { }
+                            var context = await listener.GetContextAsync().ConfigureAwait(false);
+                            using (var reader = new StreamReader(context.Request.InputStream))
+                                lastRequest = JObject.Parse(await reader.ReadToEndAsync().ConfigureAwait(false));
+                            Interlocked.Increment(ref requests);
+                            if (index == 0)
+                            {
+                                first = context; firstModel.Set();
+                                if (scenario != "model")
+                                    await SteeringReply(context, new ConversationResponse(ConversationResponse.ExecuteAction,
+                                        "Load the exact optional tool schema before use.", "Loading the tool.",
+                                        calls: new[] { new ConversationToolCall { Name = CapabilityToolCatalog.ReadToolId,
+                                            Arguments = new JObject { ["id"] = "fixture.wait" } } }).ToJson()).ConfigureAwait(false);
+                                continue;
+                            }
+                            if (scenario != "model" && index == 1)
+                            {
+                                await SteeringReply(context, new ConversationResponse(ConversationResponse.ExecuteAction,
+                                    "Use the admitted exact tool.", "Reading before answering.", calls: new[] {
+                                        new ConversationToolCall { Name = "fixture.wait", Arguments = new JObject() } }).ToJson()).ConfigureAwait(false);
+                                continue;
+                            }
+                            secondModel.Set();
+                            if (!finish.Wait(10000)) throw new TimeoutException("Steering test did not release response.");
+                            if (scenario == "model")
+                            {
+                                // A late tool proposal from the cancelled request must never execute.
+                                try { await SteeringReply(first, new ConversationResponse(ConversationResponse.ExecuteAction,
+                                    "Late response.", "Create.", calls: new[] { new ConversationToolCall { Name = "files.create",
+                                        Arguments = new JObject { ["relativePath"] = "late.txt", ["text"] = "WRONG" } } }).ToJson()).ConfigureAwait(false); }
+                                catch (Exception error) when (error is HttpListenerException || error is IOException || error is ObjectDisposedException) { }
+                            }
+                            var content = scenario == "tool" ? ScriptedVerifiedFinish(owner.GetSession(workspace, chat.SessionId),
+                                "Use the latest input.", "Уточнение принято.", "Read completed.", "fixture.wait") :
+                                ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction, "Use the latest input.",
+                                    "Ответ по уточнению.", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed);
+                            await SteeringReply(context, content).ConfigureAwait(false);
                         }
-                        var content = scenario == "tool" ? ScriptedVerifiedFinish(new ChatStore(paths).Load(chat.SessionId),
-                            "Use the latest input.", "Уточнение принято.", "Read completed.", "fixture.wait") :
-                            ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction, "Use the latest input.",
-                                "Ответ по уточнению.", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed);
-                        await SteeringReply(next, content).ConfigureAwait(false);
                     });
                     Task<WorkspaceRunResult> run = null;
                     try
@@ -101,7 +118,7 @@ namespace RNAssistant.Harness
                         var receipt = accepted["payload"]["inputReceipt"].ToObject<WorkspaceInputReceipt>();
                         AssertTrue(receipt.Steering && receipt.RunId == waiting.State.RunId, "receipt pins intake to the active run");
                         var duplicate = WorkspaceBridgeCall(bridge, BridgeToken(bridge), "submitProjectChat", request);
-                        AssertTrue((bool)duplicate["ok"], "duplicate receipt is readable");
+                        AssertTrue((bool)duplicate["ok"], "duplicate receipt is readable: " + duplicate);
                         AssertEqual(receipt.InputId, (string)duplicate["payload"]["inputReceipt"]["InputId"], "retry has one durable identity");
                         request.Input.Message = "changed";
                         var conflict = WorkspaceBridgeCall(bridge, BridgeToken(bridge), "submitProjectChat", request);
@@ -112,11 +129,12 @@ namespace RNAssistant.Harness
                         request.Input.SteerRunId = waiting.State.RunId; request.Input.RequestId = "steer-once";
                         if (scenario != "model")
                         {
-                            AssertTrue(!receipt.DeliveryRecorded && !tool.Token.IsCancellationRequested && requests == 1,
+                            AssertTrue(!receipt.DeliveryRecorded && !tool.Token.IsCancellationRequested && requests == 2,
                                 "intake returns before tool completion without cancelling it or starting another model");
                             var pending = application.ProjectChat(request);
                             AssertEqual("STEER_UNIQUE_MESSAGE", pending.State.PendingInputs.Single().Text, "durable pending input is visible");
-                            AssertEqual(1, pending.Messages.Count(message => message.Role == "user"), "intake never edits the running message list");
+                            AssertEqual(1, pending.Messages.Count(message => message.Role == "user" && !message.ProtocolMessage),
+                                "intake never edits the running message list");
                             if (scenario == "tool") { fixtures["waiting"] = JObject.FromObject(waiting); fixtures["accepted"] = accepted; }
                             if (scenario == "stop") cancel.Cancel();
                             tool.Release.Set();
@@ -128,12 +146,23 @@ namespace RNAssistant.Harness
                             var stopped = application.ProjectChat(request);
                             AssertTrue(!stopped.State.CanSteer && stopped.State.PendingInputs.Count == 1, "unapplied input survives stop visibly");
                             fixtures["stopped"] = JObject.FromObject(stopped);
+                            var retained = stopped.State.PendingInputs.Single();
+                            application.UpdateProjectChatInputAsync(new ProjectChatRequest { WorkspaceId = workspaceId,
+                                SessionId = chat.SessionId, Inbox = new WorkspaceInboxCommand { SessionId = chat.SessionId,
+                                    Action = WorkspaceInboxAction.Remove, InputId = retained.Id, ExpectedRevision = retained.Revision } },
+                                settings, () => "", CancellationToken.None).GetAwaiter().GetResult();
+                            application.UpdateProjectChatInputAsync(new ProjectChatRequest { WorkspaceId = workspaceId,
+                                SessionId = chat.SessionId, Inbox = new WorkspaceInboxCommand { SessionId = chat.SessionId,
+                                    Action = WorkspaceInboxAction.Resume } },
+                                settings, () => "", CancellationToken.None).GetAwaiter().GetResult();
                             // A fresh application/run must not automatically replay an earlier exact-run steer.
                             using (var reopened = new WorkspaceConversationService(paths))
                             {
                                 var next = reopened.SubmitInputAsync(workspace, new WorkspaceSubmitInputRequest {
                                     SessionId = chat.SessionId, RequestId = "new-task", Message = "NEW_TASK" }, settings, () => "");
-                                AssertTrue(secondModel.Wait(5000), "explicit next turn starts"); finish.Set();
+                                var started = secondModel.Wait(5000);
+                                AssertTrue(started, "explicit next turn starts: requests=" + requests +
+                                    " faulted=" + next.IsFaulted + " exception=" + next.Exception); finish.Set();
                                 AssertTrue(next.Wait(5000) && reopened.RunsDrained.Wait(5000), "fresh run drains");
                                 AssertEqual(0, owner.GetSession(workspace, chat.SessionId).Messages.Count(message => message.Id == receipt.InputId),
                                     "retained steer is not replayed into a different run");
@@ -157,12 +186,12 @@ namespace RNAssistant.Harness
                             if (scenario == "tool") fixtures["completed"] = JObject.FromObject(application.ProjectChat(request));
                         }
                         AssertTrue(server.Wait(5000), "scripted provider drains");
-                        var contentText = secondRequest["messages"].ToString(Formatting.None);
+                        var contentText = lastRequest["messages"].ToString(Formatting.None);
                         AssertEqual(scenario == "stop" ? 0 : 1,
                             System.Text.RegularExpressions.Regex.Matches(contentText, "STEER_UNIQUE_MESSAGE").Count,
                             "actual model request includes consumed input exactly once, never an unapplied input");
                         AssertTrue(!File.Exists(Path.Combine(workspace.RootPath, "late.txt")), "late discarded model response has no file effect");
-                        AssertEqual(2, requests, "only expected model requests");
+                        AssertEqual(expectedRequests, requests, "only expected model requests");
                     }
                     finally
                     {
@@ -288,8 +317,9 @@ namespace RNAssistant.Harness
                         RootPath = Path.Combine(paths.Root, "recovery") }).SelectedWorkspaceId;
                     var workspace = new WorkspaceStore(paths).OpenConnected(workspaceId);
                     var session = application.Conversations.CreateSession(workspace, "Recovery");
-                    var store = new ChatStore(paths);
-                    var events = new ChatEventStoreAdapter(store);
+                    var store = application.Conversations.ConversationStore;
+                    store.Commit(session, new ConversationCommit());
+                    var events = (IEventStore)store;
                     var journal = new ConversationInputJournal(events);
                     var input = new ConversationInput { Id = "steer-input", OperationId = "steer-operation",
                         Revision = 1, AcceptedRunId = "original-run", RequestFingerprint = "fixture",
