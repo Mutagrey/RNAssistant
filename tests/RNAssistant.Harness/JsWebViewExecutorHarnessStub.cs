@@ -5,8 +5,8 @@ using Newtonsoft.Json.Linq;
 
 namespace RNAssistant.Office.WebView
 {
-    // The Harness runs cross-platform and does not host WebView2. Production
-    // compilation uses JsWebViewExecutor.cs from RNAssistant.Office.
+    // Host-neutral test executables do not host WebView2. Production compilation
+    // uses JsWebViewExecutor.cs from RNAssistant.Office.
     internal static class JsWebViewExecutor
     {
         internal static Task<string> ExecuteAsync(string code, JObject args, string[] names,

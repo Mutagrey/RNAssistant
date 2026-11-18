@@ -12,6 +12,7 @@ using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using Newtonsoft.Json;
+using RNAssistant.Application;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Diagnostics;
 using RNAssistant.Office.Services;

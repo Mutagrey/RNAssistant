@@ -133,6 +133,7 @@
     <Compile Include="..\..\src\RNAssistant.Office\WebView\AssistantWebBridge.Window.cs" Link="Office\WebView\AssistantWebBridge.Window.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\WebView\BridgeRequestCancellationRegistry.cs" Link="Office\WebView\BridgeRequestCancellationRegistry.cs" />
     <Compile Include="..\..\tests\RNAssistant.Harness\ProtectedSecretStoreHarnessStub.cs" Link="Testing\ProtectedSecretStoreHarnessStub.cs" />
+    <Compile Include="..\..\tests\RNAssistant.Harness\JsWebViewExecutorHarnessStub.cs" Link="Testing\JsWebViewExecutorHarnessStub.cs" />
     <Compile Include="..\..\tests\RNAssistant.Testing\FakeOfficeAdapter.cs" Link="Testing\FakeOfficeAdapter.cs" />
     <Compile Include="..\..\tests\RNAssistant.Testing\ConversationStoreFixture.cs" Link="Testing\ConversationStoreFixture.cs" />
     <Compile Include="..\..\tests\RNAssistant.Testing\FakeOfficeAdapter.ExcelWrite.cs" Link="Testing\FakeOfficeAdapter.ExcelWrite.cs" />

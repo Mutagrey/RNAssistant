@@ -11,6 +11,12 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.5.1-dev
+
+- Исправлена компиляция Office solution и MockDemo после перехода JavaScript tools
+  на WebView2: `AssistantPaneControl` снова видит `LocalBrowserPageRuntime`, а
+  MockDemo использует существующую host-neutral заглушку `JsWebViewExecutor`.
+
 ### 17.5.0-dev
 
 - Office text search и replacement используют единый model-facing словарь:
