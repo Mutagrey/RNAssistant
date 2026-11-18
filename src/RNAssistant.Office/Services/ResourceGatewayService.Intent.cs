@@ -55,7 +55,7 @@ namespace RNAssistant.Office.Services
                         Reference = read.Resource.Reference, SourceComplete = read.SourceComplete != false && read.Complete };
                 } });
             }
-            return search.Search(request, sources, token);
+            return search.SearchModel(request, sources, token);
         }
 
         internal ResourceWithinSearchPage SearchWithin(ChatSession session, string target, string query,

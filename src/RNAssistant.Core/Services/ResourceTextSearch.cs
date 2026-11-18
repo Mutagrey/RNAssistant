@@ -16,6 +16,10 @@ namespace RNAssistant.Core.Services
     {
         public const int MaximumLineCharacters = 65536;
         public const int MaximumScanCharacters = 8 * 1024 * 1024;
+        // Bounded runtime-only continuation for sparse Workspace text searches.
+        public const int MaximumAutomaticEmptyPages = 4;
+        private const int ContextNeighborLines = 2;
+        private const int ContextLineCharacters = 240;
         private readonly object _sync = new object();
         private string _request, _membership;
         private readonly HashSet<string> _gaps = new HashSet<string>(StringComparer.Ordinal);
@@ -30,13 +34,73 @@ namespace RNAssistant.Core.Services
             lock (_sync) return SearchLocked(request, sources, token);
         }
 
+        // Model surface exposes next=true, never cursor coordinates. The handler's
+        // existing exact pins and query fingerprint still guard every continuation.
+        public ResourceWithinSearchPage SearchModel(ResourceTextSearchRequest request,
+            ResourceSearchSources sources, CancellationToken token)
+        {
+            lock (_sync)
+            {
+                if (request == null) return SearchLocked(request, sources, token);
+                var original = request.Continuation;
+                try
+                {
+                    if (request.Next)
+                    {
+                        if (original != null || _next == null) throw Stale();
+                        request.Continuation = _next;
+                    }
+                    return SearchLocked(request, sources, token);
+                }
+                finally { request.Continuation = original; }
+            }
+        }
+
+        // Advance only empty, normally paginated pages. Return at the first hit or any
+        // incomplete/unsafe condition. Preserve the caller's semantic request and the
+        // exact continuation guards; never rebase a changed source or hide scan gaps.
+        public ResourceWithinSearchPage SearchWithAutomaticPaging(ResourceTextSearchRequest request,
+            ResourceSearchSources sources, CancellationToken token)
+        {
+            lock (_sync)
+            {
+                if (request == null) return SearchLocked(request, sources, token);
+                var original = request.Continuation;
+                try
+                {
+                    if (request.Next)
+                    {
+                        if (original != null || _next == null) throw Stale();
+                        request.Continuation = _next;
+                    }
+                    ResourceWithinSearchPage page = null;
+                    var observed = new List<ResourceRef>();
+                    var seen = new HashSet<string>(StringComparer.Ordinal);
+                    for (var i = 0; i < MaximumAutomaticEmptyPages; i++)
+                    {
+                        page = SearchLocked(request, sources, token);
+                        // Hidden intermediate pages still contribute durable exact evidence.
+                        foreach (var reference in page.ExactReferences)
+                            if (seen.Add(reference.Uri + "\u001f" + reference.Revision)) observed.Add(reference.Copy());
+                        page.ExactReferences = new List<ResourceRef>(observed);
+                        if (page.Continuation == null || !page.SourceComplete || page.Matches.Count != 0 ||
+                            page.IncompleteReasons.Any(reason => reason != "page_limit")) return page;
+                        if (i + 1 < MaximumAutomaticEmptyPages) request.Continuation = page.Continuation;
+                    }
+                    return page;
+                }
+                finally { request.Continuation = original; }
+            }
+        }
+
         private ResourceWithinSearchPage SearchLocked(ResourceTextSearchRequest request, ResourceSearchSources sources, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
             if (request == null || string.IsNullOrEmpty(request.Query) || request.Query.Length > 500 ||
                 request.Limit < 1 || request.Limit > 50 || (request.Mode != "literal" && request.Mode != "regex") ||
+                (request.Detail != "compact" && request.Detail != "context") ||
                 string.IsNullOrEmpty(request.Target) == string.IsNullOrEmpty(request.Scope))
-                throw Invalid("Select one target or scope and a nonempty single-line query, mode literal/regex, limit 1–50.");
+                throw Invalid("Select one target or scope, query, mode literal/regex, detail compact/context and limit 1–50.");
             RNAssistant.Core.Tools.ResourceTextMatcher matcher;
             try { matcher = new RNAssistant.Core.Tools.ResourceTextMatcher(request.Query, request.Mode, request.MatchCase); }
             catch (RNAssistant.Core.Tools.TextPatternException ex)
@@ -46,7 +110,7 @@ namespace RNAssistant.Core.Services
             if (items.Select(x => x.Target).Distinct(StringComparer.Ordinal).Count() != items.Count)
                 throw Invalid("Search targets are ambiguous.");
             var fingerprint = JsonConvert.SerializeObject(new { request.Target, request.Scope, request.Directory,
-                request.Recursive, request.IncludeGlobs, request.ExcludeGlobs, request.Query, request.Mode, request.MatchCase, request.Limit });
+                request.Recursive, request.IncludeGlobs, request.ExcludeGlobs, request.Query, request.Mode, request.MatchCase, request.Limit, request.Detail });
             var membership = JsonConvert.SerializeObject(items.Select(x => x.Target));
             if (request.Continuation != null)
             {
@@ -93,6 +157,11 @@ namespace RNAssistant.Core.Services
                         if (request.Target != null) page.ExactReference = text.Reference.Copy();
                         if (!text.SourceComplete) { page.SourceComplete = false; page.IncompleteReasons.Add("source_text_incomplete"); }
                         var lineNumber = 0;
+                        var withContext = request.Detail == "context";
+                        var preceding = new Queue<string>();
+                        var pending = new List<ResourceWithinSearchItem>();
+                        var stopLine = 0;
+                        var stopColumn = 0;
                         while (true)
                         {
                             token.ThrowIfCancellationRequested();
@@ -101,7 +170,19 @@ namespace RNAssistant.Core.Services
                             if (line == null) break;
                             lineNumber++;
                             if (scanned > MaximumScanCharacters)
-                            { Incomplete(page, "scan_character_budget"); return Retain(page); }
+                            {
+                                Incomplete(page, "scan_character_budget");
+                                if (stopLine != 0) Continue(page, source.Target, stopLine, stopColumn);
+                                return Retain(page);
+                            }
+                            if (withContext)
+                            {
+                                var neighbor = ContextLine(line);
+                                foreach (var item in pending) item.After.Add(neighbor);
+                                pending.RemoveAll(item => item.After.Count >= ContextNeighborLines);
+                                if (stopLine != 0 && pending.Count == 0)
+                                { Continue(page, source.Target, stopLine, stopColumn); return Retain(page); }
+                            }
                             if (tooLong) { Incomplete(page, "line_too_long"); continue; }
                             if (compare == 0 && lineNumber < after.AfterLine) continue;
                             var start = compare == 0 && lineNumber == after.AfterLine ? after.AfterColumn : 0;
@@ -118,17 +199,34 @@ namespace RNAssistant.Core.Services
                                 if (begin > 0 && char.IsLowSurrogate(line[begin])) begin--;
                                 var count = Math.Min(600, line.Length - begin);
                                 if (count > 0 && char.IsHighSurrogate(line[begin + count - 1])) count--;
-                                page.Matches.Add(new ResourceWithinSearchItem { Target = source.Target,
-                                    StartLine = lineNumber, StartColumn = hit + 1, Snippet = line.Substring(begin, count) });
+                                var item = new ResourceWithinSearchItem { Target = source.Target,
+                                    StartLine = lineNumber, StartColumn = hit + 1, Snippet = line.Substring(begin, count) };
+                                if (withContext)
+                                {
+                                    item.Before = preceding.ToList();
+                                    item.After = new List<string>();
+                                    pending.Add(item);
+                                }
+                                page.Matches.Add(item);
                                 _matches++;
                                 if (page.Matches.Count == request.Limit)
                                 {
-                                    Continue(page, source.Target, lineNumber, next);
-                                    return Retain(page);
+                                    if (!withContext) { Continue(page, source.Target, lineNumber, next); return Retain(page); }
+                                    stopLine = lineNumber; stopColumn = next;
+                                    break;
                                 }
                                 start = next;
                             }
+                            if (withContext)
+                            {
+                                preceding.Enqueue(ContextLine(line));
+                                if (preceding.Count > ContextNeighborLines) preceding.Dequeue();
+                            }
+                            if (stopLine != 0 && pending.Count == 0)
+                            { Continue(page, source.Target, stopLine, stopColumn); return Retain(page); }
                         }
+                        if (stopLine != 0)
+                        { Continue(page, source.Target, stopLine, stopColumn); return Retain(page); }
                     }
                 }
                 catch (RegexMatchTimeoutException) { Incomplete(page, "regex_timeout"); return Retain(page); }
@@ -162,6 +260,13 @@ namespace RNAssistant.Core.Services
         }
         private static void Incomplete(ResourceWithinSearchPage page, string reason)
         { page.ScanComplete = false; page.MatchesComplete = false; if (!page.IncompleteReasons.Contains(reason)) page.IncompleteReasons.Add(reason); }
+        private static string ContextLine(string line)
+        {
+            if (line.Length <= ContextLineCharacters) return line;
+            var length = ContextLineCharacters;
+            if (char.IsHighSurrogate(line[length - 1])) length--;
+            return line.Substring(0, length) + "…";
+        }
         private static bool Same(ResourceRef a, ResourceRef b) { return b != null && a.Uri == b.Uri && a.Revision == b.Revision; }
         private static ResourceRequestException Invalid(string message) { return new ResourceRequestException(message, "resource_search_invalid", false); }
         private static ResourceRequestException Stale() { return new ResourceRequestException("Search continuation is unavailable or stale. Start a fresh search without continuation.", "resource_search_stale", false); }

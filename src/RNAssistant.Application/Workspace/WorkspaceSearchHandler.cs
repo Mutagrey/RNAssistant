@@ -33,7 +33,9 @@ namespace RNAssistant.Runtime
                     if (_office == null) return Failure("resource_search_unsupported", "No Office document is bound to this run.");
                     return _office.ExecuteAsync(context, token);
                 }
-                var page = _search.Search(request, _files.SearchSources(request, token), token);
+                // Empty directory-search pages are advanced inside the runtime, not by the model.
+                // The budget and exact-source revalidation remain in ResourceTextSearch.
+                var page = _search.SearchWithAutomaticPaging(request, _files.SearchSources(request, token), token);
                 _observation?.Record(request, page, context.Execution.RunId + ":" + context.Execution.StepId);
                 return Return(ToolResult.Ok(page.ScanComplete && page.SourceComplete ? "Selected text scope searched completely." :
                     "Search is incomplete; inspect reasons or continue. Absence is not established.",

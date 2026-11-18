@@ -19,6 +19,11 @@ namespace RNAssistant.Core.Models
         [JsonProperty("mode")] public string Mode { get; set; } = "literal";
         [JsonProperty("matchCase")] public bool MatchCase { get; set; }
         [JsonProperty("limit")] public int Limit { get; set; } = 20;
+        // Semantic verbosity only. Exact search evidence remains runtime-owned.
+        [JsonProperty("detail")] public string Detail { get; set; } = "compact";
+        // Model-facing continuation intent. Position is resolved by ResourceTextSearch.
+        [JsonProperty("next")] public bool Next { get; set; }
+        // Canonical/internal cursor: excluded from the published model argument schema.
         [JsonProperty("continuation")] public ResourceSearchPosition Continuation { get; set; }
     }
 

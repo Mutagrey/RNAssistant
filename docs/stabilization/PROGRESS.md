@@ -1,5 +1,21 @@
 # Stabilization progress
 
+## Bounded tool-search context and semantic continuation — In Review, 2026-11-18
+
+Implemented host-neutral / In Review, `17.4.2-dev`. `core.search` now supports bounded
+`detail=context` excerpts and model-facing `next=true` continuation while exact cursor,
+membership and source revisions remain runtime-owned. Workspace transparently crosses
+up to four empty pages; Office/Browser retain their existing source strategy. Model
+result projection collapses duplicated coverage flags into conservative `complete` and
+uses `matchesSeen` for incomplete scans, without changing `core.replace` observation
+requirements.
+
+`text search:` passes 6/6, including context bounds, semantic continuation, stale-query
+rejection, sparse automatic paging, exact reference retention and compact incomplete
+presentation. Harness build succeeds with the two existing PDF platform warnings.
+Windows x64 / Office x64 / WebView2 qualification and live-model token/turn measurements
+remain open.
+
 ## Harness regression sweep and Markdig packaging — In Review, 2026-11-18
 
 On `e5190c97` the Harness and MockDemo builds pass, as do focused `markdown analysis:`,

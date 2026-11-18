@@ -463,6 +463,38 @@ Search details use existing typed result blocks and activity summaries; Inspecto
 shows the saved request/result, not a second reconstructed log. Five VBA captions now
 use the active catalog constants and moduleName rather than retired tool IDs.
 
+### Search context, runtime paging and compact results — 2026-11-18
+
+Owner: `ResourceTextSearch`; Workspace and Office use the same matcher while their
+source providers and paging policy remain separate. `core.search` keeps
+`detail=compact` by default. `detail=context` adds at most two neighboring physical
+lines before and after each match, each truncated to a 240 UTF-16-code-unit prefix
+with an explicit truncation marker. Context is a search excerpt, not a complete read,
+write evidence or mutation authority.
+
+Workspace may transparently advance up to four empty search pages in one call and
+returns at the first match, non-page-limit incompleteness, cancellation or failure.
+Office/Browser-bound targets expose the same semantic continuation but retain their
+own source open cost and do not use that hidden empty-page loop. Hidden Workspace
+pages retain all exact `ResourceRef` observations; the caller's model request is not
+mutated by internal paging.
+
+The model resumes an incomplete result with `next=true` and identical query, target or
+scope, filters, mode, case and detail. `ResourceTextSearch` supplies the exact cursor,
+membership and source pins from the last incomplete call. A changed request, handler
+lifetime, source set or revision fails with `resource_search_stale`; cursor coordinates
+are absent from the published schema and model result. The canonical Tool Result keeps
+the cursor, exact references and exact counters for audit and replay.
+
+Model result projection exposes one conservative `complete` verdict instead of the
+separate scan/source/match flags. Only a complete scan with complete sources, exact
+totals, no gaps and no continuation is complete. Otherwise `totalMatches` is projected
+as `matchesSeen`, an observed lower bound, and `next=true` is present when continuation
+is available. UI presentation accepts this projection and historical canonical flags.
+The existing `core.replace` guard still requires a completed search of one exact target;
+`matchesSeen` never counts as an exact replacement total. Real Windows/Office/WebView2
+behavior remains open evidence.
+
 ### Excel Power Query — 2026-11-16
 
 Owner: `ExcelPowerQueryToolHandler` / source mutation owner in Office and the bound

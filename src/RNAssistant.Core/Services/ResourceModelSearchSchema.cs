@@ -8,7 +8,7 @@ namespace RNAssistant.Core.Services
 {
     public static class ResourceModelSearchSchema
     {
-        public const string Description = "Read-only literal or line-oriented .NET regex search. " + RNAssistant.Core.Tools.ResourceTextMatcher.LineSearchGuidance + " Select one target or a scope. Results contain bounded snippets and 1-based UTF-16 line/column coordinates; no language parser is required. Workspace scope searches only the selected directory (root when omitted), unless recursive=true includes descendants. Only scanComplete and sourceComplete together establish absence within the selected target, depth and filters. Continue with the returned semantic continuation and identical arguments; changed sources or lost continuation state require a fresh search. Search is not a complete source read or patch authorization.";
+        public const string Description = "Read-only literal or line-oriented .NET regex search. " + RNAssistant.Core.Tools.ResourceTextMatcher.LineSearchGuidance + " Select one target or a scope. detail=context returns bounded adjacent lines; next=true resumes the last incomplete search with identical arguments. Runtime owns exact position and revision; stale, changed or lost sources fail closed. Only complete source/scan coverage proves absence. Search excerpts are not full reads or patch authority.";
 
         public static string Create(bool workspace, bool office, bool browser = false)
         {
@@ -46,11 +46,10 @@ namespace RNAssistant.Core.Services
                 ["mode"] = new JObject { ["type"] = "string", ["enum"] = new JArray("literal", "regex"), ["default"] = "literal" },
                 ["matchCase"] = new JObject { ["type"] = "boolean" },
                 ["limit"] = new JObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 50 },
-                ["continuation"] = new JObject { ["type"] = "object", ["properties"] = new JObject {
-                    ["afterTarget"] = new JObject { ["type"] = "string", ["minLength"] = 1 },
-                    ["afterLine"] = new JObject { ["type"] = "integer", ["minimum"] = 0 },
-                    ["afterColumn"] = new JObject { ["type"] = "integer", ["minimum"] = 0 } },
-                    ["required"] = new JArray("afterTarget", "afterLine", "afterColumn"), ["additionalProperties"] = false }
+                ["detail"] = new JObject { ["type"] = "string", ["enum"] = new JArray("compact", "context"),
+                    ["default"] = "compact", ["description"] = "Use context to include two bounded lines before and after each match; omit for compact snippets." },
+                ["next"] = new JObject { ["type"] = "boolean", ["default"] = false,
+                    ["description"] = "Continue the most recent incomplete search with the exact same query, target/scope and filters. Omit on the first call." }
             };
             if (workspace) AddPathFilters(fields);
             return new JObject { ["type"] = "object", ["properties"] = fields,

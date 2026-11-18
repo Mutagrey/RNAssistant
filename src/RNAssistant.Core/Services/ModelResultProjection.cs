@@ -237,7 +237,7 @@ namespace RNAssistant.Core.Services
             var result = name == "core.find"
                 ? SelectFields(data, "scope", "query", "items", "total", "complete", "availabilityHint", "unavailableScopes", "directory", "code", "retryable")
                 : name == "core.search"
-                ? SelectFields(data, "target", "scope", "query", "mode", "matches", "totalMatches", "totalMatchesExact", "scanComplete", "sourceComplete", "matchesComplete", "incompleteReasons", "unavailableScopes", "continuation", "code", "retryable")
+                ? SelectFields(data, "target", "scope", "query", "mode", "matches", "totalMatches", "incompleteReasons", "unavailableScopes", "continuation", "code", "retryable")
                 : name == "resources.outline"
                 ? SelectFields(data, "target", "partCount", "totalLines", "nextPart", "sourceComplete", "symbolLanguage", "symbolsComplete", "parts", "code", "retryable")
                 : SelectFields(data, "version", "historical", "startLine", "requestedLines", "startChar", "requestedCharacters", "requestedOffset", "requestedRows", "selectionComplete", "section", "procedure", "partNumber", "partCount", "pageIndex", "startPage", "requestedPages", "nextPageIndex", "pageCount", "kind", "target", "type", "scope",
@@ -279,10 +279,31 @@ namespace RNAssistant.Core.Services
                     return candidate;
                 }));
             if (name == "core.search" && result["matches"] is JArray)
+            {
                 result["matches"] = new JArray(((JArray)result["matches"]).Select(item => SelectFields(item,
-                    "target", "startLine", "startColumn", "snippet", "partNumber", "sectionTitle")));
+                    "target", "startLine", "startColumn", "snippet", "before", "after", "partNumber", "sectionTitle")));
+                var raw = data as JObject;
+                // Do not infer absence from a truncated scan or an incomplete source.
+                var complete = raw?.Value<bool?>("scanComplete") == true &&
+                    raw.Value<bool?>("sourceComplete") == true && raw.Value<bool?>("matchesComplete") == true &&
+                    raw.Value<bool?>("totalMatchesExact") == true &&
+                    !(raw["unavailableScopes"] is JArray unavailable && unavailable.Count > 0) &&
+                    !(raw["incompleteReasons"] is JArray gaps && gaps.Count > 0) && raw["continuation"] == null;
+                result["complete"] = complete;
+                if (!complete && result["totalMatches"] != null)
+                {
+                    // A partial scan can report an observed lower bound, not an exact total.
+                    result["matchesSeen"] = result["totalMatches"].DeepClone();
+                    result.Remove("totalMatches");
+                }
+            }
+            // Canonical result retains exact continuation; the model only needs
+            // to decide whether to continue the same semantic query.
             if (name == "core.search" && result["continuation"] != null)
-                result["continuation"] = SelectFields(result["continuation"], "afterTarget", "afterLine", "afterColumn");
+            {
+                result.Remove("continuation");
+                result["next"] = true;
+            }
             if (name == "resources.outline" && result["parts"] is JArray)
                 result["parts"] = new JArray(((JArray)result["parts"]).Select(item =>
                 {

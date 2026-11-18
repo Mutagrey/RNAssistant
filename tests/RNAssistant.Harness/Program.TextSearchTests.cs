@@ -170,6 +170,10 @@ namespace RNAssistant.Harness
         {
             var schema = JObject.Parse(ResourceModelSearchSchema.Create(true, true)); string error;
             AssertTrue(ToolSchemaSupport.ValidateArguments(JObject.Parse("{\"scope\":\"workspace\",\"query\":\"x\",\"recursive\":true}"), schema, false, out error), "workspace variant");
+            AssertTrue(ToolSchemaSupport.ValidateArguments(JObject.Parse("{\"scope\":\"workspace\",\"query\":\"x\",\"detail\":\"context\"}"), schema, false, out error), "bounded context search variant");
+            AssertTrue(!ToolSchemaSupport.ValidateArguments(JObject.Parse("{\"scope\":\"workspace\",\"query\":\"x\",\"detail\":\"unsafe\"}"), schema, false, out error), "unknown detail refused");
+            AssertTrue(ToolSchemaSupport.ValidateArguments(JObject.Parse("{\"scope\":\"workspace\",\"query\":\"x\",\"next\":true}"), schema, false, out error), "semantic continuation accepted");
+            AssertTrue(!ToolSchemaSupport.ValidateArguments(JObject.Parse("{\"scope\":\"workspace\",\"query\":\"x\",\"continuation\":{\"afterTarget\":\"x\",\"afterLine\":1,\"afterColumn\":1}}"), schema, false, out error), "model cannot supply internal continuation coordinates");
             AssertTrue(!ToolSchemaSupport.ValidateArguments(JObject.Parse("{\"scope\":\"workspace\",\"target\":\"a\",\"query\":\"x\"}"), schema, false, out error), "target/scope are disjoint");
             AssertTrue(!ToolSchemaSupport.ValidateArguments(JObject.Parse("{\"scope\":\"vba\",\"directory\":\"src\",\"query\":\"x\"}"), schema, false, out error), "wrong provider selectors refused");
             AssertTrue(ToolSchemaSupport.ValidateArguments(JObject.Parse("{\"type\":\"office\",\"target\":\"Module1\",\"query\":\"x\"}"), schema, false, out error), "bound Office target variant");
@@ -181,9 +185,78 @@ namespace RNAssistant.Harness
             var parsed = ResourceModelSearchSchema.Parse(strictArgs.ToObject<Dictionary<string, object>>());
             AssertEqual("literal", parsed.Mode, "strict null optional mode keeps runtime default");
             AssertEqual(20, parsed.Limit, "strict null optional limit keeps runtime default");
+            AssertEqual("compact", parsed.Detail, "strict null optional detail keeps compact default");
             var projected = ModelResultProjection.ProjectResourceData("core.search", JObject.Parse(
                 "{\"scope\":\"workspace\",\"query\":\"x\",\"scanComplete\":false,\"matchesComplete\":false,\"sourceComplete\":true,\"revision\":\"secret\",\"matches\":[{\"target\":\"a.js\",\"startLine\":3,\"startColumn\":2,\"snippet\":\"x\",\"uri\":\"rna://secret\"}],\"continuation\":{\"afterTarget\":\"a.js\",\"afterLine\":3,\"afterColumn\":2,\"revision\":\"secret\"}}"));
             AssertTrue(!projected.ToString().Contains("secret") && (int)projected["matches"][0]["startLine"] == 3, "closed projection keeps coordinates and strips authority");
+            AssertTrue(projected.Value<bool>("complete") == false && projected["scanComplete"] == null &&
+                projected["matchesComplete"] == null && projected["sourceComplete"] == null,
+                "model sees one conservative completeness verdict, not repeated runtime flags");
+            var incompleteSummary = ToolResultSummaryProjection.Summarize("core.search", JObject.Parse(
+                "{\"matches\":[],\"scanComplete\":false,\"sourceComplete\":true,\"matchesComplete\":false,\"totalMatchesExact\":false,\"incompleteReasons\":[\"page_limit\"]}").ToString());
+            AssertTrue(incompleteSummary.Complete == false && incompleteSummary.Partial,
+                "incomplete search summary cannot look like a fully searched absence");
+            var partialModel = ModelResultProjection.ProjectResourceData("core.search", JObject.Parse(
+                "{\"matches\":[],\"scanComplete\":false,\"sourceComplete\":true,\"matchesComplete\":false,\"totalMatchesExact\":false,\"totalMatches\":7,\"incompleteReasons\":[\"page_limit\"],\"continuation\":{\"afterTarget\":\"a.js\",\"afterLine\":3,\"afterColumn\":2}}"));
+            AssertTrue(partialModel.Value<bool>("complete") == false && (int)partialModel["matchesSeen"] == 7 &&
+                partialModel["totalMatches"] == null && partialModel["continuation"] == null && partialModel.Value<bool>("next"),
+                "partial totals are an observed lower bound and cursor identity stays internal");
+            var longBefore = new string('a', 239) + "😀";
+            var contextData = new ResourceTextSearch().Search(new ResourceTextSearchRequest {
+                Target = "code.cs", Query = "needle", Detail = "context" }, new ResourceSearchSources {
+                    Items = new List<ResourceSearchSource> { new ResourceSearchSource {
+                        Target = "code.cs", Open = token => new ResourceSearchText {
+                            Reference = new ResourceRef("rna://fixture/code", "r1"),
+                            Reader = new StringReader("far\n" + longBefore + "\nprev\nneedle\nnext1\nnext2\nnext3\n") } } } }, CancellationToken.None);
+            AssertTrue(contextData.ScanComplete && contextData.Matches.Count == 1,
+                "context mode keeps ordinary search completeness");
+            AssertEqual(2, contextData.Matches[0].Before.Count, "context is bounded to two preceding lines");
+            AssertTrue(contextData.Matches[0].Before[0].EndsWith("…") && !contextData.Matches[0].Before[0].Contains("😀"),
+                "context truncation preserves a Unicode scalar and marks the cut");
+            AssertEqual("prev", contextData.Matches[0].Before[1], "context keeps the nearest preceding line");
+            AssertEqual(2, contextData.Matches[0].After.Count, "context is bounded to two following lines");
+            AssertEqual("next1", contextData.Matches[0].After[0], "context keeps the nearest following line");
+            AssertEqual("next2", contextData.Matches[0].After[1], "context stops before a third following line");
+            var contextModel = ModelResultProjection.ProjectResourceData("core.search", JObject.FromObject(contextData));
+            AssertEqual("next1", (string)contextModel["matches"][0]["after"][0], "model projection keeps bounded context");
+            AssertTrue(!contextModel.ToString().Contains("rna://"), "context projection does not leak exact references");
+            AssertTrue(contextModel.Value<bool>("complete") && contextModel["totalMatches"] != null,
+                "completed search reports trustworthy totalMatches");
+            var sources = new ResourceSearchSources {
+                Items = Enumerable.Range(0, 250).Select(index => new ResourceSearchSource {
+                    Target = index.ToString("D4") + ".txt",
+                    Open = token => new ResourceSearchText {
+                        Reference = new ResourceRef("rna://fixture/" + index, "r1"),
+                        Reader = new StringReader(index == 249 ? "needle" : "unrelated") }
+                }).ToList()
+            };
+            var autoRequest = new ResourceTextSearchRequest { Scope = "workspace", Query = "needle" };
+            var autoPage = new ResourceTextSearch().SearchWithAutomaticPaging(autoRequest, sources, CancellationToken.None);
+            AssertEqual("0249.txt", autoPage.Matches.Single().Target, "runtime skips empty search pages");
+            AssertTrue(autoPage.ScanComplete && autoPage.SourceComplete && autoPage.Continuation == null,
+                "runtime completed sparse search without additional model turns");
+            AssertEqual(250, autoPage.ExactReferences.Count, "hidden pages preserve exact canonical source references");
+            AssertTrue(autoRequest.Continuation == null, "internal search paging does not change model request");
+            var cursorSources = new ResourceSearchSources { Items = new List<ResourceSearchSource> {
+                new ResourceSearchSource { Target = "cursor.xyz", Open = token => new ResourceSearchText {
+                    Reference = new ResourceRef("rna://fixture/cursor", "r1"),
+                    Reader = new StringReader("needle\nneedle\n") } } } };
+            var cursorEngine = new ResourceTextSearch();
+            var cursorRequest = new ResourceTextSearchRequest { Target = "cursor.xyz", Query = "needle", Limit = 1 };
+            var cursorFirst = cursorEngine.SearchModel(cursorRequest, cursorSources, CancellationToken.None);
+            AssertTrue(cursorFirst.Continuation != null && cursorFirst.Matches.Single().StartLine == 1,
+                "first page retains an internal exact cursor");
+            var publicFirst = ModelResultProjection.ProjectResourceData("core.search", JObject.FromObject(cursorFirst));
+            AssertTrue(publicFirst["continuation"] == null && publicFirst.Value<bool>("next"),
+                "model sees next intent, never cursor coordinates");
+            cursorRequest.Next = true;
+            var cursorSecond = cursorEngine.SearchModel(cursorRequest, cursorSources, CancellationToken.None);
+            AssertEqual(2, cursorSecond.Matches.Single().StartLine.Value, "next resumes the matching second line");
+            AssertTrue(cursorRequest.Continuation == null, "runtime never mutates the caller cursor");
+            cursorRequest.Query = "different";
+            AssertEqual("resource_search_stale", RuntimeThrows<ResourceRequestException>(() =>
+                cursorEngine.SearchModel(cursorRequest, cursorSources, CancellationToken.None)).ErrorCode,
+                "next cannot resume after a changed query");
             var blocks = new List<ToolResultBlockDto>(); ToolResultPresentationService.AppendContent(blocks, projected.ToString());
             var list = blocks.OfType<ToolListBlockDto>().Single();
             AssertTrue(!list.Complete && list.Items.Single().Detail.Contains("3"), "typed preview shows coordinates and incomplete coverage");

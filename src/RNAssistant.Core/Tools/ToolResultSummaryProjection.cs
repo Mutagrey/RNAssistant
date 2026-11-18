@@ -18,9 +18,16 @@ namespace RNAssistant.Core.Tools
                 if (toolId == "core.find") return SummarizeFind(data);
                 if (toolId == "core.read") return SummarizeRead(data);
                 if (toolId == "core.search" && data["matches"] is JArray matches)
+                {
+                    var complete = data.Value<bool?>("complete") == true ||
+                        data.Value<bool?>("scanComplete") == true && data.Value<bool?>("sourceComplete") == true &&
+                        data.Value<bool?>("matchesComplete") == true && data.Value<bool?>("totalMatchesExact") == true;
+                    if ((data["unavailableScopes"] as JArray)?.Count > 0 ||
+                        (data["incompleteReasons"] as JArray)?.Count > 0 || data["continuation"] != null || data["next"] != null)
+                        complete = false;
                     return new RNAssistant.Core.Models.ToolResultSummary { Kind = "resource-search", ReturnedItems = matches.Count,
-                        Complete = data.Value<bool?>("scanComplete") == true && data.Value<bool?>("sourceComplete") == true && data.Value<bool?>("matchesComplete") == true,
-                        Partial = (data["unavailableScopes"] as JArray)?.Count > 0 };
+                        Complete = complete, Partial = !complete };
+                }
                 if (toolId == CapabilityToolCatalog.SearchToolId) return CapabilityCatalogService.SummarizeSearch(data);
                 return CapabilityCatalogService.SummarizeRead(data);
             }

@@ -164,8 +164,12 @@ namespace RNAssistant.Office.Services
                     sourceView.Reference = ModelReferenceProjection.BoundSourceReference(terminal, readData.Representation, readData.Coverage)?.Alias;
                 if (data.Matches != null)
                 {
-                    var block = new ToolListBlockDto { Title = "Совпадения", Complete = data.ScanComplete == true &&
-                        data.SourceComplete == true && data.MatchesComplete == true && data.Matches.Count <= MaxRows };
+                    // Projected model data has a single complete flag. Retained canonical
+                    // historical results may still use the three exact coverage flags.
+                    var searchComplete = data.Complete ?? (data.ScanComplete == true &&
+                        data.SourceComplete == true && data.MatchesComplete == true);
+                    var block = new ToolListBlockDto { Title = "Совпадения",
+                        Complete = searchComplete && data.Matches.Count <= MaxRows };
                     foreach (var match in data.Matches.Take(MaxRows))
                     {
                         if (match == null) { block.Complete = false; continue; }

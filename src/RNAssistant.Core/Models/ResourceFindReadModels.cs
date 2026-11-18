@@ -361,6 +361,9 @@ namespace RNAssistant.Core.Models
         [JsonProperty("startLine", NullValueHandling = NullValueHandling.Ignore)] public int? StartLine { get; set; }
         [JsonProperty("startColumn", NullValueHandling = NullValueHandling.Ignore)] public int? StartColumn { get; set; }
         [JsonProperty("snippet")] public string Snippet { get; set; }
+        // Optional bounded neighboring lines: excerpt only, never whole-source write evidence.
+        [JsonProperty("before", NullValueHandling = NullValueHandling.Ignore)] public List<string> Before { get; set; }
+        [JsonProperty("after", NullValueHandling = NullValueHandling.Ignore)] public List<string> After { get; set; }
         [JsonProperty("partNumber", NullValueHandling = NullValueHandling.Ignore)] public int? PartNumber { get; set; }
         [JsonProperty("sectionTitle", NullValueHandling = NullValueHandling.Ignore)] public string SectionTitle { get; set; }
     }
