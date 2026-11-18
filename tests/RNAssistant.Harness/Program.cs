@@ -64,6 +64,9 @@ namespace RNAssistant.Harness
                 return TabularSourceHost(args.Length == 2 ? args[1] : null);
             var tests = new List<HarnessTest>
             {
+                Test("markdown analysis: shared AST and exact spans", MarkdownAnalysisContract),
+                Test("markdown resources: workspace sections and coverage", MarkdownResourceWorkspaceSections),
+                Test("markdown resources: artifact outline and sections", MarkdownResourceArtifactOutline),
                 Test("diagnostic logs: typed bridge and fixed file scope", DiagnosticLogsBridgeUsesFixedScope),
                 Test("diagnostic logs: bounded UTF-8 pages and snapshot reset", DiagnosticLogsBoundedUtf8Pages),
                 Test("diagnostic logs: retention and diagnostic-only scope", DiagnosticLogsRetentionAndScope),

@@ -7,6 +7,12 @@
     if (text) result.textContent = text;
     return result;
   }
+  function formatBytes(value) {
+    value = Number(value || 0);
+    if (value < 1024) return value + " Б";
+    if (value < 1024 * 1024) return (value / 1024).toFixed(1) + " КБ";
+    return (value / (1024 * 1024)).toFixed(1) + " МБ";
+  }
   function html(target) { return target && (target.kind === "html_workspace" || readers.isHtmlFileArtifact(artifactFor(target))); }
   function valid(target) {
     return !!target && ["material", "browser-resource"].includes(target.view) && typeof target.chatId === "string" && !!target.chatId &&
@@ -35,23 +41,31 @@
     if (html(result)) result.view = "browser-resource"; return result;
   }
   function create(target) {
-    var root = node("section", "material-object-view"), header = node("header", "resource-editor-head");
+    var root = node("section", "material-object-view");
     root.dataset.resourceUri = target.resourceUri; root.setAttribute("aria-label", target.title);
-    var titleBox = node("div", "resource-editor-titlebox"), buttons = node("div", "resource-editor-actions");
-    titleBox.append(node("strong", "resource-editor-title", target.title), node("small", "resource-editor-meta",
-      [target.documentTitle || "Документ исходного чата", target.chatTitle, target.revision ? "Версия " + target.revision : "Сохранённый материал"].filter(Boolean).join(" · ")));
-    titleBox.title = titleBox.textContent;
+    var buttons = node("div", "resource-editor-actions");
+    var documentMeta = [target.documentTitle || "Документ исходного чата", target.chatTitle,
+      target.revision ? "Версия " + target.revision : "Сохранённый материал"].filter(Boolean).join(" · ");
+    var shell = window.RNAssistantMaterialSurface.create({
+      kind: readers.artifactViewerKind(artifactFor(target)) || "material", title: target.title,
+      meta: documentMeta, actions: buttons, statusMeta: target.revision ? "Версия " + target.revision : "Сохранённый материал"
+    });
+    root.appendChild(shell.element);
+    var content = shell.content;
+    content.__rnMaterialSurface = shell;
     var more = RNAssistantActionMenu.createTrigger("Действия с материалом");
-    buttons.appendChild(more); header.append(titleBox, buttons);
-    var message = node("p", "material-object-status"); message.setAttribute("role", "status"); message.setAttribute("aria-live", "polite");
-    var retry = node("button", "button compact secondary", "Повторить чтение"); retry.type = "button"; retry.hidden = true;
-    var content = node("div", "material-object-content product-viewer"); content.tabIndex = 0;
-    root.append(header, message, retry, content);
+    var downloadButton = node("button", "icon-btn compact material-download-button");
+    downloadButton.type = "button"; downloadButton.title = "Скачать оригинал"; downloadButton.setAttribute("aria-label", downloadButton.title);
+    downloadButton.innerHTML = RNAssistantIcons.render("download");
+    var retry = node("button", "icon-btn compact material-retry-button"); retry.type = "button"; retry.hidden = true;
+    retry.title = "Повторить чтение"; retry.setAttribute("aria-label", retry.title); retry.innerHTML = RNAssistantIcons.render("refresh");
+    content.tabIndex = 0;
+    buttons.append(retry, downloadButton, more);
     var active = false, disposed = false, generation = 0, abort = new AbortController(), rendered = false, requests = new Set();
     var events = new AbortController(), savedScroll = 0;
     var localState = { activeChatId: target.chatId, artifactViewerPages: {} };
     function current(version) { return !disposed && active && generation === version && !abort.signal.aborted; }
-    function status(text) { message.textContent = text || ""; message.hidden = !text; }
+    function status(text) { shell.setStatus(text || ""); }
     function closeLate(value) {
       var data = value && (value.data || value.Data);
       if (data && data.leaseId) send("resourceDataClose", { chatId: target.chatId, workspaceId: "viewer", leaseId: data.leaseId }).catch(function () {});
@@ -87,7 +101,7 @@
       if (!active || disposed) { rendered = false; return; }
       var artifact = artifactFor(target), format = readers.artifactViewerKind(artifact);
       if (format === "image" && Number(target.byteLength) > maximumImageBytes) {
-        status("Изображение больше лимита просмотра 8 МБ. Оригинал можно скачать через меню."); retry.hidden = true; return;
+        status("Изображение больше лимита просмотра 8 МБ. Оригинал можно скачать кнопкой на верхней панели."); retry.hidden = true; return;
       }
       savedScroll = content.scrollTop;
       unmount(); content.dataset.productViewer = format || "text";
@@ -97,8 +111,11 @@
       }
       retry.hidden = true;
       status(value && value.status === "ready" ? "" : "Чтение сохранённого материала…");
+      shell.setTitle(target.title, documentMeta);
+      shell.setStatusMeta([format ? format.toUpperCase() : "Материал", target.byteLength != null ? formatBytes(target.byteLength) : "",
+        target.revision ? "v" + target.revision : ""].filter(Boolean).join(" · "));
       if (!readers.appendTypedArtifactViewer(content, artifact, actions)) {
-        status("Просмотр этого формата пока недоступен. Оригинал можно скачать через меню."); rendered = true; return;
+        status("Просмотр этого формата пока недоступен. Оригинал можно скачать кнопкой на верхней панели."); rendered = true; return;
       }
       if (value && value.pages && value.pages[0] && value.pages[0].offset > 0)
         status("В памяти последние 16 страниц. Чтобы вернуться к началу, выберите «Повторить чтение» в меню.");
@@ -119,20 +136,23 @@
         isCurrent: function () { return current(version); }, status: status });
     }
     more.addEventListener("click", function () { RNAssistantActionMenu.open(more, [
-      { label: "Скачать оригинал", icon: "download", onSelect: download },
       { label: "Копировать точную ссылку", icon: "link", onSelect: function () { copyTextResult(target.resourceUri).then(function () { status("Ссылка скопирована"); }).catch(function () { status("Не удалось скопировать ссылку"); }); } },
       { label: "Повторить чтение", icon: "refresh", onSelect: reload }
     ].concat(window.RNAssistantArtifactCatalog.commands(target))); }, { signal: events.signal });
+    downloadButton.addEventListener("click", function () {
+      Promise.resolve(download()).catch(function (error) { status(error.detail || error.message || "Не удалось скачать материал."); });
+    }, { signal: events.signal });
     retry.addEventListener("click", reload, { signal: events.signal });
     if (target.head && window.RNAssistantArtifactVersions) RNAssistantArtifactVersions.append(buttons, target.head,
       { resourceUri: target.resourceUri, revision: target.revision || target.head.revision }, function (revision) {
         return RNAssistantDockWorkspace.openTarget(Object.assign({}, target, { resourceUri: revision.resourceUri,
           revision: revision.revision, title: revision.title || target.title }), { referencePanel: key(target) });
-      }, { chatId: target.chatId, sessionRevision: target.sessionRevision, isCurrent: function () { return active && !disposed; }, send: scopedSend });
+      }, { chatId: target.chatId, sessionRevision: target.sessionRevision, compact: true,
+        isCurrent: function () { return active && !disposed; }, send: scopedSend });
     return { element: root,
       activate: function () { if (disposed || active) return; active = true; abort = new AbortController(); generation++; if (!rendered) render(); },
       deactivate: function () { if (!active) return; active = false; stopReads(); RNAssistantActionMenu.closeWithin(root); },
-      dispose: function () { if (disposed) return; active = false; disposed = true; stopReads(); actions.closeAll(); events.abort(); RNAssistantActionMenu.closeWithin(root); unmount(); root.replaceChildren(); }
+      dispose: function () { if (disposed) return; active = false; disposed = true; stopReads(); actions.closeAll(); events.abort(); RNAssistantActionMenu.closeWithin(root); unmount(); shell.destroy(); root.replaceChildren(); }
     };
   }
   function register(dock) {

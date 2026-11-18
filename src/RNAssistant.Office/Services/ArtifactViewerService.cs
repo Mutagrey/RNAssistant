@@ -53,6 +53,26 @@ namespace RNAssistant.Office.Services
         private readonly ArtifactPdfViewerService _pdfViewer;
         private readonly Func<byte[], int, ArtifactImageThumbnailRenderResult> _renderImageThumbnail;
 
+        public static MarkdownAnalysisResponse AnalyzeMarkdown(MarkdownAnalysisRequest request,
+            System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
+        {
+            if (request == null || request.Text == null)
+                throw new ArgumentException("Provide the complete Markdown text.", nameof(request));
+            if (request.Text.Length > MaximumDocumentCharacters)
+                throw new MarkdownAnalysisException("Markdown preview exceeds the document viewer limit.", "markdown_too_large");
+            cancellationToken.ThrowIfCancellationRequested();
+            var document = MarkdownAnalysisService.Analyze(request.Text);
+            cancellationToken.ThrowIfCancellationRequested();
+            return new MarkdownAnalysisResponse
+            {
+                Profile = document.Profile,
+                CharacterCount = document.CharacterCount,
+                Html = document.Html,
+                Sections = document.Sections,
+                Links = document.Links
+            };
+        }
+
         public ArtifactViewerService(ResourceGatewayService gateway)
             : this(gateway, null)
         {

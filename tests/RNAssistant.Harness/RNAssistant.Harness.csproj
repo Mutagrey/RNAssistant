@@ -16,6 +16,10 @@
       <HintPath>..\..\packages\YamlDotNet.18.1.0\lib\net8.0\YamlDotNet.dll</HintPath>
       <Private>true</Private>
     </Reference>
+    <Reference Include="Markdig">
+      <HintPath>..\..\packages\Markdig.0.37.0\lib\net8.0\Markdig.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
     <Reference Include="PDFtoImage">
       <HintPath>..\..\vendor\pdf-rendering\managed\net8.0\PDFtoImage.dll</HintPath>
       <Private>true</Private>

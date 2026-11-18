@@ -761,9 +761,12 @@ namespace RNAssistant.Office.Services
             if (!string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId)) result.Metadata["scope"] = "document";
             if (artifact.Kind == ChatArtifactKinds.File && DocumentArtifactStore.FileEncoding(artifact) != null)
                 result.Metadata["authoredFile"] = "true";
+            var markdownFile = artifact.Kind == ChatArtifactKinds.File && DocumentArtifactStore.FileEncoding(artifact) != null &&
+                (string.Equals(System.IO.Path.GetExtension(artifact.Title), ".md", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(System.IO.Path.GetExtension(artifact.Title), ".markdown", StringComparison.OrdinalIgnoreCase));
             if (!string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId) && (artifact.Kind == ChatArtifactKinds.Markdown ||
-                artifact.Kind == ChatArtifactKinds.PlanDocument || DocumentArtifactStore.IsMarkdownOriginal(attachment) && !attachment.TextTruncated))
-                result.Metadata["sectionRead"] = "atx-heading";
+                artifact.Kind == ChatArtifactKinds.PlanDocument || markdownFile || DocumentArtifactStore.IsMarkdownOriginal(attachment) && !attachment.TextTruncated))
+                result.Metadata["sectionRead"] = "markdown-heading";
             if (string.Equals(artifact.Kind, ChatArtifactKinds.HtmlWorkspace, StringComparison.OrdinalIgnoreCase))
             {
                 result.SnapshotTarget = HtmlWorkspaceTargets.Snapshot(artifact);

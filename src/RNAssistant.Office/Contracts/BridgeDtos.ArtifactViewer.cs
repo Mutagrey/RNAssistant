@@ -3,6 +3,22 @@ using Newtonsoft.Json;
 
 namespace RNAssistant.Office.Contracts
 {
+    // A bounded presentation transform. It neither resolves a resource nor
+    // grants read/write evidence; the caller owns the exact source snapshot.
+    public sealed class MarkdownAnalysisRequest
+    {
+        [JsonProperty("text")] public string Text { get; set; }
+    }
+
+    public sealed class MarkdownAnalysisResponse
+    {
+        [JsonProperty("profile")] public string Profile { get; set; }
+        [JsonProperty("characterCount")] public int CharacterCount { get; set; }
+        [JsonProperty("html")] public string Html { get; set; }
+        [JsonProperty("sections")] public IReadOnlyList<RNAssistant.Core.Models.MarkdownSection> Sections { get; set; }
+        [JsonProperty("links")] public IReadOnlyList<RNAssistant.Core.Models.MarkdownLink> Links { get; set; }
+    }
+
     public class ArtifactResourcePayload : ChatPayload
     {
         [JsonProperty("documentId")] public string DocumentId { get; set; }

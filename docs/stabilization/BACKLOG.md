@@ -1,5 +1,14 @@
 # RNAssistant backlog
 
+## Markdown truncated fixture — observed 2026-11-16
+
+Owner: `tests/RNAssistant.Harness/Program.ResourceDiscoveryTests.cs`. The case
+`resources: Markdown sections enforce source bounds` expects the `Truncated.md`
+fixture to refuse section selection, but current extraction retains that text and the
+same assertion also fails on the original `f8fadddd`. Either bind the fixture to an
+explicit incomplete extraction or update the intended size/bound assertion. This is
+separate from the shared Markdig viewer/resource checks and is not claimed as passing.
+
 ## Workspace missing running chat poll — closed host-neutral 2026-11-16
 
 Owner: `app-workspace-chat.js` exact-view run observer. `project_chat_missing` now

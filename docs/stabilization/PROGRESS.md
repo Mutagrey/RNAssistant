@@ -1,5 +1,37 @@
 # Stabilization progress
 
+## Shared Markdown analysis and MaterialSurface — In Review, 2026-11-17
+
+Implemented host-neutral / In Review, `17.4.0-dev`. Saved Markdown now uses one
+bounded Markdig 0.37.0 analysis for rendered HTML, heading hierarchy, exact UTF-16
+section ranges and explicit link occurrences. Workspace and artifact section/outline
+consumers share the same parser; the former hand-written heading scanner is removed.
+`MaterialSurface` now supplies one sidebar/header/content/statusbar shell to material
+text, MD, PDF, image, sequence, JSON, task list and Browser. Viewer controls, search,
+navigation and status are provider slots over existing owners. MD adds a bounded local
+heading/explicit-link graph; it is not cross-document resolution or backlinks. The
+surface fills the panel, uses shared page spacing/controls, expands search over the
+header and collapses navigation at compact widths. Parsing is presentation/index
+evidence, not mutation authority.
+
+The compact Browser follow-up removes its duplicated title/meta, moves modes into the
+shared switcher, groups save/history/apply into one version menu and leaves a single
+`…` for project/export/compare/screenshot/page actions. MD and Browser now share the
+`preview`/play mode semantics. Tree and viewer insets were tightened at the
+MaterialSurface owner; provider toolbars remain outside the central layout.
+
+`markdown analysis:` and `markdown resources:` pass; `artifact-text-viewer.test.js`
+passes 12/12; the real Chrome fixture passes with its full-height, narrow-overlay,
+late-response and cached-analysis assertions. Wide and 420 px screenshots were
+reviewed locally. Harness and MockDemo builds pass on macOS. The MockDemo Material
+panel geometry was checked with the production viewer mounted after its known
+resource-data transport failure; this is layout evidence, not a successful artifact
+read. Windows x64 / Office x64 / WebView2/bound Office outline and 125% native visual
+acceptance remain open.
+An unrelated baseline check, `resources: Markdown sections enforce source bounds`,
+also fails on the original `f8fadddd` fixture and is recorded in
+[BACKLOG](BACKLOG.md#markdown-truncated-fixture--observed-2026-11-16).
+
 ## Native prompt catalog production matrix — 2026-11-18
 
 Host-neutral test coverage now exercises a prompt source edit through catalog discovery,
@@ -64,8 +96,8 @@ Plan preparation/read/inspection consumers now request their exact identity inst
 capturing every unrelated head. Broad evidence/catalog consumers retain full capture.
 
 `journal resources: receipts rebuild and restore` compares 300 unrelated heads:
-addressed capture read 3 journal records / 3,453 bytes in 0.786 ms, while full capture
-read 303 records / 351,986 bytes in 19.228 ms. Full `journal resources:`, `journal task
+addressed capture read 3 journal records / 3,453 bytes in 0.779 ms, while full capture
+read 303 records / 351,983 bytes in 19.282 ms. Full `journal resources:`, `journal task
 list:` and `journal Plan:` pass 3/3 each. The legacy `ResourceAuthorityStore` adapter
 filters its already retained projection explicitly; Windows/WebView2 latency remains an
 open platform gate.

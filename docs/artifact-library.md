@@ -676,7 +676,7 @@ Artifact metadata search selects public title, kind, MIME and authored descripti
 runtime artifact IDs and raw metadata JSON never populate snippets. User-authored
 body content remains searchable without recursive key filtering.
 
-Document Markdown and Plan content search now uses `artifact-text-index-v3`, a
+Document Markdown and Plan content search now uses `artifact-text-index-v4`, a
 deterministic `ResourceRevisionView` over the exact published body. Its manifest
 and 32,000-character text parts live in the existing CAS/revision journal, using
 the same retention/GC edges. It publishes no heads, observation or read guard and
@@ -692,11 +692,12 @@ One occurrence per resource suffices for discovery; a budget-limited negative
 remains incomplete. Matches spanning parts preserve exact UTF-16 source offsets,
 including CRLF and surrogate pairs.
 
-`sectionTitle` supplies the nearest preceding recognized ATX Markdown heading,
-excluding fenced code, with up to 200 characters plus an omission marker. This
-bounded outline recognizes at most 4096 headings; it supplies no title after an
-omitted heading. It is not a complete Markdown AST. Exact section selection uses
-the complete-source scan described below, never the clipped discovery label alone.
+`sectionTitle` supplies the nearest preceding Markdig heading (ATX or Setext),
+excluding fenced code, with up to 200 characters plus an omission marker. The
+shared complete-source parse is bounded to 1,048,576 UTF-16 characters, 4096
+headings and 16,384 explicit links. Beyond these bounds text parts/search remain
+available, while heading structure is explicitly incomplete. Exact section
+selection uses the same parser, never the clipped discovery label alone.
 Search-only Gateway candidates now retain the authored description too. Both
 fields are untrusted discovery context; snippets are source excerpts, not proof of
 whole-source inspection or mutation eligibility.
@@ -716,7 +717,7 @@ open. No model-generated synopsis or embedding publication is added.
 ### Implemented uploaded text discovery views — 2026-09-08
 
 `DocumentArtifactStore.SearchText` also indexes the original's retained extraction
-through `artifact-extracted-text-index-v3`. The exact resource still identifies the
+through `artifact-extracted-text-index-v4`. The exact resource still identifies the
 immutable upload; the view hash binds its **extracted text**, independently of the
 original binary payload hash. The existing manifest/parts/CAS mechanism, source
 bounds, source-page generation guards and repair path are reused. There is no
@@ -724,7 +725,7 @@ second extractor, source-chat fallback or new store. Original search no longer
 uses the per-resource 128k prefix path; local resources keep their existing path.
 
 Materialization validates the retained extraction character count. Uploaded
-Markdown receives ATX heading context; PDF/plain-text hash marks do not become
+Markdown receives heading context from the bounded Markdig parse; PDF/plain-text hash marks do not become
 Markdown headings. Snippet offsets address the retained text representation and
 round-trip through the existing exact resource read. No read-evidence contract
 changes. If text extraction bytes are missing, text search stays unavailable even
@@ -772,18 +773,20 @@ pagination and Windows/Office/WebView2/layout qualification remain open.
 
 ### Implemented Markdown section reads — 2026-09-08
 
-`common.resources_read` accepts `section` together with `representation=text` for
-document-owned authored Markdown, Plans and complete uploaded Markdown text.
-The selector is a unique ATX heading title without its leading `#` markers, up to
-200 characters, compared case-insensitively after trimming outer whitespace.
-Remaining title markup is literal. The selected text includes its heading and
-nested subsections until the next heading of equal or lesser depth. Fenced code
-headings are ignored; Setext/HTML headings are not supported by this grammar.
+`core.read` accepts `section` together with `representation=text` for
+document-owned authored Markdown, Plans, authored Markdown files, complete uploaded
+Markdown text and workspace `.md`/`.markdown` files. The selector is the unique
+visible title of an ATX or Setext heading, up to 200 characters, compared
+case-insensitively after trimming outer whitespace. Inline formatting is decoded
+by Markdig. The selected source includes its heading and nested subsections until
+the next heading of equal or lesser depth. Fenced code is not a heading source;
+raw HTML headings are not Markdown sections.
 
-An incremental counterpart of `MarkdownHeadingScanner` drives index headings;
-section selection uses the complete-source scanner and never trusts a clipped label.
-Section resolution reads the exact CAS text and scans
-at most 4096 headings. It does not infer uniqueness from incomplete extraction.
+`MarkdownAnalysisService` owns headings, section ranges, HTML anchors and explicit
+links; `MarkdownSectionSelector` handles semantic title selection. The former
+hand-written scanner and incremental heading grammar are removed. Text parts
+still stream into CAS. Section resolution checks complete exact text and the
+parser bounds; it does not infer uniqueness from incomplete extraction.
 Missing/repeated headings, truncated extraction, unsupported resources, oversized
 sections and generation drift fail explicitly with recovery guidance. A selected
 section is bounded to 32000 characters; there is no silent truncation or whole-read

@@ -3,20 +3,14 @@
   // Domain operations only. Browser owns target/lifetime; existing services own effects.
   function mount(root, context) {
     var copies = new Map(), disposed = false, abort = new AbortController();
-    var create = document.createElement("button"); create.type = "button"; create.className = "icon-btn compact preview-surface-persistent";
-    create.innerHTML = RNAssistantIcons.render("copy"); create.setAttribute("aria-label", "Создать проект");
-    var more = RNAssistantActionMenu.createTrigger("Действия страницы"); more.classList.add("compact", "preview-surface-actions-overflow"); root.append(create, more);
+    var more = RNAssistantActionMenu.createTrigger("Действия страницы"); more.classList.add("compact", "preview-surface-actions-overflow"); root.append(more);
     function key(target) { return target && (target.resourceUri || target.workspaceId + ":" + target.savedVersionId); }
     function capture(target) { var generation = context.generation(); return function () { return !disposed && context.isCurrent() &&
       context.generation() === generation && key(context.target()) === key(target); }; }
     function operation(target) { return copies.get(key(target)); }
     function refresh() {
       if (disposed) return;
-      var target = context.target(), caps = target && target.capabilities || {}, copy = operation(target);
-      create.hidden = !target || target.kind !== "HtmlResource";
-      create.disabled = !caps.createProject || !!copy;
-      create.title = copy ? copy.issue || (copy.pending ? "Проект создаётся…" : "Проект уже создан: откройте его в действиях страницы") : caps.createProject ?
-        "Создать проект из точного HTML-источника" : "Создание проекта недоступно для этого источника";
+      var target = context.target(), copy = operation(target);
       more.hidden = !target || target.kind === "Home"; more.disabled = !target || target.state !== "Ready";
     }
     async function createProject(target) {
@@ -40,11 +34,10 @@
         if (accepted()) context.error(new Error(copy.issue));
       } finally { copy.pending = false; refresh(); }
     }
-    create.onclick = function () { createProject(context.target()).catch(context.error); };
     more.onclick = function () {
       var target = context.target(); if (!target || target.state !== "Ready") return;
       var caps = target.capabilities, copy = operation(target), items = [];
-      if (context.canFind && context.canFind()) items.push({ label: 'Найти на странице', icon: 'search', onSelect: context.find });
+      if (context.canHome && context.canHome()) items.push({ label: "Главная", icon: "home", onSelect: context.home });
       if (context.compareAvailable && context.compareAvailable()) items.push({ label: "Сравнение", icon: "diff", onSelect: context.compare });
       if (context.canScreenshot) items.push({ label: "Скачать снимок страницы", icon: "image", disabled: !context.canScreenshot(), onSelect: function () {
         var request = context.screenshotRequest(), accepted = capture(target);
@@ -71,7 +64,7 @@
     };
     refresh();
     return { refresh: refresh, deactivate: function () { abort.abort(); abort = new AbortController(); RNAssistantActionMenu.closeWithin(root); },
-      dispose: function () { disposed = true; abort.abort(); RNAssistantActionMenu.closeWithin(root); create.remove(); more.remove(); } };
+      dispose: function () { disposed = true; abort.abort(); RNAssistantActionMenu.closeWithin(root); more.remove(); } };
   }
   window.RNAssistantBrowserActions = { mount: mount };
 }());

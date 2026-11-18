@@ -18,16 +18,20 @@
   }
   function create(target) {
     var root = document.createElement("section"); root.className = "browser-object-view"; root.setAttribute("aria-label", "Browser"); root.dataset.browserTabId = target.browserTabId;
-    var content = document.createElement("div"); content.className = "browser-object-content browser-local-content";
-    var files = document.createElement("select"); files.className = "rna-form-control compact browser-document-file"; files.setAttribute("aria-label", "Файл проекта");
+    var shell = window.RNAssistantMaterialSurface.create({ kind: "browser", title: target.title || "Browser",
+      hideTitle: true, statusMeta: "Browser" });
+    root.appendChild(shell.element);
+    var content = shell.content; content.classList.add("browser-object-content", "browser-local-content");
     var source = document.createElement("div"); source.className = "browser-document-source product-viewer";
     var empty = document.createElement("div"); empty.className = "empty-state";
     var viewport = document.createElement("div"); viewport.className = "browser-native-viewport"; viewport.setAttribute("aria-label", "Интерактивная страница");
-    content.append(files, source, viewport, empty); root.appendChild(content);
+    content.append(source, viewport, empty);
     var mount = document.createElement("div"); mount.className = "browser-view";
     var renderer = RNAssistantViewerRegistry.mount("browser", mount, { surface: root, portalHost: document.querySelector(".shell"), onLayout: layoutNative, onEnter: function () { if (session && selectedMode === "preview" && current.status === "Ready") { command("Focus").catch(fail); return true; } return false; } });
     var active = false, disposed = false, opening = null, session = null, current = null, generation = 0, recordedVisit = 0, pending = new Set();
-    var sourcePage = null, loadingSource = 0, selectedMode = "preview", targetGeneration = -1, homeView = null;
+    var sourcePage = null, sourceViewer = null, loadingSource = 0, selectedMode = "preview", targetGeneration = -1, homeView = null;
+    var fileNavigation = createBrowserFileNavigation();
+    shell.setNavigation({ element: fileNavigation.element, available: browserFilesAvailable });
     var operationId = target.operationId || id(), definitionDialog = null, targetInvalidated = false, sourceInvalidated = false, authorityRevision = -1, sourceRefreshEpoch = 0;
     var discussionBusy = false, createdDiscussion = null, handoverPending = false, handoverRequested = false;
     function discussionContext() {
@@ -116,7 +120,15 @@
       if (chats.length > 20) items.push({ label: "Выберите другой чат в дереве и снова откройте это меню", informational: true, icon: false });
       RNAssistantActionMenu.open(anchor, items, { label: "Связать страницу с чатом" });
     }
-    var surface = RNAssistantPreviewSurface.attach(root, { reload: function () { return command("Reload"); }, canReload: function () { return active && !!session; }, discuss: discuss });
+    function updateBrowserTitle(label) {
+      label = label || {};
+      shell.element.setAttribute("aria-label", label.title || target.title || "Browser");
+    }
+    var surface = RNAssistantPreviewSurface.attach(root, { reload: function () { return command("Reload"); }, canReload: function () { return active && !!session; }, discuss: discuss,
+      modesHost: shell.modesHost, singleOverflow: true,
+      onStatus: function (message, error) { shell.setStatus(message || "", !!error); }, onLabel: updateBrowserTitle });
+    shell.setProviderToolbar(surface.bar);
+    shell.setCommonActions(surface.actions);
     var annotationHost = RNAssistantBrowserAnnotations.create({ root: root, viewport: viewport, surface: surface, send: send, command: command,
       isCurrent: function () { return active && !disposed && selectedMode === "preview"; }, layout: layoutNative,
       focus: function () { selectMode("preview"); RNAssistantDockWorkspace.openTarget({ view: "browser", browserTabId: target.browserTabId,
@@ -177,12 +189,19 @@
       })) layoutNative();
     }); overlays.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["open", "aria-modal", "hidden", "class"] });
     var comparison = null;
-    var pageFind = RNAssistantBrowserFind.create({ root: root, content: content, command: command, layout: layoutNative,
+    var pageFind = RNAssistantBrowserFind.create({ root: shell.workspace, content: content, command: command, layout: layoutNative,
       isCurrent: function () { return active && !disposed && selectedMode === 'preview'; },
       selectionOff: function () { annotationHost.deactivate(); }, focusPage: function () { command('Focus').catch(fail); } });
+    function updateSearchAdapter() {
+      if (selectedMode === "preview") shell.setSearch({ open: pageFind.open });
+      else if (selectedMode === "source" && sourceViewer && typeof sourceViewer.search === "function") shell.setSearch({ search: sourceViewer.search });
+      else shell.setSearch(null);
+    }
+    updateSearchAdapter();
     var providerActions = RNAssistantBrowserActions.mount(surface.actions, { target: function () { return current && current.target; },
       generation: function () { return current && current.documentGeneration; }, isCurrent: function () { return active && !disposed; },
       status: surface.status, error: fail, changeDiscussion: changeDiscussion, find: pageFind.open, canFind: pageFind.enabled,
+      canHome: surface.canHome, home: surface.goHome,
       compareAvailable: function () { return !!comparison && current && current.status !== "Home" && current.status !== "Removed"; },
       compare: function () { return selectMode("diff"); },
       canScreenshot: function () { return active && !disposed && selectedMode === "preview" && current && current.status === "Ready" && current.attached && current.target.capabilities.media; },
@@ -259,6 +278,79 @@
     function label() { return { title: current && current.title || target.title || "Browser", address: current && current.url || target.locator,
       storage: { kind: current && current.target && current.target.workspaceId ? "directory" : "managed" } }; }
     function fail(error) { if (!disposed) surface.fail(label(), error.detail || error.message || String(error)); }
+    function browserFilesAvailable() {
+      return selectedMode === "source" && !!sourcePage && Array.isArray(sourcePage.files) && sourcePage.files.length > 0 &&
+        !!current && !["Home", "Removed", "Closed"].includes(current.status);
+    }
+    function syncFileNavigationAvailability() { shell.setNavigationAvailability(browserFilesAvailable()); }
+    function createBrowserFileNavigation() {
+      var panel = document.createElement("nav");
+      panel.className = "browser-file-navigation";
+      panel.setAttribute("aria-label", "Файлы проекта");
+      var heading = document.createElement("div");
+      heading.className = "product-nav-heading navigation-pane-heading";
+      var headingLabel = document.createElement("strong"); headingLabel.textContent = "Файлы проекта";
+      var count = document.createElement("span"); count.className = "navigation-tree-badge"; count.hidden = true;
+      heading.append(headingLabel, count);
+      var tree = document.createElement("div");
+      panel.append(heading, tree);
+      var expanded = Object.create(null), positionKey = "browser-files:" + target.browserTabId;
+
+      function fileIcon(path) {
+        if (/\.(?:html?|xhtml)$/i.test(path)) return RNAssistantNavigationTree.icon("html");
+        if (/\.(?:png|jpe?g|gif|webp|avif|bmp|svg)$/i.test(path)) return RNAssistantNavigationTree.icon("image");
+        if (/\.(?:css|m?js|cjs|jsx|tsx?|json|xml|ya?ml|md|txt|svg|woff2?|ttf)$/i.test(path)) return RNAssistantNavigationTree.icon("code");
+        return RNAssistantNavigationTree.icon("file");
+      }
+      function treeNodes(files, activePath) {
+        var roots = [], folders = Object.create(null);
+        files.forEach(function (path) {
+          var parts = path.split(/[\\/]+/).filter(Boolean);
+          if (!parts.length) return;
+          var parentRoots = roots, parentFolders = folders, prefix = "";
+          for (var index = 0; index < parts.length - 1; index += 1) {
+            var segment = parts[index]; prefix += (prefix ? "/" : "") + segment;
+            var slot = parentFolders[segment];
+            if (!slot) {
+              var key = "folder:" + prefix;
+              slot = { node: { key: key, title: segment, ariaLabel: prefix + "/", tooltip: prefix, kind: "parent",
+                selectable: false, iconHtml: RNAssistantNavigationTree.icon("folder"),
+                expanded: expanded[key] !== false, children: [] }, children: [], folders: Object.create(null) };
+              parentFolders[segment] = slot; parentRoots.push(slot.node);
+            }
+            parentRoots = slot.node.children; parentFolders = slot.folders;
+          }
+          parentRoots.push({ key: "file:" + path, title: parts[parts.length - 1], ariaLabel: path, tooltip: path,
+            kind: "item", iconHtml: fileIcon(path), selected: path === activePath, filePath: path });
+        });
+        return roots;
+      }
+      function draw(files, activePath, emptyText) {
+        files = Array.isArray(files) ? files.filter(function (path) { return typeof path === "string" && path.length > 0; }) : [];
+        count.textContent = String(files.length); count.hidden = !files.length;
+        tree.removeAttribute("aria-busy");
+        RNAssistantNavigationTree.render(tree, treeNodes(files, activePath), {
+          label: "Файлы проекта", positionKey: positionKey, emptyText: emptyText || "Файлы не найдены", reserveToggleSpace: true,
+          onToggle: function (node, value) { expanded[node.key] = value; },
+          onSelect: function (node) {
+            if (!node.filePath || sourcePage && sourcePage.path === node.filePath) return true;
+            loadSource(node.filePath, 0).catch(fail);
+            return true;
+          }
+        });
+      }
+      function reset(message) {
+        count.hidden = true; tree.setAttribute("aria-busy", "true");
+        RNAssistantNavigationTree.render(tree, [], { label: "Файлы проекта", positionKey: positionKey, emptyText: message || "Загрузка файлов…" });
+      }
+      reset();
+      return { element: panel,
+        render: function (files, activePath) { draw(files, activePath); },
+        select: function (path) { RNAssistantNavigationTree.setSelected(tree, path ? "file:" + path : null); },
+        reset: reset,
+        dispose: function () { RNAssistantNavigationTree.unmount(tree, positionKey); }
+      };
+    }
     async function request(type, payload) {
       var task = send(type, payload); pending.add(task);
       try { return await task; } finally { pending.delete(task); }
@@ -317,7 +409,7 @@
         suggest: suggestions
       }, selectMode);
     }
-    function selectMode(mode) { if (mode !== "preview") { annotationHost.deactivate(); pageFind.deactivate(); } selectedMode = mode; presentation(); render(); if (current) { annotationHost.update(current); pageFind.update(current); } layoutNative(); }
+    function selectMode(mode) { if (mode !== "preview") { annotationHost.deactivate(); pageFind.deactivate(); } selectedMode = mode; updateSearchAdapter(); presentation(); render(); if (current) { annotationHost.update(current); pageFind.update(current); } layoutNative(); }
     function render() {
       if (!active || disposed || !current) return;
       var home = current.status === "Home", removed = current.status === "Removed";
@@ -327,7 +419,8 @@
       viewport.hidden = selectedMode !== "preview" || !nativeReady;
       empty.hidden = !home && !removed && (selectedMode === "source" || selectedMode === "preview" && nativeReady);
       layoutNative();
-      source.hidden = files.hidden = home || removed || selectedMode !== "source";
+      source.hidden = home || removed || selectedMode !== "source";
+      syncFileNavigationAvailability();
       empty.classList.toggle("browser-home", home);
       if (home) {
         if (!homeView) { empty.replaceChildren(); homeView = createHome(empty); }
@@ -341,7 +434,7 @@
     async function loadSource(path, offset) {
       if (!active || disposed || !current || current.status === "Home" || current.status === "Removed") return;
       var epoch = ++generation, owner = current, previous = sourcePage;
-      sourcePage = null; loadingSource = epoch; files.disabled = true;
+      loadingSource = epoch;
       try {
         var result = await request("readBrowserSource", { ownerScope: owner.ownerScope, locator: owner.url, path: path, offset: offset,
           count: 32000, expectedRevision: offset > 0 && previous && previous.path === path ? previous.revision : null, requestGeneration: epoch });
@@ -349,14 +442,21 @@
         if (result.requestGeneration !== epoch || !Array.isArray(result.files) || result.files.length > 512 || typeof result.text !== "string" || result.text.length > 32000)
           throw new Error("Ответ исходника не соответствует текущему запросу.");
         sourcePage = result;
-        files.replaceChildren(); result.files.forEach(function (path) { files.appendChild(new Option(path, path)); }); files.value = result.path;
-        RNAssistantViewerRegistry.mount("text", source, { text: result.text, code: true, path: result.path, offset: result.offset,
+        fileNavigation.render(result.files, result.path);
+        sourceViewer = RNAssistantViewerRegistry.mount("text", source, { text: result.text, code: true, path: result.path, offset: result.offset,
           totalCharacters: result.totalCharacters, hasPrevious: result.offset > 0, hasNext: result.offset + result.text.length < result.totalCharacters,
           onPrevious: function () { loadSource(result.path, Math.max(0, result.offset - 32000)).catch(fail); },
           onNext: function () { loadSource(result.path, result.offset + result.text.length).catch(fail); }, onCopy: copyTextResult });
-      } finally { if (!disposed && epoch === generation) { loadingSource = 0; files.disabled = false; } }
+        updateSearchAdapter();
+        syncFileNavigationAvailability();
+        return result;
+      } catch (error) {
+        if (disposed || !active || epoch !== generation) return;
+        fileNavigation.select(sourcePage && sourcePage.path);
+        syncFileNavigationAvailability();
+        throw error;
+      } finally { if (!disposed && epoch === generation) loadingSource = 0; }
     }
-    files.onchange = function () { loadSource(files.value, 0).catch(fail); };
     function apply(value) {
       if (disposed || !value || value.browserTabId !== target.browserTabId || session && value.sessionId !== session ||
           current && value.revision < current.revision) return;
@@ -371,11 +471,13 @@
         RNAssistantDockWorkspace.recordNavigation(value); recordedVisit = value.visitRevision;
       }
       annotationHost.update(value);
-      if (value.status === "Closed") { session = null; stopReads(); fail("Страница закрыта вместе с исходным контекстом."); return; }
+      if (value.status === "Closed") { session = null; sourcePage = null; fileNavigation.reset(); syncFileNavigationAvailability();
+        stopReads(); fail("Страница закрыта вместе с исходным контекстом."); return; }
       if (targetGeneration !== value.documentGeneration) { stopReads(); sourcePage = null; RNAssistantViewerRegistry.unmount(source); source.replaceChildren();
+        fileNavigation.reset();
         RNAssistantDockWorkspace.updateTarget({ view: "browser", browserTabId: target.browserTabId, ownerScope: value.ownerScope, chatBound: value.chatBound,
           locator: value.url, title: value.title || "Browser" });
-        targetGeneration = value.documentGeneration; versionControls.reset(); versionControls.refresh();
+        targetGeneration = value.documentGeneration; sourceViewer = null; updateSearchAdapter(); versionControls.reset(); versionControls.refresh();
         if (comparison) { comparison.dispose(); comparison.element.remove(); comparison = null; }
         var descriptor = value.target;
         if (descriptor && descriptor.state === "Ready" && descriptor.capabilities.versions &&
@@ -449,8 +551,9 @@
         if (live.get(target.browserTabId) === apply) live.delete(target.browserTabId);
         if (versionViews.get(target.browserTabId) === versionView) versionViews.delete(target.browserTabId);
         versionControls.dispose(); providerActions.dispose(); if (comparison) comparison.dispose();
+        fileNavigation.dispose();
         pageFind.dispose(); annotationHost.dispose(); if (homeView) homeView.dispose(); if (session) send("browserCommand", { action: "Close", browserTabId: target.browserTabId, sessionId: session }).catch(function () {});
-        RNAssistantViewerRegistry.unmount(source); RNAssistantViewerRegistry.unmount(mount); surface.clear(); root.replaceChildren(); }
+        RNAssistantViewerRegistry.unmount(source); RNAssistantViewerRegistry.unmount(mount); surface.clear(); shell.destroy(); root.replaceChildren(); }
     };
   }
   function open(locator, owner, options) {

@@ -136,6 +136,58 @@ namespace RNAssistant.Core.Services
             return read;
         }
 
+        public ResourceReadObservation ReadMarkdownSection(string relativePath, string section,
+            int maximumCharacters, CancellationToken token = default(CancellationToken))
+        {
+            var selected = Project(_files.ReadMarkdownSection(_workspace, relativePath, section, maximumCharacters, token), false);
+            // The selected section is complete; its evidence remains a character range.
+            selected.Result.Complete = true;
+            selected.Result.Truncated = false;
+            selected.Result.SourceComplete = false;
+            return selected;
+        }
+
+        public ResourceTextOutline OutlineMarkdown(string relativePath, int fromPart, int limit,
+            CancellationToken token = default(CancellationToken))
+        {
+            if (fromPart < 1 || limit < 1 || limit > 50)
+                throw new WorkspaceFileException("resource_outline_invalid", "Select a positive fromPart and limit from 1 to 50.");
+            WorkspaceFileSnapshot snapshot;
+            string text;
+            var analysis = _files.ReadMarkdownAnalysis(_workspace, relativePath, out snapshot, out text, token);
+            var byId = analysis.Sections.ToDictionary(item => item.Id);
+            var parts = new List<ResourceTextOutlinePart>();
+            var position = 0;
+            var line = 1;
+            var previousCr = false;
+            do
+            {
+                token.ThrowIfCancellationRequested();
+                var length = Math.Min(32000, text.Length - position);
+                if (length > 0 && position + length < text.Length && char.IsHighSurrogate(text[position + length - 1])) length--;
+                var part = new ResourceTextOutlinePart { PartNumber = parts.Count + 1, FirstLine = line, Characters = length };
+                for (var i = position; i < position + length; i++)
+                {
+                    if (text[i] == '\r') { line++; previousCr = true; }
+                    else if (text[i] == '\n') { if (!previousCr) line++; previousCr = false; }
+                    else previousCr = false;
+                }
+                part.LastLine = line;
+                part.Symbols.AddRange(analysis.Sections.Where(item => item.Start >= position && item.Start < position + length)
+                    .Select(item => new ResourceTextOutlineSymbol { Name = DocumentArtifactStore.OutlineHeadingTitle(item.Title), Kind = "heading", Line = item.Line,
+                        NameTruncated = item.Title.Length > 200, Level = item.Level,
+                        ParentHeading = item.ParentId == null ? null : DocumentArtifactStore.OutlineHeadingTitle(byId[item.ParentId].Title) }));
+                parts.Add(part);
+                position += length;
+            } while (position < text.Length);
+            if (fromPart > parts.Count)
+                throw new WorkspaceFileException("resource_outline_invalid", "fromPart exceeds the current Markdown part count.");
+            return new ResourceTextOutline { ExactReference = snapshot.Reference, Target = relativePath,
+                PartCount = parts.Count, TotalLines = line, SourceComplete = true, SymbolLanguage = "markdown", SymbolsComplete = true,
+                NextPart = fromPart + limit <= parts.Count ? (int?)(fromPart + limit) : null,
+                Parts = parts.Skip(fromPart - 1).Take(limit).ToList() };
+        }
+
         public ResourceReadObservation ReadTree(string relativePath, string pointer, int depth,
             int offset, int limit, int maximumCharacters, CancellationToken token = default(CancellationToken))
         {

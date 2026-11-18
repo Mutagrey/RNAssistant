@@ -37,7 +37,6 @@ const { withPreviewPage } = require('./preview-session');
   async function toolbar(id, name) {
     await browser(id).locator('.preview-surface-toolbar').waitFor({ state: 'visible' });
     const button = browser(id).getByRole('button', { name, exact: true });
-    if (!await button.isVisible()) await browser(id).getByRole('button', { name: 'Инструменты страницы', exact: true }).click();
     await button.click();
   }
   await browser('A').locator('.browser-document-source').waitFor({ state: 'visible' });

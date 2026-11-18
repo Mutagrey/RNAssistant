@@ -1,5 +1,47 @@
 # Дизайн-система и компоненты RNAssistant
 
+## MaterialSurface shell — In Review, 2026-11-17
+
+`app-material-surface.js` is one presentation component for Material and Browser
+objects: shared sidebar, one `resource-editor-head`, format/provider/action slots,
+expandable search and bottom status bar. It reuses NavigationPane search behavior,
+PanelToggle styling/icon, NavigationTree, `view-switch`, `resource-editor-titlebox`,
+`resource-editor-actions`, `button`, `icon-btn`, form-control and spacing/color tokens.
+The content always fills its Dockview area; the provider decides document padding and
+scroll. Markdown is frameless with page inset, while text/source and media stay
+edge-to-edge. Sidebar navigation is shared by MD outline, PDF thumbnails and image/
+collection rails; it also contains the Browser source-file tree, grouped by directory
+and shown only in source mode. Crossing into compact width closes it automatically.
+After a PDF/image rail moves into the sidebar, its page/canvas still owns the full
+remaining content box. A failed-read retry is an error state, not a permanent refresh
+action beside a successfully opened exact material.
+The Material sidebar width is owned by the shared `RNAssistantSplitter` contract used
+by other trees: drag, arrows, Enter/double-click reset and left-edge collapse all follow
+the common behavior; the chosen width is shared by Material/Browser surfaces. Compact
+width keeps the sidebar as an overlay without a splitter. Collection rails switch to a
+vertical row list in this sidebar. PDF pages use an unframed page surface rather than a
+rounded card. The MD source editor is edge-to-edge, while formatted Markdown keeps its
+document page inset; code surfaces use the common subtle-surface color.
+
+The header owns title/meta, search, common download/menu/version actions and format
+modes. Search expands over the header and filters outline/collection where available;
+text-like viewers report matches and next/previous navigation. The status bar reports
+viewer status plus useful metadata such as source line/column, page, dimensions or
+MD section/link counts. MD modes are MD, read-only source and a bounded local graph of
+headings and explicit links. Generated HTML remains internal. Authored Markdown,
+resolved cross-document links/backlinks and native Windows visual acceptance remain
+separate.
+
+Browser has no duplicate title/meta: its address is the identity. Its navigation and
+address use a provider row, while common modes/search/actions stay in one header. The
+same `preview` play icon denotes MD formatted view and Browser page view. Save, history
+and saved-version apply live in one compact version menu. Exactly one `…` hosts
+low-frequency home/project/export/compare/screenshot/source-link actions. Tree nesting,
+sidebar insets, source line padding and viewer gaps use the tighter shared spacing;
+individual viewers do not compensate with parallel negative margins.
+Provider actions that do not exist for a representation are omitted rather than left as
+disabled buttons in the header.
+
 ## Browser repeated reset — In Review, 2026-11-16
 
 Repeated Browser reset changes only ownership of existing source/version callbacks;
@@ -1045,7 +1087,8 @@ trigger для обычного материала, HTML и версии пла�
 form-control к поиску общих viewers; отдельного набора цветов/кнопок нет.
 
 Порядок: имя и источник/версия → статус → ограничение/характер данных → содержимое.
-У HTML один уровень выбора «Страница / Исходник», список файлов виден только в исходнике.
+У HTML один уровень выбора «Страница / Исходник», а список файлов проекта находится
+в левом sidebar общего shell и виден только в исходнике.
 Текст имеет диапазон страницы, поиск и copy текущей страницы. Нет скрытого полного
 исходника в DOM и второй iframe под кодом. Browser CSS добавляет только flex/overflow/
 spacing для нового content layout. Длинные названия сокращаются в шапке с полным title;

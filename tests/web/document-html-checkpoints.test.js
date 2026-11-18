@@ -28,20 +28,21 @@ const {withPreviewPage}=require('./preview-session');
     };
     RNAssistantBrowser.open('/resources/html_ws_fixture',scope,{browserTabId:'document-checkpoints'});
   });
-  const root=page.locator('section[aria-label="Browser"]:visible'),save=root.getByRole('button',{name:'Сохранить версию проекта',exact:true});
-  await page.waitForFunction(()=>!document.querySelector('[aria-label="Сохранить версию проекта"]').disabled);
-  await save.click();await page.waitForFunction(()=>docProbe.saves===1);
+  const root=page.locator('section[aria-label="Browser"]:visible'),versions=root.getByRole('button',{name:'Версии проекта',exact:true});
+  async function openVersions(){if(!await page.locator('.rna-action-menu-popup:visible').count())await versions.click();}
+  async function saveVersion(){await openVersions();const item=page.getByRole('menuitem',{name:'Сохранить версию проекта',exact:true});await item.waitFor();await item.click();}
+  await openVersions();assert.equal(await page.getByRole('menuitem',{name:'Сохранить версию проекта',exact:true}).isEnabled(),true);await page.keyboard.press('Escape');
+  await saveVersion();await page.waitForFunction(()=>docProbe.saves===1);
   let probe=await page.evaluate(()=>docProbe);const index=probe.calls.findIndex(c=>c.type==='browserVersionCommand');
   assert.equal(probe.calls[index].expectedContentRevision,'rna://fixture/2');
   assert.deepEqual(probe.calls.find(c=>c.type==='bufferSave'),{type:'bufferSave',chatId:'document-chat',logicalId:'html_ws_fixture'});
   assert.ok(probe.calls.slice(0,index).some(c=>c.action==='Reload'),'buffer publication precedes checkpoint state refresh');
-  await page.waitForFunction(()=>!document.querySelector('[aria-label="Сохранить версию проекта"]').disabled);
   await page.evaluate(()=>{docProbe.dirty=true;docProbe.fail=true;});
-  await save.click();await root.getByText('Правки редактора не сохранены',{exact:true}).waitFor();
+  await saveVersion();await root.locator('.material-surface-viewer-status').getByText('Правки редактора не сохранены',{exact:true}).waitFor();
   assert.equal(await page.evaluate(()=>docProbe.saves),1,'failed file Save never creates a checkpoint');
   await page.setViewportSize({width:420,height:800});await page.evaluate(()=>document.documentElement.style.zoom='1.25');
   await page.screenshot({path:'/tmp/rna-document-checkpoints-narrow.png'});
-  assert.equal(await save.isVisible(),true);assert.deepEqual(errors,[]);
+  assert.equal(await versions.isVisible(),true);assert.deepEqual(errors,[]);
   await page.evaluate(()=>RNAssistantDockWorkspace.close('browser:document-checkpoints'));
   console.log('PASS document checkpoint flushes its exact editor owner and refuses unsaved buffers');
 }))().catch(error=>{console.error(error);process.exitCode=1;});

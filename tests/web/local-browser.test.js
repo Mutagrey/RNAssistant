@@ -14,7 +14,7 @@ const {withPreviewPage} = require('./preview-session');
         if (type === 'getProjectChats') { const result={projects:[{workspaceId:'other',name:'Другой проект',rootPath:'/other',available:true,chats:[{Id:'other-chat',Title:'Чат другого проекта'}]}]}; return p.deferChats ? new Promise(resolve => p.finishChats=()=>resolve(result)) : Promise.resolve(result); }
         if (type === 'queryNavigationSuggestions') return new Promise(resolve => p.pending.push(() => resolve({requestGeneration:payload.requestGeneration,
           items:[{title:payload.prefix,displayLocator:'/projects/project/source/'+payload.prefix+'.html'}]})));
-        if (type === 'readBrowserSource') return Promise.resolve({target:p.pages.values().next().value.target,files:['index.html','second.html'],path:payload.path||'index.html',
+        if (type === 'readBrowserSource') return Promise.resolve({target:p.pages.values().next().value.target,files:['index.html','second.html','styles/site.css'],path:payload.path||'index.html',
           text:'<h1>Exact source '+(payload.path||'index.html')+'</h1>',offset:0,totalCharacters:40,revision:'sha256',requestGeneration:payload.requestGeneration});
         let value = p.pages.get(payload.browserTabId);
         if (payload.action === 'Open') {
@@ -39,13 +39,27 @@ const {withPreviewPage} = require('./preview-session');
     });
     const root=page.locator('section[aria-label="Browser"]:visible');
     await root.locator('.browser-document-source').getByText('<h1>Exact source index.html</h1>',{exact:false}).waitFor();
+    const fileNavigation=root.locator('.browser-file-navigation');
+    await fileNavigation.waitFor();
+    assert.equal(await fileNavigation.locator('[role="treeitem"][aria-selected]').count(),3,'every source file is listed once in the shared sidebar tree');
+    assert.equal(await fileNavigation.locator('[role="treeitem"][aria-selected="true"]').getAttribute('aria-label'),'index.html');
+    assert.equal(await root.locator('.browser-object-content > select').count(),0,'the source file list is not duplicated above the viewer');
+    await fileNavigation.getByRole('treeitem',{name:'styles/site.css',exact:true}).click();
+    await root.locator('.browser-document-source').getByText('<h1>Exact source styles/site.css</h1>',{exact:false}).waitFor();
+    assert.equal(await fileNavigation.locator('[role="treeitem"][aria-selected="true"]').getAttribute('aria-label'),'styles/site.css');
+    await fileNavigation.getByRole('treeitem',{name:'index.html',exact:true}).click();
+    await root.locator('.browser-document-source').getByText('<h1>Exact source index.html</h1>',{exact:false}).waitFor();
     assert.equal(await page.evaluate(() => localProbe.calls.filter(c=>c.action==='Open').length),1);
     assert.equal(await page.evaluate(() => localProbe.calls.find(c=>c.action==='Open').ownerScope.chatId),'source-chat');
     assert.ok(await page.evaluate(() => localProbe.calls.some(c=>c.action==='Attach')));
     assert.equal(await root.locator('iframe').count(),0,'unqualified content never executes in a Shell iframe');
+    await root.getByRole('button',{name:'Найти в материале',exact:true}).click();
+    await root.locator('.material-surface-search-input').fill('Exact');
+    await root.locator('.material-surface-search-status').getByText(/из/).waitFor();
+    await page.keyboard.press('Escape');
     const address=root.getByRole('combobox',{name:'Адрес материала'});
     await address.focus();
-    assert.equal(await root.locator('.preview-surface-actions').isVisible(),false,'address focus hides the lower toolbar');
+    assert.equal(await root.locator('.preview-surface-actions').isVisible(),true,'address focus keeps common Browser actions available');
     assert.equal(await root.getByRole('button',{name:'Копировать адрес',exact:true}).count(),0,'exact address copy control is removed');
     await address.blur();
     await address.fill('old');await address.fill('new');
@@ -83,7 +97,6 @@ const {withPreviewPage} = require('./preview-session');
     assert.ok(sizes.scroll<=sizes.width+1 && sizes.right<=sizes.viewport+1,JSON.stringify(sizes));
     await page.screenshot({path:'docs/ui/review/browser-binding-narrow.png'});
     await page.evaluate(()=>localProbe.deferChats=true);
-    await root.getByRole('button',{name:'Инструменты страницы',exact:true}).click();
     await root.getByRole('button',{name:'Действия страницы',exact:true}).click();
     await page.getByRole('menuitem',{name:'Связать с другим чатом…',exact:true}).click();
     await page.waitForFunction(()=>!!localProbe.finishChats);

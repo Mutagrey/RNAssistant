@@ -472,6 +472,18 @@
     var child = null;
     var railChild = null;
     var thumbnailUrls = {};
+    var statusListeners = [], childStatusUnsubscribe = null, currentStatus = "PDF · " + Number(options.pageCount || 0) + " страниц";
+
+    function publishStatus(value) {
+      currentStatus = value || "";
+      statusListeners.slice().forEach(function (listener) { listener(value); });
+    }
+    function bindChildStatus() {
+      if (childStatusUnsubscribe) childStatusUnsubscribe();
+      childStatusUnsubscribe = null;
+      if (child && typeof child.subscribeStatus === "function")
+        childStatusUnsubscribe = child.subscribeStatus(publishStatus);
+    }
 
     function pdfThumbnailUrl(page) {
       var key = String(page.pageIndex) + ":" + String(page.imageContentSha256 || "");
@@ -485,6 +497,8 @@
     }
 
     function clear() {
+      if (childStatusUnsubscribe) childStatusUnsubscribe();
+      childStatusUnsubscribe = null;
       if (child && typeof child.destroy === "function") child.destroy();
       child = null;
       if (railChild && typeof railChild.destroy === "function") railChild.destroy();
@@ -527,6 +541,7 @@
       layout.appendChild(railChild.element);
       layout.appendChild(pageHost);
       body.appendChild(layout);
+      publishStatus("Страница " + (Number(page.pageIndex || 0) + 1) + " из " + Number(options.pageCount || 0));
     }
 
     function showText() {
@@ -560,6 +575,7 @@
         onCopy: typeof options.onCopy === "function" ? null : window.copyTextResult,
         showCopy: typeof options.onCopy !== "function"
       });
+      bindChildStatus();
       body.appendChild(child.element);
     }
 
@@ -569,6 +585,15 @@
     else showPages();
     return {
       element: root,
+      search: function (query, direction) {
+        return child && typeof child.search === "function" ? child.search(query, direction) : { count: 0, index: 0 };
+      },
+      subscribeStatus: function (listener) {
+        if (typeof listener !== "function") return function () {};
+        statusListeners.push(listener);
+        listener(currentStatus);
+        return function () { var index = statusListeners.indexOf(listener); if (index >= 0) statusListeners.splice(index, 1); };
+      },
       destroy: function () { clear(); root.replaceChildren(); }
     };
   }

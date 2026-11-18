@@ -860,11 +860,39 @@
       });
     }
 
+    function analyzeMarkdown(text, request) {
+      request = request || {};
+      var uri = request.resourceUri || "", chatId = state.activeChatId;
+      var viewer = uri ? artifactViewerState(uri) : null;
+      if (typeof text !== "string" || text.length > 512000 ||
+          uri && (!viewer || !viewer.complete || viewer.fullText !== text)) {
+        return Promise.reject(new Error("Для оглавления нужен полный текст открытого документа."));
+      }
+      if (viewer && viewer.markdownAnalysis) return Promise.resolve(viewer.markdownAnalysis);
+      if (viewer && viewer.markdownAnalysisPending) return viewer.markdownAnalysisPending;
+      var pending = Promise.resolve().then(function () {
+        return options.send("analyzeMarkdown", { text: text });
+      }).then(function (analysis) {
+        if (state.activeChatId !== chatId || viewer && (cache()[uri] !== viewer || viewer.fullText !== text))
+          throw new Error("Чтение отменено.");
+        if (!analysis || analysis.characterCount !== text.length || typeof analysis.html !== "string" ||
+            typeof analysis.profile !== "string" || !Array.isArray(analysis.sections) || !Array.isArray(analysis.links))
+          throw new Error("Структура Markdown не соответствует открытому тексту.");
+        if (viewer) viewer.markdownAnalysis = analysis;
+        return analysis;
+      }).finally(function () {
+        if (viewer && viewer.markdownAnalysisPending === pending) viewer.markdownAnalysisPending = null;
+      });
+      if (viewer) viewer.markdownAnalysisPending = pending;
+      return pending;
+    }
+
     return {
       closeAll: closeAll,
       hasPending: function () { return binaryPending.size > 0 || Object.keys(cache()).some(function (uri) {
-        var value = cache()[uri]; return value.status === "loading" || value.pending || value.pdfThumbnailPendingCount > 0;
+        var value = cache()[uri]; return value.status === "loading" || value.pending || value.markdownAnalysisPending || value.pdfThumbnailPendingCount > 0;
       }); },
+      analyzeMarkdown: analyzeMarkdown,
       artifactImageThumbnailState: artifactImageThumbnailState,
       artifactViewerState: artifactViewerState,
       changeArtifactPdfPage: changeArtifactPdfPage,

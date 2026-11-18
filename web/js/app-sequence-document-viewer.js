@@ -22,23 +22,37 @@
         text: RNAssistantJsonViewer.raw(parsed, items[index]), completeness: "full", onCopy: options.onCopy
       });
     }
-    var rail = RNAssistantSequenceViewer.createRail({ title: "Элементы", ariaLabel: "Элементы коллекции", count: items.length,
-      currentIndex: 0, orientation: "horizontal", className: "collection-rail", showJump: false, showNumbers: false, itemExtent: 156,
-      getItem: function (index) { return items[index]; }, itemLabel: function (index, item) { return itemTitle(item, index); }, onSelect: select,
-      renderItem: function (index, item, preview) { preview.appendChild(node("strong", itemTitle(item, index))); return "ready"; }
-    });
+    function createCollectionRail(orientation) {
+      return RNAssistantSequenceViewer.createRail({ title: "Элементы", ariaLabel: "Элементы коллекции", count: items.length,
+        currentIndex: 0, orientation: orientation, className: "collection-rail", showJump: false, showNumbers: false,
+        itemExtent: orientation === "vertical" ? 44 : 156,
+        getItem: function (index) { return items[index]; }, itemLabel: function (index, item) { return itemTitle(item, index); }, onSelect: select,
+        renderItem: function (index, item, preview) { preview.appendChild(node("strong", itemTitle(item, index))); return "ready"; }
+      });
+    }
+    var rail = createCollectionRail("horizontal"), sourceVisible = false;
     var toolbar = node("div", "", "material-viewer-toolbar"), modes = node("div", "", "view-switch");
     var collectionButton = node("button", "Элементы"), sourceButton = node("button", "JSON");
     collectionButton.type = sourceButton.type = "button"; collectionButton.setAttribute("aria-pressed", "true"); sourceButton.setAttribute("aria-pressed", "false");
     var source = node("div", "", "collection-page product-viewer"), sourceMounted = false; source.hidden = true;
     function mode(raw) {
-      page.hidden = rail.element.hidden = raw; source.hidden = !raw;
+      sourceVisible = !!raw;
+      page.hidden = rail.element.hidden = sourceVisible; source.hidden = !sourceVisible;
       collectionButton.setAttribute("aria-pressed", String(!raw)); sourceButton.setAttribute("aria-pressed", String(raw));
       if (raw && !sourceMounted) { RNAssistantViewerRegistry.mount("json", source, { text: text, completeness: "full", onCopy: options.onCopy }); sourceMounted = true; }
     }
     collectionButton.addEventListener("click", function () { mode(false); }); sourceButton.addEventListener("click", function () { mode(true); });
     modes.append(collectionButton, sourceButton); toolbar.appendChild(modes); body.append(toolbar, rail.element, page, source); select(0);
-    return { element: body, destroy: function () { rail.destroy(); RNAssistantViewerRegistry.unmount(page); RNAssistantViewerRegistry.unmount(source); body.replaceChildren(); } };
+    return { element: body,
+      setNavigationOrientation: function (orientation) {
+        var vertical = orientation === "vertical";
+        if (vertical === rail.element.classList.contains("is-vertical")) return;
+        var next = createCollectionRail(vertical ? "vertical" : "horizontal");
+        rail.element.replaceWith(next.element);
+        rail.destroy(); rail = next; rail.element.hidden = sourceVisible;
+      },
+      destroy: function () { rail.destroy(); RNAssistantViewerRegistry.unmount(page); RNAssistantViewerRegistry.unmount(source); body.replaceChildren(); }
+    };
   }
   RNAssistantViewerRegistry.register("sequence", create);
 }());

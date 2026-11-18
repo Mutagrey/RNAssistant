@@ -61,6 +61,35 @@ costs. In the fixture a receipt stays at 7 journal records and zero body reads; 
 current pending inputs take 53 records and exactly 50 body reads. It runs with the full
 `journal input:` filter; `inbox:` verifies application scheduling and recovery behavior.
 
+## Shared Markdown analysis and MaterialSurface — 2026-11-17
+
+Focused filter `markdown analysis:` exercises the shared Core Markdig pipeline:
+ATX/Setext hierarchy, fenced examples, duplicate and empty headings, HTML/outline
+anchor parity, exact UTF-16/CRLF/BOM ranges, reference links, autolinks, images, raw HTML
+escaping, parse-only results and explicit analysis bounds. Restore the pinned
+`packages/Markdig.0.37.0` dependency before building; Harness and MockDemo use its
+`net8.0` assembly, production Core and offline deployment use `net462`.
+
+Run `dotnet run --project tests/RNAssistant.Harness -- "markdown analysis:"`.
+This filter is independent of the retired `markdown.save` lifecycle fixtures.
+Parser checks do not qualify real WebView2 rendering, Office integration or visual
+acceptance; those remain separate checks.
+
+Filter `markdown resources:` checks workspace and artifact section/outline parity,
+exact captured source after a live edit, duplicate-heading refusal, range-only
+evidence, structure bounds and the current native artifact outline dispatch.
+Run it after the same successful build. The focused filters and MockDemo build pass
+on macOS with Markdig 0.37.0 restored. The separate Chrome fixture also passes with
+explicit `PLAYWRIGHT_EXECUTABLE_PATH`; `PLAYWRIGHT` itself is not a production
+dependency. The bound Office `type=office` route still needs Windows/Office
+verification.
+
+Web presentation evidence also includes `material-object-views.test.js` for the common
+MaterialSurface over PDF/image/text/JSON/collection slots and
+`browser-saved-views.test.js` for the adapted Browser header, unified version menu and
+single page overflow. `markdown-document-viewer.test.js` also checks the compact tree
+insets. These remain Chromium host-neutral checks, not Windows/WebView2 qualification.
+
 ## Bounded journal index admission — 2026-11-16
 
 Filter `storage optimization: journal index admission is bounded` holds the shared
@@ -112,9 +141,10 @@ normal-return macro repetition, genuine Unknown with the same and different next
 arguments, exact latest-producer/terminal witness fences, routed VBA replace and
 one-target patch, publication failure before/after the authority frame, delete and
 explicit restore, skill catalog publication, self-title/no-op metadata and addressed
-rename with a deterministic target commit receipt. Native rebuild verifies retained
-receipts and cannot dispatch. Capability checks cover the single-target patch schema/
-pre-dispatch limit, stale/busy addressed-rename refusal and source/target isolation.
+rename with a deterministic target commit receipt. Native
+rebuild verifies retained receipts and cannot dispatch. Capability checks cover the
+single-target patch schema/pre-dispatch limit, stale/busy addressed-rename refusal and
+source/target isolation after rebuild.
 
 Run these integration cases alongside `journal mutation:`, `journal resources:`,
 `journal runtime:`, `legacy chat import:`, `legacy plugin import:` and the existing

@@ -521,6 +521,7 @@
       importUploadedHtml: importUploadedHtml,
       artifactImageThumbnailState: artifactViewers.artifactImageThumbnailState,
       artifactViewerState: artifactViewers.artifactViewerState,
+      analyzeMarkdown: artifactViewers.analyzeMarkdown,
       closeArtifactViewers: artifactViewers.closeAll,
       changeArtifactPdfPage: artifactViewers.changeArtifactPdfPage,
       changeArtifactViewerPage: artifactViewers.changeArtifactViewerPage,

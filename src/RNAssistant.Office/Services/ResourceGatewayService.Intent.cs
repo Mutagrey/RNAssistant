@@ -928,10 +928,10 @@ namespace RNAssistant.Office.Services
             if (descriptor.Kind == LiveDocumentResourceProvider.DocumentKind &&
                 descriptor.Metadata.TryGetValue("host", out var host) && host == "Word")
                 return "Read structure for exact main-story start/end without materializing document text. For a large document, read explicit Word range: start:end targets within those bounds; each range is a selected part, not the whole document.";
+            if (descriptor.Metadata.ContainsKey("sectionRead"))
+                return "Use representation=text and section with an exact unique visible ATX or Setext heading title (without heading markers) to read that section and nested subsections, up to 32000 characters. Omit section to read the text; a large source may return a bounded first excerpt. Discovery descriptions/snippets are not whole-read evidence.";
             if (type == "file")
                 return "Current authored text/code file. Use resources_search and resources_outline to locate exact parts, resources_read with partNumber for bounded source, then file_patch with unique exact fragments. Download preserves the original extension and encoding.";
-            if (descriptor.Metadata.ContainsKey("sectionRead"))
-                return "Use representation=text and section with an exact unique ATX heading title (without leading #) to read that section and nested subsections, up to 32000 characters. Omit section to read the text; a large source may return a bounded first excerpt. Discovery descriptions/snippets are not whole-read evidence.";
             if (!string.IsNullOrWhiteSpace(IntentRecordsPath(descriptor)))
                 return "For table omit path; runtime applies this target's canonical row view.";
             return null;

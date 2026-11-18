@@ -1,5 +1,59 @@
 # Карта экранов, навигации и состояний
 
+## MaterialSurface and Markdown modes — In Review, 2026-11-17
+
+Material and Browser objects use the same shell: optional left navigation, one header,
+format/provider controls, expandable search and common actions, a full-bleed content
+slot, and a bottom status bar. Ordinary materials show a one-line title; Browser uses
+its address as identity and does not duplicate a title/meta block. In source mode the
+Browser file list lives in the shared left sidebar as a directory tree; the active file
+is selected there and no selector is duplicated above the source. Artifact and Browser
+versions share one menu: save, history and apply are actions inside it. Download remains
+a visible material action. One `…` owns copy-link/reload, home, project, export,
+compare, screenshot, edit-source and catalog commands; search is not duplicated in that
+menu.
+
+For PDF and images, moving the thumbnail/gallery rail into the sidebar does not shrink
+the document page or canvas: the remaining content slot fills the surface. A successful
+exact material shows no refresh button; failed reads alone expose retry, while the same
+recovery command remains available in the material overflow menu.
+
+The Material sidebar is resizable through the same `splitter` behavior as other product
+trees; its width persists across Material/Browser views. Collection navigation switches
+to compact vertical rows in that sidebar. PDF pages have no rounded page frame. MD source
+starts at the content edge; formatted MD/plan content keeps the document inset. An MD
+analysis failure shows its retry next to the reason in the status bar, not as an isolated
+toolbar button.
+
+Saved material Markdown uses the same `preview` mode as Browser: a play icon for the
+formatted document, a code icon for read-only source and a graph icon for a bounded
+local graph of headings and explicit links. Generated HTML remains internal. The code
+icon is not an editor.
+The existing Plan editor keeps its own draft/save owner; generic editable Markdown is
+still pending.
+
+The adjacent outline toggle opens the local NavigationTree: heading hierarchy and
+explicit outgoing links grouped by destination. Heading selection scrolls to the
+rendered anchor; link occurrence selection opens its source line. Relative and
+external destinations are displayed, not guessed into file paths. Same-document
+anchors can navigate within the rendered document. The graph contains only the current
+document's bounded sections and explicit outgoing links; it is not a resolved
+cross-document graph or backlink index.
+
+Partial text keeps page navigation and can request the existing full read.
+Only complete readable text gets formatted/source/outline modes. Failed analysis
+offers retry and retains source. Narrow views initially keep the sidebar closed;
+opening it uses a local overlay, and selection dismisses that overlay. Per-view
+mode and expansion state belong to the existing viewer instance. In a Material
+panel the frameless viewer fills the available content and height; the outline and
+rendered body scroll inside that surface rather than making a short card. Crossing
+into the narrow width closes an open outline; the navigation button reopens it as a
+local overlay. PDF thumbnails, image/collection rails and text/Markdown search/status
+use the same slots. At narrow width Browser may place its address/provider row below
+the modes/search/action row to avoid overlap; Markdown normally remains one row. Tree
+and viewer insets are owned by shared MaterialSurface spacing rather than nested
+toolbars or per-view wrappers.
+
 ## Черновик чата — W9, In Review, 2026-11-16
 
 Ввод в Office/Workspace/plugin по-прежнему мгновенно отображается и сохраняет свою

@@ -14,8 +14,8 @@ namespace RNAssistant.Core.Storage
 {
     public sealed partial class DocumentArtifactStore
     {
-        private const string TextIndexView = "artifact-text-index-v3";
-        private const string ExtractedTextIndexView = "artifact-extracted-text-index-v3";
+        private const string TextIndexView = "artifact-text-index-v4";
+        private const string ExtractedTextIndexView = "artifact-extracted-text-index-v4";
         private const int TextPartCharacters = 32000;
         private const int MaximumIndexedCharacters = int.MaxValue;
         private const long MaximumIndexedBytes = long.MaxValue;
@@ -26,34 +26,44 @@ namespace RNAssistant.Core.Storage
                 throw new MarkdownSectionException("Use a complete heading title of at most 200 characters.", "resource_section_invalid");
             var artifact = Read(ConversationMetadata.From(session), reference, false);
             var original = artifact.OriginalAttachment;
-            if (original == null ? artifact.Kind != ChatArtifactKinds.Markdown && artifact.Kind != ChatArtifactKinds.PlanDocument : !IsMarkdownOriginal(original))
+            if (original == null ? artifact.Kind != ChatArtifactKinds.Markdown && artifact.Kind != ChatArtifactKinds.PlanDocument &&
+                !(artifact.Kind == ChatArtifactKinds.File && FileEncoding(artifact) != null && IsMarkdownPath(artifact.Title)) : !IsMarkdownOriginal(original))
                 throw new MarkdownSectionException("Section reads require document Markdown or a Plan. Read this resource's advertised representation instead.", "resource_section_unsupported");
             if (original?.TextTruncated == true)
                 throw new MarkdownSectionException("The extraction is incomplete; a unique complete section cannot be established.", "resource_section_incomplete");
             var body = original == null ? _revisions.GetRevision(Scope(session), reference)?.Payload :
                 string.IsNullOrWhiteSpace(original.ExtractedTextSha256) || !original.ExtractedTextByteLength.HasValue ? null :
                 new PayloadRef(original.ExtractedTextSha256, original.ExtractedTextByteLength.Value, "text/plain; charset=utf-8");
-            if (body == null || body.ByteLength > MaximumIndexedBytes)
+            if (body == null)
                 throw new MarkdownSectionException("The exact Markdown source is unavailable or exceeds the section scan bound.", "RESOURCE_SNAPSHOT_UNAVAILABLE");
+            if (original == null && artifact.Kind == ChatArtifactKinds.File)
+                body = FileTextPayload(session, reference, artifact, body);
+            if (body.ByteLength > 4L * MarkdownAnalysisService.MaximumCharacters + 3)
+                throw new MarkdownSectionException("Markdown exceeds the structure analysis bound; use source line/character selectors.", "resource_section_incomplete");
             var text = _payloads.ReadText(body.ToBlobReference());
             if (text == null || text.Length > MaximumIndexedCharacters || original != null && original.ExtractedCharCount != text.Length)
                 throw new MarkdownSectionException("The exact Markdown source is unavailable or incomplete.", "RESOURCE_SNAPSHOT_UNAVAILABLE");
-            var headings = MarkdownHeadingScanner.Scan(text).Take(4097).ToList();
-            if (headings.Count > 4096)
-                throw new MarkdownSectionException("The heading scan is incomplete; read the whole resource instead.", "resource_section_incomplete");
-            var matches = headings.Where(item => string.Equals(text.Substring(item.ContentStart, item.LineEnd - item.ContentStart).Trim(), section.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
-            if (matches.Count != 1)
-                throw new MarkdownSectionException(matches.Count == 0 ? "Heading not found. Rediscover or read the source; do not guess a section title." :
-                    "The heading is repeated. Choose a unique nested heading or read the whole resource.",
-                    matches.Count == 0 ? "resource_section_not_found" : "resource_section_ambiguous");
-            var selected = matches[0];
-            var end = headings.FirstOrDefault(item => item.Start > selected.Start && item.Level <= selected.Level)?.Start ?? text.Length;
-            if (end - selected.Start > maxCharacters)
-                throw new MarkdownSectionException("This section exceeds the bounded read size. Choose a narrower nested heading or read the whole resource.", "resource_section_too_large");
+            var selected = MarkdownSectionSelector.Select(text, section, maxCharacters);
+            var end = selected.End;
             return new ResourceReadResult { Representation = ResourceRepresentations.Text, Text = text.Substring(selected.Start, end - selected.Start),
                 ContentSha256 = body.Sha256, Offset = selected.Start, ReturnedCharacters = end - selected.Start, TotalCharacters = text.Length,
                 Coverage = new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: selected.Start, end: end),
                 Complete = true, Truncated = false, RawContentIncluded = true };
+        }
+
+        internal static string OutlineHeadingTitle(string title)
+        {
+            title = title ?? string.Empty;
+            if (title.Length <= 200) return title;
+            var length = char.IsHighSurrogate(title[199]) ? 201 : 200;
+            return title.Substring(0, length) + "…";
+        }
+
+        internal static bool IsMarkdownPath(string fileName)
+        {
+            var extension = Path.GetExtension(fileName ?? string.Empty);
+            return string.Equals(extension, ".md", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(extension, ".markdown", StringComparison.OrdinalIgnoreCase);
         }
 
         public static bool IsMarkdownOriginal(ChatAttachment original)
@@ -103,7 +113,7 @@ namespace RNAssistant.Core.Storage
             var coverage = sourceIncomplete ? new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: 0, end: original.ExtractedCharCount) : ResourceCoverage.Whole();
             var view = original == null ? TextIndexView : ExtractedTextIndexView;
             var markdown = original == null ? artifact.Kind != ChatArtifactKinds.File ||
-                string.Equals(Path.GetExtension(artifact.Title), ".md", StringComparison.OrdinalIgnoreCase) : IsMarkdownOriginal(original);
+                IsMarkdownPath(artifact.Title) : IsMarkdownOriginal(original);
             var result = SearchTextView(scope, reference, artifact, body, view, coverage, markdown, original?.ExtractedCharCount,
                 query, characterBudget, snippetCharacters, null, maximumMatches, scanAll, matchCase);
             result.ScanTruncated |= sourceIncomplete;
@@ -154,7 +164,7 @@ namespace RNAssistant.Core.Storage
             if (captured == null)
                 captured = MaterializeTextIndex(scope, reference, source, view, coverage,
                     original == null ? artifact.Kind != ChatArtifactKinds.File ||
-                        string.Equals(Path.GetExtension(artifact.Title), ".md", StringComparison.OrdinalIgnoreCase) : IsMarkdownOriginal(original),
+                        IsMarkdownPath(artifact.Title) : IsMarkdownOriginal(original),
                     original?.ExtractedCharCount, null, artifact.Title);
             try { return ReadIndexedTextPartFromView(captured, source, sourceComplete, partNumber); }
             catch (Exception error) when (error is IOException || error is InvalidDataException || error is JsonException)
@@ -164,7 +174,7 @@ namespace RNAssistant.Core.Storage
                 // from the repaired CAS part; never switch to a live head.
                 captured = MaterializeTextIndex(scope, reference, source, view, coverage,
                     original == null ? artifact.Kind != ChatArtifactKinds.File ||
-                        string.Equals(Path.GetExtension(artifact.Title), ".md", StringComparison.OrdinalIgnoreCase) : IsMarkdownOriginal(original),
+                        IsMarkdownPath(artifact.Title) : IsMarkdownOriginal(original),
                     original?.ExtractedCharCount, null, artifact.Title);
                 return ReadIndexedTextPartFromView(captured, source, sourceComplete, partNumber);
             }
@@ -264,12 +274,12 @@ namespace RNAssistant.Core.Storage
             var count = Math.Max(1, index.Parts.Count);
             if (fromPart > count) throw new ArgumentOutOfRangeException(nameof(fromPart));
             var markdown = artifact.OriginalAttachment == null ? artifact.Kind != ChatArtifactKinds.File ||
-                string.Equals(Path.GetExtension(artifact.Title), ".md", StringComparison.OrdinalIgnoreCase) : IsMarkdownOriginal(artifact.OriginalAttachment);
+                IsMarkdownPath(artifact.Title) : IsMarkdownOriginal(artifact.OriginalAttachment);
             var result = new ResourceTextOutline {
                 ExactReference = reference.Copy(), PartCount = count, TotalLines = index.TotalLines,
                 SourceComplete = verified.SourceComplete != false,
                 SymbolLanguage = markdown ? "markdown" : index.SymbolLanguage,
-                SymbolsComplete = markdown ? index.SectionsThrough == index.Length :
+                SymbolsComplete = markdown ? verified.SourceComplete != false && index.SectionsThrough == index.Length :
                     index.SymbolLanguage != null && index.SymbolsComplete,
                 NextPart = fromPart + limit < count + 1 ? (int?)(fromPart + limit) : null
             };
@@ -283,7 +293,8 @@ namespace RNAssistant.Core.Storage
                 if (part != null && markdown)
                     projected.Symbols.AddRange(index.Sections
                         .Where(item => item.Start >= part.Start && item.Start < part.Start + part.Length)
-                        .Select(item => new ResourceTextOutlineSymbol { Name = item.Title, Kind = "heading" }));
+                        .Select(item => new ResourceTextOutlineSymbol { Name = item.Title, Kind = "heading",
+                            Line = item.Line, Level = item.Level, ParentHeading = item.ParentHeading, NameTruncated = item.TitleTruncated }));
                 else if (part != null)
                     projected.Symbols.AddRange(index.Symbols
                         .Where(item => item.PartNumber == number)
@@ -422,7 +433,8 @@ namespace RNAssistant.Core.Storage
         {
             private readonly DocumentArtifactStore _store;
             private readonly TextIndex _index = new TextIndex();
-            private readonly TextHeadingCollector _headings;
+            private readonly bool _markdown;
+            private StringBuilder _markdownSource;
             private readonly TextSymbolCollector _symbols;
             private readonly StringBuilder _pending = new StringBuilder(TextPartCharacters + 81920);
             private int _line = 1;
@@ -431,7 +443,8 @@ namespace RNAssistant.Core.Storage
             internal TextIndexAccumulator(DocumentArtifactStore store, bool markdown, string fileName)
             {
                 _store = store;
-                _headings = markdown ? new TextHeadingCollector(_index) : null;
+                _markdown = markdown;
+                _markdownSource = markdown ? new StringBuilder() : null;
                 _index.SymbolLanguage = markdown ? null : CodeLanguage(fileName);
                 _symbols = _index.SymbolLanguage == null ? null : new TextSymbolCollector(_index);
                 if (_symbols != null) _index.SymbolsComplete = false; // advisory grammar only
@@ -465,10 +478,23 @@ namespace RNAssistant.Core.Storage
                         throw new InvalidDataException("The text source ends with an incomplete UTF-16 pair.");
                     Emit(_pending.Length);
                 }
-                _headings?.Finish();
+                if (_markdownSource != null)
+                {
+                    try
+                    {
+                        var analysis = MarkdownAnalysisService.Analyze(_markdownSource.ToString(), false);
+                        var byId = analysis.Sections.ToDictionary(item => item.Id);
+                        _index.Sections.AddRange(analysis.Sections.Select(item => new TextSection {
+                            Start = item.Start, Title = OutlineHeadingTitle(item.Title), TitleTruncated = item.Title.Length > 200, Level = item.Level, Line = item.Line,
+                            ParentHeading = item.ParentId == null ? null : OutlineHeadingTitle(byId[item.ParentId].Title) }));
+                        _index.SectionsThrough = _index.Length;
+                    }
+                    catch (MarkdownAnalysisException) { _index.SectionsThrough = 0; }
+                    _markdownSource = null;
+                }
                 _symbols?.Finish();
                 _index.TotalLines = _line;
-                if (_headings == null) _index.SectionsThrough = _index.Length;
+                if (!_markdown) _index.SectionsThrough = _index.Length;
                 if (expectedCharacters.HasValue && expectedCharacters.Value != _index.Length)
                     throw new InvalidDataException("The retained extraction length does not match its exact text.");
                 return _index;
@@ -488,89 +514,14 @@ namespace RNAssistant.Core.Storage
                 _index.Parts.Add(new TextPart { Start = _index.Length, Length = length,
                     FirstLine = firstLine, LastLine = _line,
                     Payload = PayloadRef.FromBlob(_store._payloads.StoreText(text, "text/plain; charset=utf-8")) });
-                _headings?.Add(text);
+                if (_markdownSource != null)
+                {
+                    if (_markdownSource.Length <= MarkdownAnalysisService.MaximumCharacters - text.Length)
+                        _markdownSource.Append(text);
+                    else _markdownSource = null; // Keep bounded source parts; no partial parse is called complete.
+                }
                 _symbols?.Add(text, _index.Parts.Count);
                 _index.Length += length;
-            }
-        }
-
-        // Incremental counterpart of MarkdownHeadingScanner's bounded ATX grammar.
-        // Even a very long line retains only 201 title characters.
-        private sealed class TextHeadingCollector
-        {
-            private readonly TextIndex _index;
-            private readonly StringBuilder _title = new StringBuilder(201);
-            private int _position, _lineStart, _leading, _markers, _afterLength, _fenceLength;
-            private char _marker, _fence, _firstAfter;
-            private bool _afterWhitespace = true, _invalid, _afterStarted, _sectionsOmitted;
-
-            internal TextHeadingCollector(TextIndex index) { _index = index; }
-
-            internal void Add(string text)
-            {
-                foreach (var value in text)
-                {
-                    if (value == '\n')
-                    {
-                        FinishLine();
-                        _lineStart = _position + 1;
-                    }
-                    else if (!_invalid)
-                    {
-                        if (_marker == '\0')
-                        {
-                            if (value == ' ' && _leading < 4) _leading++;
-                            else if (_leading < 4 && (value == '#' || value == '`' || value == '~'))
-                            { _marker = value; _markers = 1; }
-                            else _invalid = true;
-                        }
-                        else if (!_afterStarted && value == _marker) _markers++;
-                        else
-                        {
-                            if (!_afterStarted) { _firstAfter = value; _afterStarted = true; }
-                            _afterLength++;
-                            if (!char.IsWhiteSpace(value)) _afterWhitespace = false;
-                            if (_title.Length < 201) _title.Append(value);
-                        }
-                    }
-                    _position++;
-                }
-            }
-
-            internal void Finish()
-            {
-                if (_lineStart < _position) FinishLine();
-                if (!_sectionsOmitted) _index.SectionsThrough = _position;
-            }
-
-            private void FinishLine()
-            {
-                if (!_invalid && (_marker == '`' || _marker == '~') && _markers >= 3)
-                {
-                    if (_fence == '\0') { _fence = _marker; _fenceLength = _markers; }
-                    else if (_fence == _marker && _markers >= _fenceLength && _afterWhitespace) _fence = '\0';
-                }
-                else if (!_invalid && _fence == '\0' && _marker == '#' && _markers <= 6 &&
-                    (_afterLength == 0 || char.IsWhiteSpace(_firstAfter)))
-                {
-                    if (_index.Sections.Count == 4096)
-                    {
-                        if (!_sectionsOmitted) { _index.SectionsThrough = _lineStart; _sectionsOmitted = true; }
-                    }
-                    else
-                    {
-                        var title = _title.ToString().Trim();
-                        if (title.Length > 200 || _afterLength > 201)
-                            title = title.Substring(0, Math.Min(200, title.Length)) + "…";
-                        _index.Sections.Add(new TextSection { Start = _lineStart, Title = title });
-                    }
-                }
-                _leading = _markers = _afterLength = 0;
-                _marker = _firstAfter = '\0';
-                _afterWhitespace = true;
-                _afterStarted = false;
-                _invalid = false;
-                _title.Clear();
             }
         }
 
@@ -670,6 +621,10 @@ namespace RNAssistant.Core.Storage
         {
             public int Start { get; set; }
             public string Title { get; set; }
+            public int Line { get; set; }
+            public int Level { get; set; }
+            public string ParentHeading { get; set; }
+            public bool TitleTruncated { get; set; }
         }
         private sealed class TextSymbol
         {

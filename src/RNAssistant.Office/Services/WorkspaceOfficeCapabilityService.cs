@@ -73,6 +73,7 @@ namespace RNAssistant.Office.Services
                 result.ResourceFind = new UnavailableOfficeRead();
                 result.ResourceRead = new UnavailableOfficeRead();
                 result.ResourceSearch = new UnavailableOfficeRead();
+                result.ResourceOutline = new UnavailableOfficeRead();
                 result.MutationObserver = new UnavailableOfficeMutationObserver();
                 return result;
             }
@@ -80,7 +81,8 @@ namespace RNAssistant.Office.Services
             var session = OfficeSession(target, workspaceSession, runId);
             var resourceTools = ResourceToolCatalog.GetControllerTools()
                 .Where(item => item.Id == ResourceToolCatalog.FindToolId ||
-                    item.Id == ResourceToolCatalog.ReadToolId || item.Id == ResourceToolCatalog.SearchToolId).ToArray();
+                    item.Id == ResourceToolCatalog.ReadToolId || item.Id == ResourceToolCatalog.SearchToolId ||
+                    item.Id == ResourceToolCatalog.OutlineToolId).ToArray();
             var native = _executor.CreateNativeRuntime(session, tools.Concat(resourceTools),
                 settings ?? new AppSettings(), ChatModes.Agent, trace: false, manualRun: true);
             result.Tools = tools.Select(item => new WorkspaceToolContribution
@@ -88,11 +90,13 @@ namespace RNAssistant.Office.Services
             result.ResourceFind = native.HandlerFor(ResourceToolCatalog.FindToolId) as IReadOnlyToolHandler;
             result.ResourceRead = native.HandlerFor(ResourceToolCatalog.ReadToolId) as IReadOnlyToolHandler;
             result.ResourceSearch = native.HandlerFor(ResourceToolCatalog.SearchToolId) as IReadOnlyToolHandler;
-            if (result.Tools.Any(item => item.Handler == null) || result.ResourceFind == null || result.ResourceRead == null || result.ResourceSearch == null)
+            result.ResourceOutline = native.HandlerFor(ResourceToolCatalog.OutlineToolId) as IReadOnlyToolHandler;
+            if (result.Tools.Any(item => item.Handler == null) || result.ResourceFind == null || result.ResourceRead == null || result.ResourceSearch == null || result.ResourceOutline == null)
                 throw new InvalidOperationException("The bound Office tool handlers are incomplete.");
             result.ResourceFind = new BoundOfficeResource(result.ResourceFind);
             result.ResourceRead = new BoundOfficeResource(result.ResourceRead);
             result.ResourceSearch = new BoundOfficeResource(result.ResourceSearch);
+            result.ResourceOutline = new BoundOfficeResource(result.ResourceOutline);
             Func<ToolExecutionContext, ResourceMutationOrigin> origin = null;
             if (_executor.ResourceOrigin != null) origin = context => _executor.ResourceOrigin(session, context);
             result.MutationObserver = new ResourceMutationAuthorityObserver(

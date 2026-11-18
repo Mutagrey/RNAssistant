@@ -1018,6 +1018,11 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.DeleteDocumentArtifact:
                         responsePayload = _controller.DeleteDocumentArtifact(Payload<ArtifactDeleteRequest>(payload));
                         break;
+                    case BridgeOperationId.AnalyzeMarkdown:
+                        var markdownAnalysis = Payload<MarkdownAnalysisRequest>(payload);
+                        responsePayload = await RunBridgeWorkAsync(
+                            () => ArtifactViewerService.AnalyzeMarkdown(markdownAnalysis, cancellationToken), cancellationToken).ConfigureAwait(false);
+                        break;
                     case BridgeOperationId.ReadArtifactViewerPage:
                         var artifactViewerPage = Payload<ArtifactViewerPagePayload>(payload);
                         responsePayload = _controller.ReadArtifactViewerPage(

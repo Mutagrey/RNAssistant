@@ -1,5 +1,93 @@
 /* One visual shell for the shipped viewers; no parser or viewer implementation fork. */
 .product-viewer { min-width: 0; min-height: 0; font-size: 13px; }
+.material-surface { position: relative; display: flex; flex: 1; flex-direction: column; width: 100%; height: 100%; min-width: 0; min-height: 0; background: var(--surface); container-type: inline-size; }
+.material-surface-layout { display: grid; flex: 1; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; }
+.material-surface.has-material-sidebar > .material-surface-layout { --material-navigation-width: var(--navigation-width-default); grid-template-columns: minmax(var(--navigation-width-min), var(--material-navigation-width)) var(--navigation-splitter-width) minmax(0, 1fr); }
+.material-surface-sidebar { grid-column: 1; grid-row: 1; min-width: 0; min-height: 0; overflow: auto; padding: 0; background: var(--surface-subtle); }
+.material-surface-sidebar[hidden] { display: none; }
+.material-surface-splitter { grid-column: 2; grid-row: 1; width: var(--navigation-splitter-width); min-width: var(--navigation-splitter-width); border-left: 1px solid var(--line); background: var(--surface-subtle); }
+.material-surface-splitter:is(:hover, :focus-visible, .dragging) { background: var(--accent); }
+.material-surface-sidebar-body { min-width: 0; min-height: 100%; }
+.material-surface-sidebar .rn-markdown-viewer-navigation { padding: var(--space-1) var(--space-2) var(--space-1) 0; }
+.material-surface.product-viewer .material-surface-sidebar .rn-markdown-viewer-navigation { padding: var(--space-1) var(--space-2) var(--space-1) 0; }
+.material-surface-sidebar .navigation-tree-section + .navigation-tree-section { margin-top: var(--space-1); }
+.material-surface-sidebar .navigation-tree-list .navigation-tree-list { margin-left: var(--space-2); }
+.material-surface-sidebar .rn-pdf-thumbnail-rail,.material-surface-sidebar .rn-sequence-rail { border: 0; border-radius: 0; background: transparent; }
+.material-surface-sidebar .collection-rail { border: 0; border-radius: 0; background: transparent; }
+.material-surface-sidebar .collection-rail .rn-sequence-header { padding: var(--space-1) var(--space-2); border-bottom: 0; }
+.material-surface-sidebar .collection-rail.is-vertical .rn-sequence-list { flex: none; height: auto; min-height: 0; }
+.material-surface-sidebar .collection-rail.is-vertical .rn-sequence-item { right: 0; left: 0; height: 36px; min-height: 36px; grid-template-columns: minmax(0, 1fr); padding: var(--space-1) var(--space-2); }
+.material-surface-sidebar .collection-rail .rn-sequence-preview { display: block; min-width: 0; height: auto; overflow: hidden; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.material-surface-sidebar .collection-rail .rn-sequence-preview strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.material-surface-workspace { grid-column: 1; grid-row: 1; display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
+.material-surface.has-material-sidebar .material-surface-workspace { grid-column: 3; }
+.material-surface-header { position: relative; flex: 0 0 auto; align-items: center; gap: var(--space-2); min-height: var(--page-header-height); padding: var(--space-1) var(--page-inset); border-bottom: 1px solid var(--line); background: var(--surface); }
+.material-surface-navigation-toggle { flex: 0 0 var(--control-compact); }
+.material-surface-title { flex: 1 1 180px; max-width: min(34rem, 45%); }
+.material-surface-title[hidden] { display: none; }
+.material-surface-title .resource-editor-title,.material-surface-title .resource-editor-meta { display: block; }
+.material-surface-modes { display: flex; flex: 0 0 auto; align-items: center; min-width: 0; }
+.material-surface-modes:empty { display: none; }
+.material-surface-provider { display: flex; flex: 1 1 auto; align-items: center; min-width: 0; }
+.material-surface-provider[hidden] { display: none; }
+.material-surface-provider .preview-surface-bar { flex: 1; min-width: 0; padding: 0; border: 0; background: transparent; }
+.material-surface-provider .preview-surface-status { display: none; }
+.material-surface-provider .preview-surface-toolbar { min-width: 0; }
+.material-surface-provider .preview-surface-location { flex: 1 1 180px; }
+.material-surface-search { display: flex; position: relative; flex: 0 1 auto; align-items: center; gap: var(--space-1); min-width: 0; }
+.material-surface-search[hidden] { display: none; }
+.material-surface-search-input { width: min(18rem, 32vw); min-width: 9rem; }
+.material-surface-search-input[hidden] { display: none; }
+.material-surface-search-status { min-width: 0; color: var(--ink-muted); font-size: var(--text-xs); white-space: nowrap; }
+.material-surface-search-status:empty { display: none; }
+.material-surface-search.searching { position: absolute; inset: var(--space-1) var(--page-inset); z-index: 5; padding: var(--space-1) var(--space-2); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--shadow); }
+.material-surface-search.searching .material-surface-search-input { flex: 1 1 auto; width: auto; min-width: 0; }
+.material-surface-actions { display: flex; flex: 0 0 auto; align-items: center; gap: var(--space-1); margin-left: auto; min-width: 0; }
+.material-surface-provider-actions,.material-surface-common-actions { display: flex; align-items: center; gap: var(--space-1); min-width: 0; }
+.material-surface-provider-actions:empty,.material-surface-common-actions:empty { display: none; }
+.material-surface-content { flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+.material-surface-content > :is(.artifact-viewer-host,.collection-page,.collection-view,.browser-object-content) { width: 100%; height: 100%; min-width: 0; min-height: 0; }
+.material-surface-statusbar { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: var(--shell-status-height); padding: var(--space-1) var(--page-inset); border-top: 1px solid var(--line); color: var(--ink-muted); background: var(--surface-subtle); font-size: var(--text-xs); }
+.material-surface-statusbar[hidden] { display: none; }
+.material-surface-viewer-status { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.material-surface-viewer-status .rn-markdown-viewer-note { width: 100%; }
+.material-surface-status-meta { flex: 0 0 auto; color: var(--ink-faint); white-space: nowrap; }
+.material-surface-viewer-status .rn-text-viewer-status,.material-surface-viewer-status .rn-json-status,.material-surface-viewer-status .rn-resource-viewer-status { padding: 0; border: 0; background: transparent; color: inherit; font: inherit; }
+.material-surface-modes :is(.view-switch,.rn-markdown-viewer-tabs,.rn-pdf-viewer-tabs,.rn-json-modes) { margin: 0; }
+.material-surface-provider-actions>.rn-markdown-viewer-actions,.material-surface-provider-actions>.rn-text-viewer-actions,.material-surface-provider-actions>.rn-pdf-viewer-actions,.material-surface-provider-actions>.rn-json-actions,.material-surface-provider-actions>.rn-task-list-toolbar { margin: 0; padding: 0; border: 0; }
+.material-surface-content .rn-text-viewer-toolbar,.material-surface-content .rn-text-viewer-status { display: none; }
+.material-surface-content .rn-markdown-viewer-toolbar:not(.material-surface-hoisted),.material-surface-content .rn-pdf-viewer-toolbar:not(.material-surface-hoisted),.material-surface-content .rn-json-toolbar:not(.material-surface-hoisted),.material-surface-content .rn-resource-viewer-toolbar:not(.material-surface-hoisted) { display: none; }
+.material-surface-content .rn-text-viewer { height: 100%; }
+.material-surface-content .rn-markdown-viewer { height: 100%; }
+.material-surface-content .rn-markdown-viewer-layout { grid-template-columns: minmax(0, 1fr); }
+.material-surface-content .rn-pdf-thumbnail-rail,.material-surface-content .rn-sequence-rail { border: 0; background: transparent; }
+.material-surface .material-surface-content .rn-pdf-pages-layout { grid-template-columns: minmax(0, 1fr); gap: 0; }
+.material-surface .material-surface-content .rn-image-viewer { grid-template-rows: minmax(0, 1fr); }
+.material-surface-content .rn-markdown-search-match { padding: 0; border-radius: 2px; background: var(--accent-soft); color: inherit; }
+.material-surface-content .rn-markdown-search-match.active { outline: 1px solid var(--accent); background: var(--surface-selected); }
+.material-surface-content .has-code-editor .CodeMirror-lines { padding: 0; }
+.material-surface-content .rn-text-viewer-source pre { padding: 0; }
+.rn-markdown-graph { min-width: 0; height: 100%; overflow: auto; padding: var(--space-3) var(--page-inset) var(--space-5); }
+.rn-markdown-graph-svg { display: block; width: 100%; min-width: 760px; height: auto; }
+.rn-markdown-graph-edge { stroke: var(--line-strong); stroke-width: 1.25; fill: none; }
+.rn-markdown-graph-node rect { fill: var(--surface-subtle); stroke: var(--line-strong); stroke-width: 1; }
+.rn-markdown-graph-node text { fill: var(--ink); font: var(--text-xs) var(--font); }
+.rn-markdown-graph-note { margin-top: var(--space-3); color: var(--ink-muted); font-size: var(--text-xs); }
+@container (max-width:680px) {
+  .material-surface-header { flex-wrap: wrap; padding-inline: var(--space-3); }
+  .material-surface-title { flex: 1 1 140px; max-width: none; }
+  .material-surface-provider:not([hidden]) { order: 5; flex-basis: 100%; }
+  .material-surface-actions { order: 4; margin-left: auto; }
+  .material-surface-provider .preview-surface-location { flex: 1 1 100%; width: 100%; min-width: 0; }
+  .material-surface-provider .preview-surface-address { min-width: 0; }
+  .material-surface-common-actions { flex-wrap: wrap; justify-content: flex-end; }
+  .material-surface-search-input { width: min(12rem, 38vw); min-width: 7rem; }
+  .material-surface-status-meta { display: none; }
+  .material-surface.has-material-sidebar > .material-surface-layout { grid-template-columns: minmax(0, 1fr); }
+  .material-surface.has-material-sidebar .material-surface-workspace { grid-column: 1; }
+  .material-surface-splitter { display: none; }
+  .material-surface-sidebar { position: absolute; inset: var(--page-header-height) auto var(--shell-status-height) 0; z-index: 12; width: min(82%, var(--material-navigation-width)); border-right: 1px solid var(--line); box-shadow: var(--shadow); }
+}
 .product-viewer .hidden { display: none !important; }
 .product-viewer :is(.rn-json-toolbar, .rn-markdown-viewer-toolbar, .rn-pdf-viewer-toolbar, .rn-text-viewer-toolbar, .rn-resource-viewer-toolbar, .rn-task-list-toolbar) { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex-shrink: 0; min-width: 0; min-height: 40px; padding: 0 0 10px; border-bottom: 1px solid var(--line); background: transparent; }
 .product-viewer :is(.rn-json-modes, .rn-markdown-viewer-tabs, .rn-pdf-viewer-tabs) { flex: 0 0 auto; min-width: max-content; flex-wrap: nowrap; }
@@ -14,7 +102,7 @@
 .product-viewer .rn-text-viewer-search { flex: 1; width: 180px; min-width: 100px; max-width: 320px; min-height: 30px; padding: 5px 9px; font-size: 12px; }
 .product-viewer .rn-text-viewer { display: flex; flex-direction: column; gap: 12px; min-height: 0; height: 100%; }
 .product-viewer .rn-text-viewer-source { display: block; flex: 1; min-height: 0; max-height: none; overflow: auto; border: 0; border-radius: 0; background: transparent; }
-.product-viewer .rn-text-viewer-source pre { margin: 0; padding: 8px 0; border: 0; border-radius: 0; background: none; font: 14px/1.75 var(--font); white-space: pre-wrap; overflow-wrap: anywhere; }
+.product-viewer .rn-text-viewer-source pre { margin: 0; padding: var(--space-1) 0; border: 0; border-radius: 0; background: none; font: 14px/1.75 var(--font); white-space: pre-wrap; overflow-wrap: anywhere; }
 .product-viewer .rn-text-viewer-lines { display: none; }
 .product-viewer .rn-text-viewer-content { width: 100%; max-width: none; }
 .product-viewer .rn-text-viewer-status { padding: var(--space-2) var(--space-3); color: var(--ink-muted); font-size: var(--text-xs); }
@@ -33,11 +121,18 @@ html[data-theme] .product-viewer .rn-json-key { color: var(--syntax-key); }
 html[data-theme] .product-viewer .rn-json-string { color: var(--syntax-string); }
 html[data-theme] .product-viewer .rn-json-number { color: var(--syntax-number); }
 html[data-theme] .product-viewer :is(.rn-json-boolean, .rn-json-null) { color: var(--syntax-literal); }
-.product-viewer .rn-markdown-viewer { min-height: 0; width: 100%; max-width: none; margin-inline: auto; align-content: start; }
-.product-viewer .rn-markdown-viewer h1 { font-size: 24px; margin: 12px 0 20px; }
-.product-viewer .rn-markdown-viewer h2 { font-size: 18px; margin: 22px 0 12px; }
-.product-viewer .rn-markdown-viewer p, .product-viewer .rn-markdown-viewer li { line-height: 1.8; margin-block: 12px; }
-.product-viewer .rn-markdown-viewer ul { padding-left: 22px; }
+.product-viewer .rn-markdown-viewer { display: flex; flex-direction: column; height: 100%; min-height: 0; width: 100%; max-width: none; margin-inline: auto; }
+.product-viewer .rn-markdown-viewer-layout { flex: 1 1 auto; overflow: hidden; }
+.product-viewer .rn-markdown-viewer-navigation { height: 100%; max-height: none; padding: var(--space-4) var(--space-2) var(--space-4) 0; }
+.product-viewer .rn-markdown-viewer-body { overflow: auto; }
+.product-viewer .rn-markdown-viewer-rendered { padding: var(--space-3) var(--page-inset) var(--space-5); border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.product-viewer .rn-markdown-viewer-retry[hidden] { display: none; }
+.product-viewer .rn-markdown-viewer-actions { flex: 0 0 auto; white-space: nowrap; }
+.product-viewer .rn-markdown-viewer-actions > .resource-editor-actions { margin-left: 0; }
+.product-viewer .rn-markdown-viewer-rendered h1 { font-size: 24px; margin: 12px 0 20px; }
+.product-viewer .rn-markdown-viewer-rendered h2 { font-size: 18px; margin: 22px 0 12px; }
+.product-viewer .rn-markdown-viewer-rendered p, .product-viewer .rn-markdown-viewer-rendered li { line-height: 1.8; margin-block: 12px; }
+.product-viewer .rn-markdown-viewer-rendered ul { padding-left: 22px; }
 .product-viewer[data-product-viewer="collection"] .rn-markdown-viewer-tabs,
 .artifact-detail-preview.is-plan-preview .rn-markdown-viewer-tabs { display: none; }
 .product-viewer .collection-rail.is-horizontal { flex-direction: column; height: auto; gap: 8px; border: 0; background: none; border-radius: 0; }
@@ -62,6 +157,7 @@ html[data-theme] .product-viewer :is(.rn-json-boolean, .rn-json-null) { color: v
 .product-viewer .rn-image-viewer { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100%; min-height: 0; gap: 8px; }
 .product-viewer .rn-image-viewer-stage-shell { min-height: 0; max-height: none; height: 100%; background: repeating-conic-gradient(var(--line) 0 25%, var(--surface-subtle) 0 50%) 50% / 18px 18px; }
 .product-viewer .rn-image-viewer-stage-shell.is-document-page { background: var(--canvas); }
+.product-viewer .rn-pdf-page-host .rn-image-viewer-stage-shell { border: 0; border-radius: 0; }
 /* Document geometry follows resize/zoom directly; the vendor's transition: all jitters on reflow. */
 .product-viewer .viewer-transition { transition: none; }
 .product-viewer .rn-resource-viewer-toolbar { min-height: 30px; align-self: start; }
@@ -110,5 +206,14 @@ html[data-theme] .product-viewer :is(.rn-json-boolean, .rn-json-null) { color: v
 
 .product-viewer .rn-json-body.has-code-editor { flex:1; overflow:hidden; }
 .product-viewer .rn-json-code { height:100%; min-height:0; }
-.product-viewer .rn-markdown-viewer:has(.has-code-editor) { display:flex; flex-direction:column; height:100%; }
 .product-viewer .rn-markdown-viewer-body:has(.has-code-editor) { flex:1; min-height:0; overflow:hidden; }
+
+/* MaterialSurface owns these controls; nested viewer toolbars stay out of layout. */
+.material-surface-content.product-viewer .rn-text-viewer .rn-text-viewer-toolbar,
+.material-surface-content.product-viewer .rn-text-viewer .rn-text-viewer-status { display: none; }
+.material-surface-content.product-viewer .rn-markdown-viewer-toolbar:not(.material-surface-hoisted),
+.material-surface-content.product-viewer .rn-pdf-viewer-toolbar:not(.material-surface-hoisted),
+.material-surface-content.product-viewer .rn-json-toolbar:not(.material-surface-hoisted),
+.material-surface-content.product-viewer .rn-resource-viewer-toolbar:not(.material-surface-hoisted),
+.material-surface-content.product-viewer .rn-task-list-toolbar:not(.material-surface-hoisted),
+.material-surface-content.product-viewer .material-viewer-toolbar:not(.material-surface-hoisted) { display: none; }

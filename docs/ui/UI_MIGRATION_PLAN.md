@@ -1,5 +1,44 @@
 # План модернизации production UI
 
+## Markdown structure and MaterialSurface — In Review, 2026-11-17
+
+Scope: shared Core Markdig analysis, current resource section/outline consumers,
+typed presentation transform and the existing saved-document viewer. Source bounds,
+exact owners, data leases and chat streaming stay with their established owners.
+The hand-written Markdown heading scanner is removed after its callers switch.
+The same presentation slice introduces `MaterialSurface` for all material formats and
+Browser: one sidebar/header/content/statusbar shell with provider slots. Existing
+viewers keep parsing, authority, leases and commands; ViewerUI only hoists their
+format controls, search/status adapters and navigation into the shared shell.
+
+Targeted host-neutral checks pass: `node tests/web/artifact-text-viewer.test.js`
+12/12, the real Chrome fixture, Harness filters `markdown analysis:` and
+`markdown resources:`, and Harness/MockDemo builds with restored Markdig 0.37.0.
+Wide and 420 px screenshots were reviewed locally, including full-height Material
+content, the single Material header, MD/source/graph modes, common search/sidebar/
+statusbar and the adapted Browser header. `material-object-views.test.js` covers PDF,
+image, sequence, JSON and text slots; `browser-saved-views.test.js` covers common
+Browser actions and the unified version menu. Browser omits duplicate title/meta,
+uses the shared preview/source modes, one version menu and one overflow. Browser source
+files use the shared NavigationTree in the left sidebar; `local-browser.test.js` covers
+directory grouping, active selection and switching without a duplicate in-content select.
+`material-object-views.test.js` also checks that hoisted PDF/image rails leave a visible
+full-size page/canvas, that successful Markdown/PDF has no detached retry action, that the
+shared sidebar splitter changes width, that collection rows stay inside the sidebar, and
+that MD source has no outer inset. PDF page frames and the source background use shared
+surface styling.
+MockDemo still has its known resource-data transport gap, so the real artifact read
+is not claimed. Windows x64 / Office x64 / WebView2 checks remain separate.
+
+Next slices in order: editable Markdown with the existing resource mutation owner
+and revision/read-back guards; scope-aware explicit link resolution/backlinks and a
+shared Cytoscape graph consuming resolved results. The current MD graph is local,
+bounded and uses only the existing analysis output.
+Word/PDF ingestion and semantic relationships follow those shared foundations.
+Rollback is this source diff; the new text-index profile is derived and rebuildable.
+The completed host-neutral slice is `17.4.0-dev`. It adds no durable migration,
+commit, release or Windows/Office qualification.
+
 ## Unified chat draft persistence — W9, In Review, 2026-11-16
 
 Scope: existing `RNAssistantChatDrafts` and `RNAssistantConversationInput`, without a new

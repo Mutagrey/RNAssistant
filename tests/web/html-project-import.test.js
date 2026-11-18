@@ -52,7 +52,6 @@ const {chromium}=require('playwright');
     async function action(id,name){
       await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
       const root=surface(id),button=root.getByRole('button',{name,exact:true,includeHidden:true});
-      if(!await button.isVisible())await root.getByRole('button',{name:'Инструменты страницы',exact:true}).click();
       await button.click();
     }
     async function open(id){
@@ -93,12 +92,12 @@ const {chromium}=require('playwright');
     assert.equal(await surface('A').isVisible(),true,'selected browser remains active');
     await open('B');await action('B','Действия страницы');await page.getByRole('menuitem',{name:'Открыть созданный проект',exact:true}).waitFor();await page.keyboard.press('Escape');
 
-    await open('C');assert.equal(await surface('C').getByRole('button',{name:'Создать проект',exact:true}).isVisible(),true,'raw HTML has a persistent Create project action');await begin('C');await page.evaluate(()=>projectTest.finish('C','Rejected'));
-    await surface('C').getByText('Перенос SDK пока не поддерживается.',{exact:true}).waitFor();
+    await open('C');await menu('C');assert.equal(await page.getByRole('menuitem',{name:'Создать проект из снимка',exact:true}).isVisible(),true,'raw HTML exposes Create project in the shared overflow menu');await page.keyboard.press('Escape');await begin('C');await page.evaluate(()=>projectTest.finish('C','Rejected'));
+    await surface('C').locator('.material-surface-viewer-status').getByText('Перенос SDK пока не поддерживается.',{exact:true}).waitFor();
     await menu('C');assert.equal(await page.getByRole('menuitem',{name:'Создать проект из снимка',exact:true}).isEnabled(),true,'known refusal allows a new explicit attempt');
     await page.getByRole('menuitem',{name:'Создать проект из снимка',exact:true}).click();
     await page.waitForFunction(()=>!!projectTest.pending[projectTest.targets.C.resourceUri]);
-    await page.evaluate(()=>projectTest.finish('C','Unknown'));await surface('C').getByText(/Проверьте папку \/managed\/C/).waitFor();
+    await page.evaluate(()=>projectTest.finish('C','Unknown'));await surface('C').locator('.material-surface-viewer-status').getByText(/Проверьте папку \/managed\/C/).waitFor();
     await page.setViewportSize({width:420,height:900});await page.evaluate(()=>{document.documentElement.style.zoom='1.25';});
     await menu('C');assert.equal(await page.getByRole('menuitem',{name:'Создать проект из снимка',exact:true}).isDisabled(),true,'unknown effect is not offered as retry');
     assert.ok(await page.locator('.rna-action-menu-popup').evaluate(n=>{const r=n.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth+1;}));

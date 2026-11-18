@@ -156,7 +156,8 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   const rendered = markdownHost.querySelector(".rn-markdown-viewer-rendered");
   assert.ok(rendered);
   assert.match(rendered.innerHTML, /&lt;script>/);
-  button(markdownHost, "Исходник").click();
+  markdownHost.querySelector(".rn-markdown-viewer-tabs").querySelectorAll("button")
+    .find(item => item.attributes["aria-label"] === "Исходник Markdown").click();
   assert.equal(markdownHost.querySelector(".rn-text-viewer-content").textContent, "# Safe\n<script>x</script>");
   console.log("PASS artifact Markdown viewer: sanitized rendered view and exact Source share one controller");
 
@@ -169,9 +170,66 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
     onCopy: context.copyTextResult
   });
   assert.equal(incompleteMarkdown.querySelector(".rn-markdown-viewer-rendered"), null);
-  assert.match(incompleteMarkdown.textContent, /preview отключён/);
+  assert.match(incompleteMarkdown.textContent, /после полного чтения/);
   assert.equal(button(incompleteMarkdown, "Скачать"), undefined);
   console.log("PASS artifact Markdown viewer: truncated source never becomes rendered or full-download authority");
+
+  const sharedText = "# Root\n## Same\n[Target](target.md)\n## Same\n";
+  const sharedAnalysis = { profile: "fixture", characterCount: sharedText.length, html: '<h1 id="root">Root</h1>',
+    sections: [{ id: "root", parentId: null, title: "Root", level: 1, anchor: "root", line: 1 },
+      { id: "same", parentId: "root", title: "Same", level: 2, anchor: "same", line: 2 },
+      { id: "same-1", parentId: "root", title: "Same", level: 2, anchor: "same-1", line: 4 }],
+    links: [{ destination: "target.md", text: "Target", line: 3, isImage: false }] };
+  let sanitizeCalls = 0, treeNodes = null, analysisCalls = 0;
+  context.DOMPurify = { sanitize(html) { sanitizeCalls++; return "sanitized:" + html; } };
+  context.RNAssistantNavigationTree = {
+    render(_, nodes) { treeNodes = nodes; }, unmount() {}
+  };
+  const sharedHost = new Element("div");
+  context.RNAssistantViewerRegistry.mount("markdown", sharedHost, {
+    text: sharedText, fullText: sharedText, complete: true, requireAnalysis: true,
+    onAnalyze() { analysisCalls++; return Promise.resolve(sharedAnalysis); }
+  });
+  await settle();
+  assert.equal(sharedHost.querySelector(".rn-markdown-viewer-rendered").innerHTML, "sanitized:" + sharedAnalysis.html);
+  assert.equal(sanitizeCalls, 1);
+  assert.equal(treeNodes[0].children[0].children.length, 2, "Repeated titles remain separate children");
+  assert.notEqual(treeNodes[0].children[0].children[0].key, treeNodes[0].children[0].children[1].key);
+  assert.equal(treeNodes[1].children[0].title, "target.md");
+  assert.equal(button(sharedHost, "HTML"), undefined, "Generated HTML is not exposed as a document mode");
+  sharedHost.querySelectorAll("button").find(item => item.attributes["aria-label"] === "Исходник Markdown").click();
+  assert.equal(sharedHost.querySelector(".rn-text-viewer-content").textContent, sharedText);
+  sharedHost.querySelectorAll("button").find(item => item.attributes["aria-label"] === "Просмотр Markdown").click();
+  assert.equal(analysisCalls, 1, "Changing presentation does not reparse");
+  context.RNAssistantViewerRegistry.unmount(sharedHost);
+  let finishLate;
+  context.RNAssistantViewerRegistry.mount("markdown", sharedHost, {
+    text: sharedText, fullText: sharedText, complete: true, requireAnalysis: true,
+    onAnalyze() { return new Promise(resolve => { finishLate = resolve; }); }
+  });
+  await settle();
+  sharedHost.querySelectorAll("button").find(item => item.attributes["aria-label"] === "Исходник Markdown").click();
+  finishLate(sharedAnalysis); await settle();
+  assert.equal(sharedHost.querySelector(".rn-markdown-viewer-rendered"), null, "Late analysis preserves explicit source mode");
+  assert.equal(sharedHost.querySelector(".rn-text-viewer-content").textContent, sharedText);
+  context.RNAssistantViewerRegistry.unmount(sharedHost);
+  context.RNAssistantViewerRegistry.mount("markdown", sharedHost, {
+    text: sharedText, fullText: sharedText, complete: true, requireAnalysis: true,
+    onAnalyze() { return new Promise(resolve => { finishLate = resolve; }); }
+  });
+  await settle();
+  context.RNAssistantViewerRegistry.unmount(sharedHost);
+  finishLate(sharedAnalysis); await settle();
+  assert.equal(sharedHost.childNodes.length, 0, "Closed viewers ignore late analysis");
+  delete context.DOMPurify;
+  context.RNAssistantViewerRegistry.mount("markdown", sharedHost, {
+    text: sharedText, fullText: sharedText, complete: true, requireAnalysis: true, analysis: sharedAnalysis
+  });
+  assert.equal(sharedHost.querySelector(".rn-markdown-viewer-rendered"), null, "Missing sanitizer must fail closed");
+  assert.equal(sharedHost.querySelector(".rn-text-viewer-content").textContent, sharedText);
+  context.RNAssistantViewerRegistry.unmount(sharedHost);
+  delete context.RNAssistantNavigationTree;
+  console.log("PASS artifact Markdown: shared hierarchy, analysis reuse, late response and sanitizer guards");
 
   const imageHost = new Element("div");
   context.RNAssistantViewerRegistry.mount("image", imageHost, {
@@ -649,6 +707,32 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   actions.closeArtifactViewers();
   assert.ok(revokedUrls.includes(ownedUrl), "cache owner revokes verified binary blob URLs on close");
 
+  const markdownState = { activeChatId: "md-chat", artifactViewerPages: {} };
+  const markdownUri = "rna://chat/md-chat/artifact/md/revision/1";
+  const markdownOwner = { status: "ready", complete: true, fullText: sharedText };
+  markdownState.artifactViewerPages[markdownUri] = markdownOwner;
+  let resolveAnalysis, markdownRequests = 0;
+  const markdownActions = actionContext.RNAssistantArtifactViewerActions.create({ state: markdownState,
+    send(method, payload) {
+      assert.equal(method, "analyzeMarkdown"); assert.equal(payload.text, sharedText); markdownRequests++;
+      return new Promise(resolve => { resolveAnalysis = resolve; });
+    } });
+  const firstAnalysis = markdownActions.analyzeMarkdown(sharedText, { resourceUri: markdownUri });
+  const secondAnalysis = markdownActions.analyzeMarkdown(sharedText, { resourceUri: markdownUri });
+  await settle();
+  assert.equal(markdownRequests, 1); assert.ok(markdownActions.hasPending());
+  resolveAnalysis(sharedAnalysis); await Promise.all([firstAnalysis, secondAnalysis]);
+  assert.equal(await markdownActions.analyzeMarkdown(sharedText, { resourceUri: markdownUri }), sharedAnalysis);
+  assert.equal(markdownRequests, 1); assert.equal(markdownActions.hasPending(), false);
+  await assert.rejects(markdownActions.analyzeMarkdown("wrong", { resourceUri: markdownUri }));
+  delete markdownOwner.markdownAnalysis;
+  const closedAnalysis = markdownActions.analyzeMarkdown(sharedText, { resourceUri: markdownUri });
+  await settle(); markdownActions.closeAll(); resolveAnalysis(sharedAnalysis);
+  await assert.rejects(closedAnalysis, /отменено/);
+  assert.equal(Object.keys(markdownState.artifactViewerPages).length, 0);
+  assert.equal(typeof actions.analyzeMarkdown, "function", "Plan editor forwards the shared analysis owner");
+  console.log("PASS artifact Markdown: exact-source cache, concurrent request coalescing and owner disposal");
+
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
   assert.match(index, /app\-text\-viewer\.js\?v=[^"\s]+/);
   assert.match(index, /app\-text\-viewer\.css\?v=[^"\s]+/);
@@ -675,5 +759,5 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.match(actionSource, /readArtifactViewerPage/);
   assert.match(actionSource, /readArtifactPdfThumbnail/);
   console.log("PASS artifact viewers: allowlisted modules are UI-only and loaded after their registry");
-  console.log("OK 10/10");
+  console.log("OK 12/12");
 })().catch(error => { console.error(error.stack || error); process.exitCode = 1; });

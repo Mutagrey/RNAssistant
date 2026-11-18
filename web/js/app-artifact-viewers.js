@@ -90,6 +90,7 @@
   function appendTypedArtifactViewer(root, artifact, actions, draftText) {
     actions = actions || {};
     var expectedKind = artifactViewerKind(artifact);
+    var planView = artifactKind(artifact) === "plan";
     if (!expectedKind) return false;
     if (!window.RNAssistantViewerRegistry || !window.RNAssistantViewerRegistry.has(expectedKind)) {
       appendViewerError(root, "Typed artifact viewer is unavailable.");
@@ -98,6 +99,7 @@
     if (typeof draftText === "string") {
       var draftTarget = document.createElement("div");
       draftTarget.className = "artifact-viewer-host artifact-typed-viewer product-viewer";
+      if (planView) draftTarget.classList.add("is-plan-view");
       root.appendChild(draftTarget);
       window.RNAssistantViewerRegistry.mount("markdown", draftTarget, {
         text: draftText,
@@ -105,6 +107,8 @@
         complete: true,
         sourceComplete: true,
         draft: true,
+        requireAnalysis: true,
+        onAnalyze: typeof actions.analyzeMarkdown === "function" ? function (text) { return actions.analyzeMarkdown(text); } : null,
         onCopy: window.copyTextResult
       });
       return true;
@@ -292,10 +296,12 @@
     }
     var target = document.createElement("div");
     target.className = "artifact-viewer-host artifact-typed-viewer product-viewer";
+    if (planView) target.classList.add("is-plan-view");
     root.appendChild(target);
     var needsComplete = ["json", "task_list", "sequence"].indexOf(expectedKind) >= 0;
     var format = needsComplete && !viewer.complete ? "text" : expectedKind;
     if (needsComplete && !viewer.complete) appendContentLabel(root, "Структурный просмотр доступен после полного чтения. Сейчас показана страница исходника.");
+    if (format === "markdown" && !viewer.markdownPresentation) viewer.markdownPresentation = {};
     window.RNAssistantViewerRegistry.mount(format, target, {
       code: true, path: viewer.title || prop(artifact, "Title", "title", ""),
       text: viewer.complete ? viewer.fullText : page.text,
@@ -303,6 +309,11 @@
       completeness: viewer.complete ? "full" : "fragment",
       fullText: viewer.complete ? viewer.fullText : null,
       complete: viewer.complete === true,
+      requireAnalysis: format === "markdown",
+      analysis: format === "markdown" ? viewer.markdownAnalysis : null,
+      presentation: format === "markdown" ? viewer.markdownPresentation : null,
+      onAnalyze: format === "markdown" && typeof actions.analyzeMarkdown === "function"
+        ? function (text) { return actions.analyzeMarkdown(text, { resourceUri: uri }); } : null,
       offset: page.offset,
       startLine: page.startLine,
       totalCharacters: page.totalCharacters,

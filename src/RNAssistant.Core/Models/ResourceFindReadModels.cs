@@ -392,6 +392,9 @@ namespace RNAssistant.Core.Models
         [JsonProperty("name")] public string Name { get; set; }
         [JsonProperty("kind")] public string Kind { get; set; }
         [JsonProperty("line", NullValueHandling = NullValueHandling.Ignore)] public int? Line { get; set; }
+        [JsonProperty("level", NullValueHandling = NullValueHandling.Ignore)] public int? Level { get; set; }
+        [JsonProperty("parentHeading", NullValueHandling = NullValueHandling.Ignore)] public string ParentHeading { get; set; }
+        [JsonProperty("nameTruncated", DefaultValueHandling = DefaultValueHandling.Ignore)] public bool NameTruncated { get; set; }
     }
 
     // A provider read and the evidence delivered with that same observation.

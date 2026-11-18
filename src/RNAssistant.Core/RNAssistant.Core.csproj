@@ -36,6 +36,10 @@
       <HintPath>..\..\packages\YamlDotNet.18.1.0\lib\net47\YamlDotNet.dll</HintPath>
       <Private>True</Private>
     </Reference>
+    <Reference Include="Markdig">
+      <HintPath>..\..\packages\Markdig.0.37.0\lib\net462\Markdig.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
     <Reference Include="Microsoft.Bcl.HashCode">
       <HintPath>..\..\packages\Microsoft.Bcl.HashCode.6.0.0\lib\net462\Microsoft.Bcl.HashCode.dll</HintPath>
       <Private>True</Private>
@@ -117,6 +121,7 @@
     <Compile Include="Models\DiagnosticLogModels.cs" />
     <Compile Include="Storage\DiagnosticLogStore.cs" />
     <Compile Include="Models\ArtifactModels.cs" />
+    <Compile Include="Models\MarkdownAnalysisModels.cs" />
     <Compile Include="Models\HtmlProjectSnapshot.cs" />
     <Compile Include="Models\ResourceModels.cs" />
     <Compile Include="Models\ResourceArchitectureModels.cs" />
@@ -379,7 +384,8 @@
     <Compile Include="Storage\DocumentArtifactStore.Files.cs" />
     <Compile Include="Storage\DocumentArtifactStore.FilePatches.cs" />
     <Compile Include="Storage\DocumentArtifactStore.Claims.cs" />
-    <Compile Include="Services\MarkdownHeadingScanner.cs" />
+    <Compile Include="Services\MarkdownAnalysisService.cs" />
+    <Compile Include="Services\MarkdownSectionSelector.cs" />
     <Compile Include="Storage\ChatStore.Caching.cs" />
     <Compile Include="Storage\ChatStore.EventLog.cs" />
     <Compile Include="Storage\ChatStore.SqliteProjection.cs" />

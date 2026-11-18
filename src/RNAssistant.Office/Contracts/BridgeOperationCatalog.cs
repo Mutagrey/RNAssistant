@@ -174,6 +174,7 @@ namespace RNAssistant.Office.Contracts
         ChangeArtifactLink,
         DeleteDocumentArtifact,
         [BridgeOperationPolicy(true, 300)] ReadArtifactViewerPage,
+        [BridgeOperationPolicy(true, 60)] AnalyzeMarkdown,
         [BridgeOperationPolicy(true, 300)] ReadArtifactImage,
         [BridgeOperationPolicy(true, 300)] ReadArtifactImageThumbnail,
         ReadArtifactPdfInfo,

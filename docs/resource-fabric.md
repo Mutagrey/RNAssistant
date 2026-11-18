@@ -713,9 +713,10 @@ URIs remain outside model projections. Incomplete global discovery still reports
 `complete=false`; it does not make explicit message attachment targets unreadable.
 
 Document-owned uploaded text/code, authored text/code files and authored Markdown/Plans retain a deterministic
-`artifact-(extracted-)?text-index-v3` view under their exact revision. Its CAS
+`artifact-(extracted-)?text-index-v4` view under their exact revision. Its CAS
 manifest holds 32,000-character parts, UTF-16 character coverage, line ranges,
-bounded Markdown headings and advisory C#/VBA/JS/TS declarations. The source is
+Markdig Markdown headings (ATX and Setext, visible title, line, level and parent)
+and advisory C#/VBA/JS/TS declarations. The source is
 verified through the protected CAS decoder while the index is built incrementally;
 no plaintext temporary file, head, second store or read evidence is created.
 The index has no configured whole-source byte ceiling; long lines remain addressable by parts. Derived parts remain CAS retention roots. A missing/corrupt part is rebuilt
@@ -728,7 +729,19 @@ characters each. A prefix-only negative reports incomplete coverage.
 indexed text completely and returns bounded literal
 snippets, a total match count, `scanComplete`, `sourceComplete` and a matching
 `partNumber`. A negative result proves absence only when `scanComplete=true`.
-`resources.outline(target, fromPart, limit)` pages exact part/line ranges;
+`resources.outline(target, fromPart, limit)` pages exact part/line ranges.
+Workspace files use the same tool with a workspace-relative `.md`/`.markdown`
+target (default `type=file`); bound Office artifacts use `type=office`.
+Workspace part numbers paginate the navigation map only: read those files with
+`section` or line/character selectors, not the artifact-only `partNumber`.
+Markdown navigation uses the same `MarkdownAnalysisService` as the viewer. A
+complete parse is bounded to 1,048,576 UTF-16 characters, 4,096 sections and
+16,384 links. Larger artifact texts retain their streamed parts and return
+`symbolsComplete=false`; workspace structure requests fail explicitly and retain
+ordinary text-window reads. Partial source text is never parsed as a complete map. Heading display names are
+bounded to 200 characters; `nameTruncated=true` directs callers to source windows
+instead of passing the shortened label as a section selector.
+
 Markdown heading names and code declarations are navigation hints. The code
 symbol grammar is deliberately partial (`symbolsComplete=false`), including
 minified/very long lines. `core.read` accepts `partNumber` for indexed
@@ -971,9 +984,13 @@ Old observations without the metadata remain unknown. Context-claim binding and
 fork copying preserve known metadata; a new sliced observation never inherits
 the completeness of its previous whole-body observation.
 
-Model `core.read` may select an exact unique ATX heading with `section`
-and `representation=text` for document Markdown/Plans and complete uploaded
-Markdown. This uses the same provider/authority/evidence path and retains only
+Model `core.read` may select an exact unique visible ATX or Setext heading with
+`section` and `representation=text` for document Markdown/Plans, complete uploaded
+Markdown, authored Markdown files and workspace `.md`/`.markdown` files. The same
+Markdig parse computes nested section ends and ignores heading-like fenced code.
+Duplicate visible titles remain ambiguous; use source line/character selectors.
+Workspace selection captures once and reads its range from the same immutable
+bytes, even if the live file changes while parsing. This uses the same provider/authority/evidence path and retains only
 character-range coverage, even for a complete selected section. It cannot satisfy
 a whole-resource refresh requirement. The model result reports
 `selectionComplete=true` and `complete=false`; exact runtime evidence may mark

@@ -68,23 +68,14 @@
     return trigger;
   }
   function mountBrowser(root, context) {
-    var save = RNAssistantActionMenu.createTrigger("Сохранить версию проекта");
-    save.classList.add("compact", "preview-surface-persistent"); save.removeAttribute("aria-haspopup"); save.removeAttribute("aria-expanded"); save.innerHTML = RNAssistantIcons.render("save"); root.appendChild(save);
     var versions = RNAssistantActionMenu.createTrigger("Версии проекта");
     versions.classList.add("compact"); versions.innerHTML = RNAssistantIcons.render("clock"); root.appendChild(versions);
-    var apply = RNAssistantActionMenu.createTrigger("Применить сохранённую версию");
-    apply.classList.add("compact"); apply.removeAttribute("aria-haspopup"); apply.removeAttribute("aria-expanded"); apply.innerHTML = RNAssistantIcons.render("upload"); root.appendChild(apply);
     var state = null, chosen = null, epoch = 0, busy = false, menu = null, rows = [], cursor = null, pending = null, disposed = false;
     function target() { return context.target(); }
     function controls() {
       var value = target(), caps = state && state.capabilities || value && value.capabilities || {};
-      save.hidden = value && value.kind === "HtmlResource";
-      save.disabled = busy || !!pending || !state || !caps.saveVersion || !state.capabilities.saveVersion || !state.contentRevision;
-      save.title = save.disabled ? "Сохранить версию: " + (busy ? "дождитесь операции" : !caps.saveVersion ?
-        caps.saveReason === "ProjectDefinitionRequired" ? "задайте состав проекта" : "доступно для рабочей копии проекта" : (state && state.target && state.target.message || "обновите состояние исходников")) : "Сохранить версию проекта";
-      versions.disabled = busy || !caps.versions || !supported(value); apply.hidden = !value || !value.pluginId;
-      apply.disabled = busy || !!pending || !state || !(value && value.savedVersionId || chosen) || value.state === "Removed";
-      apply.title = apply.disabled ? "Применить: сохраните или выберите версию" : "Применить сохранённую версию";
+      versions.disabled = busy || !supported(value);
+      versions.title = value && value.savedVersionId ? "Версии проекта · " + value.savedVersionId : "Версии проекта";
     }
     function valid(serial) { return !disposed && context.isCurrent() && epoch === serial; }
     function supported(value) { return value && (value.pluginId || value.kind === "WorkspaceHtmlProject" || value.kind === "HtmlArtifact" || value.kind === "HtmlWorkspace"); }
@@ -112,7 +103,7 @@
       try {
         var result = await context.request("browserVersionCommand", request); received = true;
         if (!valid(serial)) return;
-        if (result.outcome === "Unknown") { pending = request; context.status("Результат неизвестен. Проверьте исходную операцию через меню версий."); return; }
+        if (result.outcome === "Unknown") { pending = request; if (menu) menu.close(); context.status("Результат неизвестен. Проверьте сохранение через меню версий."); return; }
         pending = null;
         if (result.outcome === "Rejected") throw new Error(result.message || "Состояние изменилось. Обновите версии.");
         if (request.action === "Save") chosen = result.version.removed ? null : result.version.versionId;
@@ -124,8 +115,8 @@
           else { context.error(error); await refresh(true); } } }
       finally { busy = false; controls(); }
     }
-    save.onclick = async function () {
-      if (save.disabled || pending || busy) return;
+    async function saveVersion() {
+      if (pending || busy) return;
       if (context.beforeSave) {
         busy = true; controls();
         var changed;
@@ -133,11 +124,17 @@
         catch (error) { context.error(error); return; }
         finally { busy = false; controls(); }
         if (disposed || !context.isCurrent()) return;
-        if (changed) await refresh(); if (save.disabled || pending) return;
+        if (changed) await refresh();
+        var value = target(), caps = state && state.capabilities || value && value.capabilities || {};
+        if (pending || !state || !caps.saveVersion || !state.capabilities.saveVersion || !state.contentRevision) return;
       }
-      execute(command("Save"));
-    };
-    apply.onclick = function () { if (!apply.disabled && !pending && window.confirm("Применить выбранную сохранённую версию плагина? Исходники останутся без изменений.")) execute(command("Activate")); };
+      return execute(command("Save"));
+    }
+    function applyVersion() {
+      var value = target();
+      if (busy || pending || !state || !(value && value.savedVersionId || chosen) || value.state === "Removed") return;
+      if (window.confirm("Применить выбранную сохранённую версию плагина? Исходники останутся без изменений.")) return execute(command("Activate"));
+    }
     function locator(version) {
       if (target().logicalId) return "/resources/" + encodeURIComponent(target().logicalId) + (version ? "/versions/" + encodeURIComponent(version) : "");
       var value = target(), base = value.pluginId ? "/plugins/" + encodeURIComponent(value.pluginId) : "/projects/" + encodeURIComponent(value.workspaceId);
@@ -145,9 +142,21 @@
     }
     function entries() {
       var value = target(), items = [];
+      var caps = state && state.capabilities || value && value.capabilities || {};
+      var saveBlocked = busy || !!pending || !state || !caps.saveVersion || !state.capabilities.saveVersion || !state.contentRevision;
+      var applyBlocked = busy || !!pending || !state || !(value && value.savedVersionId || chosen) || value.state === "Removed";
+      items.push({ label: pending ? "Проверить сохранение версии" : "Сохранить версию проекта", icon: pending ? "refresh" : "save",
+        disabled: busy || !state || !caps.saveVersion || (!pending && saveBlocked),
+        status: saveBlocked ? busy ? "Дождитесь операции" : !caps.saveVersion ?
+          caps.saveReason === "ProjectDefinitionRequired" ? "Задайте состав проекта" : "Доступно для рабочей копии проекта" :
+          state && state.target && state.target.message || "Обновите состояние исходников" : "",
+        onSelect: function () { return pending ? execute(pending) : saveVersion(); } });
+      items.push({ label: "Применить сохранённую версию", icon: "upload", disabled: applyBlocked,
+        status: applyBlocked ? "Сохраните или выберите версию" : "Исходники останутся без изменений",
+        onSelect: applyVersion });
+      items.push({ separator: true });
       if (context.configure && value.kind === "WorkspaceHtmlProject" && !value.immutable)
         items.push({ label: "Состав проекта…", icon: "folder", onSelect: context.configure });
-      if (pending) items.push({ label: "Проверить исходную операцию", icon: "refresh", onSelect: function () { return execute(pending); } });
       items.push({ label: "Рабочая копия", icon: "code", checked: !value.savedVersionId,
         onSelect: function () { return context.navigate(locator(null)); } });
       rows.forEach(function (entry) {
@@ -179,7 +188,7 @@
     };
     controls();
     return { refresh: refresh, reset: function () { epoch++; state = null; chosen = null; pending = null; if (menu) menu.close(); controls(); },
-      deactivate: function () { epoch++; if (menu) menu.close(); }, dispose: function () { disposed = true; epoch++; if (menu) menu.close(); save.remove(); versions.remove(); apply.remove(); } };
+      deactivate: function () { epoch++; if (menu) menu.close(); }, dispose: function () { disposed = true; epoch++; if (menu) menu.close(); versions.remove(); } };
   }
   window.RNAssistantArtifactVersions = { append: append, mountBrowser: mountBrowser };
 }());

@@ -36,9 +36,15 @@ const {withPreviewPage}=require('./preview-session');
     await RNAssistantPlugins.select('alpha');
   });
   const visible=()=>page.locator('section[aria-label="Browser"]:visible');
+  async function saveEnabled(){
+    const versions=visible().getByRole('button',{name:'Версии проекта',exact:true});
+    if(!await page.locator('.rna-action-menu-popup:visible').count())await versions.click();
+    const item=page.getByRole('menuitem',{name:'Сохранить версию проекта',exact:true});
+    await item.waitFor();const enabled=await item.isEnabled();await page.keyboard.press('Escape');return enabled;
+  }
   await visible().getByText('{ invalid manifest',{exact:false}).waitFor();
   assert.equal(await visible().locator('iframe').count(),0);
-  assert.equal(await visible().getByRole('button',{name:'Сохранить версию проекта',exact:true}).isEnabled(),false);
+  assert.equal(await saveEnabled(),false);
   const first=await visible().getAttribute('data-browser-tab-id');
   await page.evaluate(()=>RNAssistantPlugins.select('beta'));
   await visible().getByText('{ invalid manifest',{exact:false}).waitFor();
@@ -49,9 +55,9 @@ const {withPreviewPage}=require('./preview-session');
   await page.evaluate(()=>{pluginBrowser.bad=false;});
   await visible().getByRole('button',{name:'Обновить предпросмотр',exact:true}).click();
   await visible().getByText('{"name":"repaired"}',{exact:false}).waitFor();
-  assert.equal(await visible().getByRole('button',{name:'Сохранить версию проекта',exact:true}).isEnabled(),true);
+  assert.equal(await saveEnabled(),true);
   await page.setViewportSize({width:420,height:760});
-  assert.ok(await visible().getByRole('button',{name:'Сохранить версию проекта',exact:true}).isVisible());
+  assert.ok(await visible().getByRole('button',{name:'Версии проекта',exact:true}).isVisible());
   await page.evaluate(id=>RNAssistantDockWorkspace.close('browser:'+id),first);
   await page.waitForFunction(id=>pluginBrowser.calls.some(c=>c.action==='Close'&&c.browserTabId===id),first);
   assert.equal(await page.evaluate(id=>pluginBrowser.calls.filter(c=>c.action==='Close'&&c.browserTabId===id).length,second),0,'closing one tab preserves sibling');

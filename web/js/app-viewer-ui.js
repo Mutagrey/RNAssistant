@@ -36,9 +36,11 @@
         root.querySelectorAll('.rn-text-viewer').forEach(function (reader) {
           var full = kind === "pdf" ? options.textComplete === true && options.sourceComplete === true : options.complete === true && options.sourceComplete !== false;
           var status = reader.querySelector('.rn-text-viewer-status');
-          status.hidden = full && !options.draft;
-          if (options.draft) status.textContent = "Есть несохранённые изменения";
-          else if (!full) status.textContent = status.textContent.replace("exact source", "текст").replace("viewer bound", "лимит просмотра");
+          if (status) {
+            status.hidden = full && !options.draft;
+            if (options.draft) status.textContent = "Есть несохранённые изменения";
+            else if (!full) status.textContent = status.textContent.replace("exact source", "текст").replace("viewer bound", "лимит просмотра");
+          }
           var search = reader.querySelector('.rn-text-viewer-search');
           if (search) { search.placeholder = "Найти в тексте"; search.setAttribute("aria-label", "Найти в тексте"); }
           reader.querySelector('.rn-text-viewer-source').setAttribute("role", "document");
@@ -87,7 +89,11 @@
         }); })) return;
         queued = true; queueMicrotask(function () { queued = false; if (root.isConnected) decorate(); });
       });
-      decorate(); observer.observe(root, { childList: true, subtree: true });
+      decorate();
+      var materialContent = root.closest && root.closest(".material-surface-content");
+      if (materialContent && materialContent.__rnMaterialSurface && (root === materialContent || root.parentElement === materialContent))
+        materialContent.__rnMaterialSurface.attachViewer(root, kind, options, controller);
+      observer.observe(root, { childList: true, subtree: true });
       return { destroy: function () { observer.disconnect(); } };
     }
   };

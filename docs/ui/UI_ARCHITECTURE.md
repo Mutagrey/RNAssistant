@@ -1,5 +1,40 @@
 # Архитектура UI RNAssistant
 
+## Markdown document structure and MaterialSurface — In Review, 2026-11-17
+
+Saved Markdown presentation stays in `app-text-viewer.js` / `ViewerRegistry`.
+`MarkdownAnalysisService` in Core owns the single bounded Markdig parse for HTML,
+heading hierarchy, exact UTF-16 section ranges and explicit link occurrences.
+The typed `analyzeMarkdown` bridge is a pure presentation transform: it accepts a
+complete text snapshot, publishes no resource head and grants no read/write evidence.
+`ArtifactViewerActions` binds and caches its response to the existing exact viewer
+and text; view disposal and generation checks reject late responses.
+
+`app-artifact-viewers.js` requires this analysis for saved resources and Plan
+previews. Missing/failed analysis leaves readable source with an explicit status.
+The existing `app-markdown.js` renderer continues to own chat/message streaming.
+UI sanitizes generated HTML and uses the analysis anchors for its local
+NavigationTree; it does not derive a second heading grammar. Generated HTML is not a
+user-facing mode. `app-material-surface.js` owns the shared Material/Browser shell:
+sidebar, one header, common search/actions and status bar. `ViewerUI` attaches format
+modes, provider actions, navigation and status/search adapters to that shell;
+`app-material-view.js` supplies artifact versions/download/menu, while Browser inserts
+its existing PreviewSurface address/navigation as a provider slot. Browser source files
+use the same NavigationTree in the shared left sidebar, with directory grouping and an
+explicit active-file selection; the list is visible only in source mode and is not
+duplicated above the viewer. Hoisted PDF thumbnails and image/collection rails leave
+the exact page/image canvas as the sole full-size content grid item. Read retry stays
+error-only for successful exact snapshots; Markdown analysis retry stays with its
+explanatory status instead of becoming a detached toolbar action. Browser has no
+duplicate title/meta; address is the identity. Save/history/apply share one version
+menu, and home/project/export/compare/search-adjacent page operations share the single
+overflow instead of separate tool buttons. MD and Browser use the same `preview` mode
+semantics. The local MD graph
+uses the existing bounded analysis sections/links and does not claim cross-document
+resolution or backlinks. Authored Markdown editing and resolved link/backlink indexes
+remain separate unfinished slices. This patch changes no mutation owner or durable
+document state.
+
 ## Unified chat draft persistence — W9, In Review, 2026-11-16
 
 `RNAssistantChatDrafts` owns one coalesced writer per exact draft for Office, Workspace

@@ -115,6 +115,14 @@
       <Link>%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Include="$(MSBuildThisFileDirectory)packages/Markdig.0.37.0/lib/net462/Markdig.dll">
+      <Link>%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="$(MSBuildThisFileDirectory)vendor/markdig/Markdig-LICENSE.txt">
+      <Link>licenses\Markdig-LICENSE.txt</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Content Include="$(MSBuildThisFileDirectory)packages/Microsoft.Data.Sqlite.Core.10.0.10/lib/netstandard2.0/Microsoft.Data.Sqlite.dll;$(MSBuildThisFileDirectory)packages/SQLitePCLRaw.core.2.1.11/lib/netstandard2.0/SQLitePCLRaw.core.dll;$(MSBuildThisFileDirectory)packages/SQLitePCLRaw.provider.winsqlite3.2.1.11/lib/netstandard2.0/SQLitePCLRaw.provider.winsqlite3.dll;$(MSBuildThisFileDirectory)packages/SQLitePCLRaw.provider.sqlite3.2.1.11/lib/netstandard2.0/SQLitePCLRaw.provider.sqlite3.dll;$(MSBuildThisFileDirectory)packages/Microsoft.Bcl.HashCode.6.0.0/lib/net462/Microsoft.Bcl.HashCode.dll;$(MSBuildThisFileDirectory)packages/System.Buffers.4.6.1/lib/net462/System.Buffers.dll;$(MSBuildThisFileDirectory)packages/System.Memory.4.6.3/lib/net462/System.Memory.dll;$(MSBuildThisFileDirectory)packages/System.Numerics.Vectors.4.6.1/lib/net462/System.Numerics.Vectors.dll;$(MSBuildThisFileDirectory)packages/System.Runtime.CompilerServices.Unsafe.6.1.2/lib/net462/System.Runtime.CompilerServices.Unsafe.dll">
       <Link>%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -175,6 +183,7 @@
       <RNAssistantManagedFile Include="$(MSBuildThisFileDirectory)packages/Microsoft.Web.WebView2.1.0.2903.40/lib/net462/Microsoft.Web.WebView2.WinForms.dll" />
       <RNAssistantManagedFile Include="$(MSBuildThisFileDirectory)packages/Newtonsoft.Json.13.0.3/lib/net45/Newtonsoft.Json.dll" />
       <RNAssistantManagedFile Include="$(MSBuildThisFileDirectory)packages/YamlDotNet.18.1.0/lib/net47/YamlDotNet.dll" />
+      <RNAssistantManagedFile Include="$(MSBuildThisFileDirectory)packages/Markdig.0.37.0/lib/net462/Markdig.dll" />
       <RNAssistantManagedFile Include="$(MSBuildThisFileDirectory)packages/PdfPig.0.1.15/lib/net471/UglyToad.PdfPig.dll" />
       <RNAssistantManagedFile Include="$(MSBuildThisFileDirectory)packages/PdfPig.0.1.15/lib/net471/UglyToad.PdfPig.Core.dll" />
       <RNAssistantManagedFile Include="$(MSBuildThisFileDirectory)packages/PdfPig.0.1.15/lib/net471/UglyToad.PdfPig.DocumentLayoutAnalysis.dll" />

@@ -30,7 +30,7 @@
   --danger-ink: #ffffff;
   --info: #426683;
   --info-soft: #ecf2f7;
-  --code-bg: #f7f8f7;
+  --code-bg: var(--surface-subtle);
   --syntax-key: var(--palette-violet);
   --syntax-string: var(--palette-green);
   --syntax-number: var(--palette-blue);
@@ -156,7 +156,7 @@ html[data-theme="dark"], .theme-preview-dark {
   --danger-ink: #281614;
   --info: #adc8df;
   --info-soft: #2c3540;
-  --code-bg: #1c2024;
+  --code-bg: var(--surface-subtle);
   --syntax-key: #c7adf2;
   --syntax-string: #9bc8a5;
   --syntax-number: #a4bffc;

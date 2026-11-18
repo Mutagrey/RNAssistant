@@ -59,11 +59,86 @@
   user-select: none;
 }
 
-.rn-markdown-viewer-tabs .active {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
-  color: var(--accent);
-}
-
 .rn-markdown-viewer-rendered {
   min-width: 0;
+}
+
+.rn-markdown-viewer {
+  container-type: inline-size;
+  min-width: 0;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: var(--space-2);
+}
+
+.rn-markdown-viewer-toolbar,
+.rn-markdown-viewer-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.rn-markdown-viewer-actions {
+  margin-left: auto;
+}
+
+.rn-markdown-viewer-layout {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
+
+.has-markdown-navigation > .rn-markdown-viewer-layout {
+  grid-template-columns: minmax(10rem, 16rem) minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+.rn-markdown-viewer-navigation {
+  min-width: 0;
+  max-height: min(70vh, 42rem);
+  overflow: auto;
+  border-right: 1px solid var(--line);
+  padding-right: var(--space-2);
+  background: var(--surface);
+}
+
+.rn-markdown-viewer-navigation[hidden] {
+  display: none;
+}
+
+.rn-markdown-viewer-body {
+  min-width: 0;
+  min-height: 0;
+  overflow-wrap: anywhere;
+}
+
+.rn-markdown-viewer-note { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.rn-markdown-viewer-note[hidden] { display: none; }
+.rn-markdown-viewer-note-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rn-markdown-viewer-note[data-error="true"] .rn-markdown-viewer-note-text { color: var(--danger); }
+.rn-markdown-viewer-note .rn-markdown-viewer-retry { flex: none; min-height: 22px; padding: 0 var(--space-1); border: 0; background: transparent; color: var(--accent); font-size: var(--text-xs); }
+.rn-markdown-viewer-note .rn-markdown-viewer-retry:hover { background: var(--surface-hover); }
+
+.rn-markdown-viewer-rendered a[role="link"] {
+  cursor: pointer;
+}
+
+@container (max-width: 40rem) {
+  .has-markdown-navigation > .rn-markdown-viewer-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .rn-markdown-viewer-navigation {
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: 2;
+    width: min(85%, 16rem);
+    max-height: 100%;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow);
+    padding: var(--space-2);
+  }
 }

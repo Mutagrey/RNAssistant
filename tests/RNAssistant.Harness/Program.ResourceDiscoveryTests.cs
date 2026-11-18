@@ -505,7 +505,7 @@ namespace RNAssistant.Harness
                 AssertEqual("Purpose and complete document scope", candidate.Description, "description survives discovery projection");
                 AssertTrue(candidate.Evidence == null || candidate.Evidence.Count == 0, "search snippet does not grant whole-read evidence");
 
-                var view = authority.GetView(scope, reference, "artifact-text-index-v3");
+                var view = authority.GetView(scope, reference, "artifact-text-index-v4");
                 File.Delete(executor.Payloads.PathFor(view.Payload.Sha256));
                 AssertEqual(1, provider.Search(other, "late-content-marker", "document-artifact", 20, 600).Matches.Count, "missing index is reconstructed from the same source");
                 File.WriteAllText(executor.Payloads.PathFor(view.Parts[0].Sha256), "corrupt part");
@@ -544,7 +544,7 @@ namespace RNAssistant.Harness
                 var counted = new DiscoveryPageStore(authority);
                 counted.ViewRegistered = view =>
                 {
-                    if (view.View != "artifact-text-index-v3") return;
+                    if (view.View != "artifact-text-index-v4") return;
                     counted.ViewRegistered = null;
                     var scope = ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId));
                     var before = authority.Capture(scope);

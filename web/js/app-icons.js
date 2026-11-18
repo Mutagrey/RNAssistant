@@ -55,6 +55,7 @@
     moon: '<path d="M20 14A8 8 0 0 1 10 4a8.5 8.5 0 1 0 10 10Z"/>',
     shield: '<path d="m12 3 8 3v6c0 5-8 9-8 9S4 17 4 12V6Z"/><path d="m8 12 3 3 5-6"/>',
     chart: '<path d="M3 3v18h18M7 16v-5M12 16V7M17 16V4"/>',
+    graph: '<circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="m7.7 7.2 3.2 8.5M16.3 7.2l-3.2 8.5M8 6h8"/>',
     diagnostics: '<circle cx="10.5" cy="10.5" r="7.5"/><path d="m16 16 5 5M5.5 10.5H8l1.5-3 2.5 6 1.5-3H16"/>',
     table: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M10 4v16M16 4v16"/>',
     puzzle: '<path d="M9 3H3v6h2a2 2 0 1 1 0 4H3v8h7v-2a2 2 0 1 1 4 0v2h7v-7h-2a2 2 0 1 1 0-4h2V3h-8v2a2 2 0 1 1-4 0Z"/>',

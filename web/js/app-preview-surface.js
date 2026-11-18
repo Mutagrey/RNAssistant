@@ -66,12 +66,14 @@
     home.hidden = stop.hidden = true;
     home.onclick = function () { if (presentation && presentation.home) invoke(presentation.home); };
     stop.onclick = function () { if (presentation && presentation.stop) invoke(presentation.stop); };
-    navigation.append(back, forward, reload, home, stop, annotate);
+    navigation.append(back, forward, reload, stop, annotate);
 
     var info = iconButton("info", "Сведения о странице"); info.setAttribute("aria-haspopup", "dialog"); info.setAttribute("aria-expanded", "false");
     location.append(info, address, completion);
     var tools = iconButton("more", "Инструменты страницы"); tools.classList.add("preview-surface-tools"); tools.setAttribute("aria-expanded", "false");
-    toolbar.append(navigation, location, actions, tools); bar.append(toolbar, status); root.insertBefore(bar, root.firstChild);
+    if (options.singleOverflow) toolbar.append(navigation, location, actions);
+    else toolbar.append(navigation, location, actions, tools);
+    bar.append(toolbar, status); root.insertBefore(bar, root.firstChild);
 
     function inOwnMenu(target) {
       return target && target.closest && target.closest(".rna-action-menu-popup") && toolbar.querySelector('[aria-haspopup][aria-expanded="true"]');
@@ -141,7 +143,8 @@
           var button = iconButton(mode === "preview" ? "play" : "code", mode === "preview" ? "Страница" : "Исходник");
           button.onclick = function () { if (modeChange) modeChange(mode); }; modeButtons[mode] = button; modes.appendChild(button);
         });
-        actions.prepend(modes);
+        if (options.modesHost) { options.modesHost.appendChild(modes); options.modesHost.hidden = false; }
+        else actions.prepend(modes);
       }
       if (modes) {
         modes.hidden = !(value.supportedModes && value.supportedModes.length);
@@ -168,9 +171,11 @@
     function setStatus(message, error) {
       status.textContent = message || ""; status.title = message || "";
       status.dataset.error = error ? "true" : "false"; status.setAttribute("role", error ? "alert" : "status");
+      if (typeof options.onStatus === "function") options.onStatus(message || "", !!error);
     }
     function show(label, message) {
       bar.hidden = false; currentLabel = label && typeof label === "object" ? label : { title: label };
+      if (typeof options.onLabel === "function") options.onLabel(currentLabel);
       updateAddress(); updateInfo(); setStatus(message, false); refresh();
     }
     function refresh() { reload.disabled = options.canReload ? !options.canReload() : false; }
@@ -183,13 +188,17 @@
       };
       pending = current; frame.addEventListener("load", current.load); frame.addEventListener("error", current.error);
     }
+    function closeMenus() { RNAssistantActionMenu.closeWithin(bar); RNAssistantActionMenu.closeWithin(actions); }
     return { actions: actions, discussButton: discuss, refresh: refresh, status: setStatus,
+      canHome: function () { return !!(presentation && presentation.home); },
+      goHome: function () { if (presentation && presentation.home) return presentation.home(); },
       setAnnotation: function (button) { annotate.replaceWith(button); annotate = button; button.classList.add("icon-btn", "compact"); },
-      updateLabel: function (value) { currentLabel = Object.assign({}, currentLabel, value); updateAddress(); updateInfo(); },
-      collapse: function () { expand(false); RNAssistantActionMenu.closeWithin(bar); },
+      updateLabel: function (value) { currentLabel = Object.assign({}, currentLabel, value); if (typeof options.onLabel === "function") options.onLabel(currentLabel); updateAddress(); updateInfo(); },
+      bar: bar, toolbar: toolbar, statusElement: status,
+      collapse: function () { expand(false); closeMenus(); },
       setDocument: setDocument, clearDocument: clearDocument, watch: watch,
       waiting: function (label, message) { detach(); show(label, message || "Загрузка…"); }, fail: fail,
-      clear: function () { detach(); expand(false); RNAssistantActionMenu.closeWithin(bar); currentLabel = null; clearDocument(); bar.hidden = true; setStatus("", false); reload.hidden = false; reload.disabled = true; stop.hidden = true; }
+      clear: function () { detach(); expand(false); closeMenus(); currentLabel = null; clearDocument(); bar.hidden = true; setStatus("", false); reload.hidden = false; reload.disabled = true; stop.hidden = true; }
     };
   }
   window.RNAssistantPreviewSurface = { attach: attach };

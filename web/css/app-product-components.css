@@ -14,6 +14,7 @@ input::placeholder, textarea::placeholder { color: var(--ink-faint); opacity: 1;
 .button:not(.primary)[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); background: var(--surface-selected); }
 .button:not(.primary)[aria-pressed="true"]:hover { background: var(--surface-selected); }
 .icon-btn, summary.icon-btn { display: inline-grid; flex: 0 0 var(--control); place-items: center; width: var(--control); height: var(--control); min-height: var(--control); padding: 0; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--ink-muted); }
+.icon-btn[hidden], summary.icon-btn[hidden] { display: none; }
 summary.icon-btn { list-style: none; cursor: pointer; }
 summary.icon-btn::-webkit-details-marker { display: none; }
 .icon-btn > svg { flex: 0 0 18px; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.55; stroke-linecap: round; stroke-linejoin: round; }

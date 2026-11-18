@@ -95,6 +95,11 @@ function installRestoredBrowserStartup(fixture) {
   const lifecycle = () => ({ activate: noop, deactivate: noop, dispose: noop, update: noop,
     refresh: noop, reset: noop, layout: noop, busy: () => false });
   context.RNAssistantViewerRegistry = { mount: lifecycle, unmount: noop };
+  context.RNAssistantMaterialSurface = { create: () => {
+    const content = element();
+    return { element: element(), content, workspace: content, setProviderToolbar: noop, setSearch: noop,
+      setTitle: noop, setStatus: noop, setStatusMeta: noop, setCommonActions: noop, destroy: noop };
+  } };
   context.RNAssistantPreviewSurface = { attach: () => ({ actions: element(), discussButton: element(),
     status: noop, waiting: noop, collapse: noop, clear: noop, setDocument: noop,
     fail: (label, message) => errors.push(message) }) };

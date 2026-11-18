@@ -29,13 +29,17 @@
       open();
     }, events);
     input.addEventListener("input", update, events);
-    input.addEventListener("blur", function () { close(false); }, events);
+    input.addEventListener("blur", function (event) {
+      if (event.relatedTarget && heading.contains(event.relatedTarget)) return;
+      close(false);
+    }, events);
     input.addEventListener("keydown", function (event) {
       if (event.key === "Escape") { event.preventDefault(); close(true); button.focus(); }
     }, events);
     if (signal) signal.addEventListener("abort", function () { searches.delete(button); }, { once: true });
     update();
-    var control = { open: open }; searches.set(button, control); return control;
+    var control = { open: open, close: function (clear) { close(clear); }, isOpen: function () { return !input.hidden; } };
+    searches.set(button, control); return control;
   }
   function node(tag, className, text) {
     var element = document.createElement(tag); element.className = className;
@@ -100,7 +104,7 @@
     window.addEventListener("pagehide", function (event) { if (!event.persisted) pane.dispose(); }, events);
     panes.set(root, pane); return pane;
   }
-  window.RNAssistantNavigationPane = { mount: mount, bindSearches: function (root) {
+  window.RNAssistantNavigationPane = { mount: mount, bind: bindSearch, bindSearches: function (root) {
     root.querySelectorAll("[data-nav-search-toggle]").forEach(function (button) {
       var input = document.getElementById(button.dataset.navSearchToggle), heading = button.closest(".product-search-heading");
       if (input && heading) bindSearch(button, input, heading);

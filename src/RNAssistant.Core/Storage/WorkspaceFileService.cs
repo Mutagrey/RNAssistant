@@ -305,6 +305,51 @@ namespace RNAssistant.Core.Storage
                 new ResourceTextWindow(procedure.StartChar, procedure.EndChar - procedure.StartChar, false, maximumCharacters), token, snapshot);
         }
 
+        internal MarkdownDocumentAnalysis ReadMarkdownAnalysis(WorkspaceDescriptor workspace, string relativePath,
+            out WorkspaceFileSnapshot snapshot, out string text, CancellationToken token)
+        {
+            if (!DocumentArtifactStore.IsMarkdownPath(relativePath))
+                throw new WorkspaceFileException("resource_section_unsupported", "Markdown structure requires an .md or .markdown file.");
+            var maximumBytes = 4L * MarkdownAnalysisService.MaximumCharacters + 3;
+            snapshot = CaptureFile(workspace, relativePath, maximumBytes, token);
+            var source = new StringBuilder();
+            try
+            {
+                using (var input = OpenExactRead(workspace, relativePath, snapshot.Reference, maximumBytes, token))
+                using (var reader = new StreamReader(input, StrictUtf8, false, 81920))
+                {
+                    var buffer = new char[81920];
+                    int count;
+                    while ((count = reader.Read(buffer, 0, buffer.Length)) > 0)
+                    {
+                        token.ThrowIfCancellationRequested();
+                        if (source.Length > MarkdownAnalysisService.MaximumCharacters - count)
+                            throw new WorkspaceFileException("markdown_too_large", "Markdown exceeds the structure analysis bound; use source line/character selectors.");
+                        source.Append(buffer, 0, count);
+                    }
+                }
+            }
+            catch (DecoderFallbackException)
+            { throw new WorkspaceFileException("encoding_ambiguous", "Only strict UTF-8 text is supported."); }
+            text = source.ToString();
+            try { return MarkdownAnalysisService.Analyze(text, false); }
+            catch (MarkdownAnalysisException error) { throw new WorkspaceFileException(error.Code, error.Message); }
+        }
+
+        public WorkspaceFileObservation ReadMarkdownSection(WorkspaceDescriptor workspace, string relativePath,
+            string section, int maximumCharacters, CancellationToken token = default(CancellationToken))
+        {
+            WorkspaceFileSnapshot snapshot;
+            string text;
+            var analysis = ReadMarkdownAnalysis(workspace, relativePath, out snapshot, out text, token);
+            MarkdownSection selected;
+            try { selected = MarkdownSectionSelector.Select(analysis, section, maximumCharacters); }
+            catch (MarkdownSectionException error) { throw new WorkspaceFileException(error.Code, error.Message); }
+            // Select from the captured immutable bytes; do not recapture the live file.
+            return ReadTextWindow(workspace, relativePath,
+                new ResourceTextWindow(selected.Start, selected.End - selected.Start, false, maximumCharacters), token, snapshot);
+        }
+
         // Application-only bounded text view. An exact continuation consumes only
         // its published raw revision; a missing/corrupt text view is not repaired.
         public WorkspaceFileObservation ReadTextViewCharacters(WorkspaceDescriptor workspace, string relativePath,

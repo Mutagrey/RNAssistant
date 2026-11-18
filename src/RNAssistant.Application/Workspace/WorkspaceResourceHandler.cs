@@ -12,6 +12,46 @@ using RNAssistant.Core.Tools.Contracts;
 
 namespace RNAssistant.Runtime
 {
+    // Workspace file navigation shares the existing outline tool name. The optional
+    // Office route keeps its original artifact owner when a document is bound.
+    internal sealed class WorkspaceMarkdownOutlineHandler : IReadOnlyToolHandler
+    {
+        private readonly WorkspaceFileResourceProvider _files;
+        private readonly IReadOnlyToolHandler _office;
+        internal WorkspaceMarkdownOutlineHandler(WorkspaceFileResourceProvider files, IReadOnlyToolHandler office)
+        { _files = files; _office = office; }
+
+        public Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var type = Text(context, "type", "file");
+            if (type == "office" && _office != null) return _office.ExecuteAsync(context, cancellationToken);
+            try
+            {
+                if (type != "file") throw new WorkspaceFileException("resource_outline_unsupported", "This outline provider is unavailable.");
+                var outline = _files.OutlineMarkdown(Text(context, "target", string.Empty),
+                    Number(context, "fromPart", 1),
+                    Number(context, "limit", 20), cancellationToken);
+                return Task.FromResult(new ToolHandlerResult(ToolResult.Ok(
+                    "Exact Markdown heading map returned. Read a unique section or startLine/lineCount; workspace part numbers paginate this map only.",
+                    JsonConvert.SerializeObject(outline), new[] { outline.ExactReference }), ToolEffectEvidence.None));
+            }
+            catch (WorkspaceFileException error)
+            {
+                return Task.FromResult(new ToolHandlerResult(ToolResult.Error(error.Message,
+                    JsonConvert.SerializeObject(new OutlineFailure { Code = error.Code })), ToolEffectEvidence.None));
+            }
+        }
+
+        private static string Text(ToolHandlerContext context, string name, string fallback)
+        { object value; return context.Arguments.TryGetValue(name, out value) && value != null ? Convert.ToString(value) : fallback; }
+        private static int Number(ToolHandlerContext context, string name, int fallback)
+        { object value; return context.Arguments.TryGetValue(name, out value) && value != null ? Convert.ToInt32(value) : fallback; }
+
+        private sealed class OutlineFailure
+        { [JsonProperty("code")] public string Code { get; set; } }
+    }
+
     // One semantic resource entrypoint. It never issues mutation observations for
     // instruction resources; files remain owned by WorkspaceFileService.
     internal sealed class WorkspaceResourceHandler : IReadOnlyToolHandler
@@ -116,6 +156,8 @@ namespace RNAssistant.Runtime
                 var startPage = Number(context, "startPage");
                 var requestedPages = Number(context, "pageCount");
                 var pageRange = pdfSelection == ResourcePdfPageSelectionKind.Range;
+                var hasSection = context.Arguments.ContainsKey("section");
+                var section = Value(context, "section");
                 var procedure = Value(context, "procedure");
                 var procedureKind = Value(context, "procedureKind");
                 var isTree = Value(context, "representation") == ResourceRepresentations.Tree;
@@ -173,6 +215,10 @@ namespace RNAssistant.Runtime
                         "Exact bounded attachment text excerpt read.", JsonConvert.SerializeObject(selected),
                         new[] { read.Result.Resource.Reference }), read.Evidence);
                 }
+                if (hasSection && (type != "file" || string.IsNullOrWhiteSpace(section) || section.Length > 200 ||
+                    Value(context, "representation") != string.Empty && Value(context, "representation") != ResourceRepresentations.Text ||
+                    context.Arguments.Keys.Any(key => key != "type" && key != "target" && key != "representation" && key != "section")))
+                    throw Error("Markdown section selection requires a file and one unique visible heading, without other selectors.", "resource_section_invalid");
                 if (isTree && (type != "file" || !hasPointer || depth < 0 || treeOffset < 0 || treeLimit < 1 ||
                     startLine.HasValue || lineCount.HasValue || startChar.HasValue || charCount.HasValue ||
                     context.Arguments.ContainsKey("procedure") || context.Arguments.ContainsKey("procedureKind") ||
@@ -191,7 +237,9 @@ namespace RNAssistant.Runtime
                     if (startChar.HasValue != charCount.HasValue ||
                         (startChar.HasValue && (startLine.HasValue || lineCount.HasValue)))
                         throw Error("Supply startChar and charCount together, without line selectors.", "resource_chars_invalid");
-                    read = isTree
+                    read = hasSection
+                        ? _files.ReadMarkdownSection(target, section, Math.Min(32000, _maximumTextReadCharacters), cancellationToken)
+                        : isTree
                         ? _files.ReadTree(target, pointer, depth, treeOffset, treeLimit,
                             Math.Max(1, _maximumTextReadCharacters - 512), cancellationToken)
                         : pageRange
@@ -228,8 +276,10 @@ namespace RNAssistant.Runtime
                 }
                 if (read.Result.Text.Length > _maximumTextReadCharacters)
                     throw Error("The source exceeds the model read budget. Use startLine/lineCount or startChar/charCount to select a smaller region.", "read_too_large");
-                if (read.Result.Complete) read.RequireCompleteExactText();
-                var projection = isTree
+                if (read.Result.Complete && !hasSection) read.RequireCompleteExactText();
+                var projection = hasSection
+                    ? ResourceReadProjection.FromSection(read.Result, target, type, "workspace", section)
+                    : isTree
                     ? ResourceReadProjection.FromTree(read.Result, target, type, "workspace", pointer,
                         depth, treeOffset, treeLimit)
                     : pageRange
@@ -246,7 +296,7 @@ namespace RNAssistant.Runtime
                     : startLine.HasValue
                     ? ResourceReadProjection.FromLines(read.Result, target, type, type == "skill" ? "catalog" : "workspace", startLine.Value, lineCount.Value)
                     : ResourceReadProjection.From(read.Result, target, type, type == "skill" ? "catalog" : "workspace");
-                if (!isTree && !pageRange && !pageIndex.HasValue && (type == "file" || !read.Result.Complete))
+                if (!hasSection && !isTree && !pageRange && !pageIndex.HasValue && (type == "file" || !read.Result.Complete))
                 {
                     projection.SourceComplete = read.Result.Complete;
                     if (!read.Result.Complete)
@@ -275,7 +325,9 @@ namespace RNAssistant.Runtime
                 if (isTree && JsonConvert.SerializeObject(projection).Length > _maximumTextReadCharacters)
                     throw Error("Selected tree exceeds the model read budget; narrow pointer, depth or limit.",
                         "resource_tree_view_too_large");
-                var requestedCoverage = isTree
+                var requestedCoverage = hasSection
+                    ? null
+                    : isTree
                     ? new ResourceCoverage(read.Result.Tree.Coverage().Kind,
                         address: "depth=" + depth + ";limit=" + treeLimit,
                         start: treeOffset, end: (long)treeOffset + treeLimit, path: pointer)
@@ -297,9 +349,10 @@ namespace RNAssistant.Runtime
                         end: (long)startLine.Value + lineCount.Value)
                     : hasProcedure ? null : ResourceCoverage.Whole();
                 read = read.WithReadMetadata(projection, requestedCoverage,
-                    requestedProcedure: hasProcedure ? procedure : null, requestedProcedureKind: procedureKind,
+                    requestedSection: hasSection ? section : null, requestedProcedure: hasProcedure ? procedure : null, requestedProcedureKind: procedureKind,
                     requestedDepth: isTree ? (int?)depth : null);
-                var message = isTree ? "Exact structured tree read; navigate with pointer, depth and child offset. Values are decoded previews, not raw source lexemes." :
+                var message = hasSection ? "Complete Markdown section read from one exact snapshot; other source regions are not observed." :
+                    isTree ? "Exact structured tree read; navigate with pointer, depth and child offset. Values are decoded previews, not raw source lexemes." :
                     pageRange ? "Exact PDF page range extraction; only complete extracted pages are covered. Continue at nextPageIndex when present; visual content may require media inspection." :
                     pageIndex.HasValue ? "Exact PDF page text extraction; coverage is limited to this page and character window. Visual content may require media inspection." :
                     read.Result.Complete ? "Complete resource representation read." :

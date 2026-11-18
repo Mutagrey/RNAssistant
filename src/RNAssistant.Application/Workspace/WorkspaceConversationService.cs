@@ -1309,6 +1309,7 @@ namespace RNAssistant.Runtime
                         maximumFileReadCharacters,
                         office?.ResourceFind, _chatAttachments, chatCatalog, browserSet?.ResourceFind));
                 Register(registry, entries, "core.read", (_mode.AllowsSkills ? "Read a UTF-8 file (default type=file, target is its workspace-relative path) or published skill instructions (type=skill, target is the skill ID). referencePath belongs only to a listed skill reference. For a workspace Plan use type=plan, omit target for the selected plan or supply an exact unique title. Optional version reads history without selecting it; a current read selects its exact revision. File text delivery follows this run's model input budget; Plans and published skill sources use the same budget and excerpt selectors; reading an excerpt does not activate a skill. For large files use startLine and positive lineCount, or zero-based UTF-16 startChar and charCount for a long single line; each slice observes the current version. core.patch accepts structured substring edits and full-line context from a delivered excerpt of a UTF-8 source. No partial skill activation." : "Read UTF-8 text by workspace-relative target. File text delivery follows this run's model input budget; use startLine/positive lineCount or zero-based UTF-16 startChar/charCount for bounded excerpts of files.") +
+                    " For Markdown files (.md/.markdown), section selects a unique visible ATX or Setext heading, including descendants, within 32000 characters and the model budget. Read resources.outline first; duplicate headings require line/character selectors. Structure analysis supports complete sources up to 1048576 UTF-16 characters." +
                     " For VBA files, procedure selects a unique procedure by name; optional procedureKind=sub/function/property-get/property-let/property-set disambiguates accessors. Do not combine with line/character selectors." +
                     " For PDF files, representation=text with startPage/pageCount reads consecutive complete pages within the model budget; nextPageIndex continues the range. Use pageIndex with optional startChar/charCount for a long page. Extracted text may omit visual or scanned content." +
                     " Use type=chat with target=Chat overview: <agent_id> from discovery, representation=text or metadata, and no history selectors to read a bounded historical overview without starting that chat. Use type=attachment with the exact semantic target from discovery to read an immutable attachment; it does not authorize a source edit." +
@@ -1318,6 +1319,11 @@ namespace RNAssistant.Runtime
                     new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, false, _plans,
                         maximumFileReadCharacters,
                         office?.ResourceRead, _chatAttachments, chatCatalog, browserSet?.ResourceRead));
+                Register(registry, entries, "resources.outline",
+                    "Navigate Markdown workspace files by heading level, parent heading and source line. target is a workspace-relative .md/.markdown path. Complete structure analysis is bounded to 1048576 UTF-16 characters; larger sources remain readable by line/character windows. fromPart/limit paginate a 32000-character navigation map; core.read partNumber is for Office artifacts only, not workspace files. Use core.read section for a unique visible heading; use startLine/lineCount for duplicates or nameTruncated=true. This navigation result does not grant mutation evidence." +
+                        (office?.ResourceOutline == null ? string.Empty : " Use type=office for an indexed document artifact target."),
+                    MarkdownOutlineSchema(office?.ResourceOutline != null), false,
+                    new WorkspaceMarkdownOutlineHandler(_resources.Select("file"), office?.ResourceOutline));
                 var searchObservation = new ResourceSearchObservation();
                 Register(registry, entries, "core.search", ResourceModelSearchSchema.Description,
                     ResourceModelSearchSchema.Create(true, office != null, browserSet != null), false,
@@ -1408,7 +1414,7 @@ namespace RNAssistant.Runtime
                     mutation ? ToolVerification.Tool : ToolVerification.None,
                     requiresConfirmation, !mutation && independentRead,
                     mutation ? new[] { ChatModes.Agent } : new[] { ChatModes.Chat, ChatModes.Plan, ChatModes.Agent }, mutation ? 1 : 0, executesCode,
-                    id == "core.find" || id == "core.search" || id == "core.outline" ? EvidenceEligibility.None : EvidenceEligibility.Eligible);
+                    id == "core.find" || id == "core.search" || id == "resources.outline" ? EvidenceEligibility.None : EvidenceEligibility.Eligible);
                 var binding = new ToolBinding(id, scope: "workspace", host: "Common");
                 Register(registry, entries, new ToolCatalogEntry
                 { Id = id, Host = "Common", Name = id, Description = description,
@@ -1440,6 +1446,20 @@ namespace RNAssistant.Runtime
                 if (third != null) { properties[third] = new JObject { ["type"] = "string", ["description"] = third }; if (thirdRequired) required.Add(third); }
                 return new JObject { ["type"] = "object", ["properties"] = properties,
                     ["required"] = required, ["additionalProperties"] = false }.ToString(Formatting.None);
+            }
+
+            private static string MarkdownOutlineSchema(bool allowOffice)
+            {
+                var types = new JArray("file");
+                if (allowOffice) types.Add("office");
+                return new JObject { ["type"] = "object", ["additionalProperties"] = false,
+                    ["required"] = new JArray("target"), ["properties"] = new JObject {
+                        ["type"] = new JObject { ["type"] = "string", ["enum"] = types },
+                        ["target"] = new JObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 1024,
+                            ["description"] = "Discovered workspace-relative Markdown path; for type=office, the exact artifact target." },
+                        ["fromPart"] = new JObject { ["type"] = "integer", ["minimum"] = 1 },
+                        ["limit"] = new JObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 50 }
+                    } }.ToString(Formatting.None);
             }
 
             private static string ResourceSchema(bool find, bool allowSkills, bool allowOffice,
@@ -1498,6 +1518,17 @@ namespace RNAssistant.Runtime
                     ((JArray)branch["required"]).Add("type");
                 }
                 return schema;
+            }
+
+            private static void AddMarkdownSectionVariant(JObject alternatives, JObject file)
+            {
+                var section = (JObject)file.DeepClone();
+                var properties = (JObject)section["properties"];
+                properties["representation"] = new JObject { ["type"] = "string", ["enum"] = new JArray("text") };
+                properties["section"] = new JObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 200,
+                    ["description"] = "Exact unique visible ATX or Setext heading title from resources.outline; includes descendants. Markdown sources up to 1048576 UTF-16 characters, selected section up to 32000 and the model budget." };
+                ((JArray)section["required"]).Add("section");
+                ((JArray)alternatives["anyOf"]).Add(section);
             }
 
             private static void AddProcedureVariant(JObject alternatives, JObject file)
@@ -1612,6 +1643,7 @@ namespace RNAssistant.Runtime
                     var alternatives = TextReadSelectorAlternatives(schema, maximumFileReadCharacters);
                     if (!skill)
                     {
+                        AddMarkdownSectionVariant(alternatives, schema);
                         AddProcedureVariant(alternatives, schema);
                         AddTreeVariant(alternatives, schema);
                         AddPdfPageVariant(alternatives, schema);
