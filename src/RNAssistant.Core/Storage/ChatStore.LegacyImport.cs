@@ -29,8 +29,15 @@ namespace RNAssistant.Core.Storage
                     snapshot = saved.Item2;
                     source = snapshot.ToObject<ChatSession>();
                     if (source == null || !ChatSession.IsReadableFormat(source.FormatVersion) || source.Id != saved.Item1.Id ||
-                        source.Messages == null || source.Messages.Count != saved.Item1.MessageCount || source.Messages.Count > 200000)
+                        source.Messages == null || source.Messages.Any(message => message == null) || source.Messages.Count > 200000)
                         throw new InvalidDataException("Неподдерживаемый или неполный снимок истории.");
+                    // The header count is the visible transcript count. Legacy
+                    // protocol/tool/runtime rows are retained in the snapshot but
+                    // intentionally excluded from that count.
+                    var visibleMessages = source.Messages.Count(message => !message.ProtocolMessage);
+                    if (visibleMessages != saved.Item1.MessageCount)
+                        throw new InvalidDataException("Неполный снимок истории: видимых сообщений " + visibleMessages +
+                            ", в заголовке " + saved.Item1.MessageCount + ".");
                     source.Artifacts = source.Artifacts ?? new System.Collections.Generic.List<ChatArtifact>();
                     source.ArtifactLinks = source.ArtifactLinks ?? new System.Collections.Generic.List<ChatArtifactLink>();
                     var receipt = router.ReadLegacyImport(source.Id, sourceId, expectedRevision, token);

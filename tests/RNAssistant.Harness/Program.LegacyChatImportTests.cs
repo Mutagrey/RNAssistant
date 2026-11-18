@@ -259,6 +259,7 @@ namespace RNAssistant.Harness
                     Attachments = new List<ChatAttachment> { upload } };
                 first.Messages.Add(firstMessage);
                 new ChatResourceIngestionService(attachmentStore, legacy.DocumentArtifacts).CommitAndLink(first, firstMessage, 0);
+                first.Messages.Add(new ChatMessage { Role = "assistant", Content = "stored protocol row", ProtocolMessage = true });
                 legacy.Save(first);
                 var authority = first.DocumentAuthorityId;
                 for (var index = 1; index < 26; index++)
@@ -291,6 +292,8 @@ namespace RNAssistant.Harness
                     AssertEqual(0, status.Failed + status.Unknown + status.Skipped, "healthy archive has no refused or unknown outcomes");
                     AssertEqual(26, router.ListHeaders(false).Count, "background migration publishes the full native catalog");
                     var imported = router.Load(first.Id);
+                    AssertEqual(2, imported.Messages.Count, "import retains a protocol row while validating the visible header count");
+                    AssertEqual(1, imported.Messages.Count(message => !message.ProtocolMessage), "visible legacy count remains exact");
                     var library = ArtifactLibraryProjectionService.Project(imported);
                     AssertTrue(library.Heads.Any(head => head.Title == "legacy-material.txt" || head.ArtifactId == "attachment_" + upload.Id),
                         "background migration publishes the imported resource into the native Materials projection");
