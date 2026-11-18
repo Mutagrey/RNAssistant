@@ -15,6 +15,18 @@ Browser держит back/forward/reload, сжимаемый адрес, реж�
 пересчитывает видимость точного native viewport, поэтому HTML не остаётся скрытым
 после отмены или выбора пункта.
 
+## Отмена активного запроса — In Review, 2026-11-18
+
+После Stop terminal-состояние чата публикуется только после освобождения exact
+session lease. Поэтому «Остановлено» одновременно означает, что composer снова
+готов принять новое сообщение или edit, а exact run исчезает из общего счётчика
+«Запросы». Пока cancellation ещё выполняется, running/stopping состояние остаётся
+видимым и ввод блокируется штатно.
+
+Один отменённый model attempt показывается одной retained-attempt карточкой.
+Terminal diagnostic того же run не дублирует её отдельной карточкой «Выполнение
+отменено»; общий заголовок запуска по-прежнему показывает terminal lifecycle.
+
 ## MaterialSurface and Markdown modes — In Review, 2026-11-17
 
 Material and Browser objects use the same shell: optional left navigation, one header,

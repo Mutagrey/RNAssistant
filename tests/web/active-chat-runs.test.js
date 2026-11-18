@@ -60,6 +60,9 @@ const assert=require('node:assert/strict'), path=require('node:path'), {spawn}=r
   assert.equal(await page.getByRole('menuitem',{name:'Остановить: Исправить плагин',exact:true}).isDisabled(),true,'duplicate Stop is disabled while awaiting acknowledgement');
   await page.evaluate(()=>finishStop());
   await page.waitForFunction(()=>document.getElementById('activeChatRunsCount').textContent==='1');
+  await page.evaluate(()=>RNAssistantActiveRuns.terminal(runTargets[0],'run-0'));
+  assert.equal(await page.locator('#activeChatRunsCount').textContent(),'0','terminal snapshot immediately removes its active request');
+  await page.evaluate(()=>RNAssistantActiveRuns.refresh());
   assert.equal(await page.evaluate(()=>!!RNAssistantConversationPanel.find(runTargets[1])),false,'Stop works without mounting its chat');
   assert.deepEqual(await page.evaluate(()=>stopRequests[0]),await page.evaluate(()=>({...runTargets[1],runId:'run-1'})));
   // A row may become stale while the menu is open. Never cancel its replacement run.

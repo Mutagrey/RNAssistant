@@ -190,6 +190,11 @@
       var title = field(state(), "title"); if (title) RNAssistantDockWorkspace.setTitle(RNAssistantConversationPanel.key(target), title);
       component.contextOwner = snapshot().project && snapshot().project.pluginId ? "plugin" : "project";
       unavailable = false; observer.recover(snapshot(), pending()); component.render();
+      var lifecycle = runStatus(state());
+      if (["completed", "failed", "cancelled"].indexOf(lifecycle) >= 0 && component.error === "Отмена запрошена…")
+        component.notice("");
+      if (window.RNAssistantActiveRuns && ["completed", "failed", "cancelled"].indexOf(lifecycle) >= 0)
+        RNAssistantActiveRuns.terminal(target, field(state(), "runId"));
       RNAssistantProjectChats.refreshTree();
       if (selected() === component) { if (window.RNAssistantPlugins) RNAssistantPlugins.onChatSnapshot(snapshot()); RNAssistantChatInspector.render(); }
       return true;
@@ -314,19 +319,26 @@
       stop: async function () {
         if (!running() || cancelling) return;
         var runId = field(state(), "runId"); cancelling = true; component.controls();
+        function visible() {
+          return component.isCurrent() && RNAssistantDockWorkspace.isVisible(RNAssistantConversationPanel.key(target));
+        }
         function cancel() { return send("cancelProjectChat", { workspaceId: target.workspaceId, sessionId: target.sessionId,
           runId: runId, cursor: field(state(), "cursor") }); }
         try {
           var result;
           try { result = await cancel(); }
           catch (error) {
-            if (error.code !== "project_chat_stale" || !component.isCurrent()) throw error;
+            if (error.code !== "project_chat_stale" || !visible()) throw error;
             accept(await read());
-            if (!component.isCurrent() || field(state(), "runId") !== runId || !running()) return;
+            if (!visible() || field(state(), "runId") !== runId || !running()) return;
             result = await cancel();
           }
           accept(result);
-        } catch (error) { component.notice(error); }
+          if (field(result, "cancelStatus") === "Requested") component.notice("Отмена запрошена…");
+          else component.notice("");
+        } catch (error) {
+          if (visible() && field(state(), "runId") === runId && running()) component.notice(error);
+        }
         finally { cancelling = false; component.controls(); }
       },
       resolve: function (value) {

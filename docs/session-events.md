@@ -2122,6 +2122,12 @@ remain with the respective adapter; neither path retries a tool.
 The project-chat submit/approval boundary reports an unavailable session run
 lease as typed `project_chat_busy`. It does not accept input while another
 process owns that chat; the UI can refresh its state before another submission.
+Terminal progress for an owned run is published only after the run reservation and
+exact session lease leave their owner scopes. This keeps the visible terminal state
+aligned with admission readiness and lets the active-request projection remove the
+finished run immediately. A retained model attempt and the cancelled terminal
+diagnostic of the same run remain separate durable facts, but share one visible
+retained-attempt explanation in the common chat projection.
 
 Opening or polling a project/plugin source chat reconciles an abandoned run through
 `WorkspaceConversationService.RefreshSession`. It attempts the session lease once,

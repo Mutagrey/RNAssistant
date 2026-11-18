@@ -149,17 +149,19 @@ namespace RNAssistant.Runtime
             public async Task StartTurnAsync(ChatSession session, ConversationInput input, CancellationToken token)
             {
                 using (_owner._runtimeUseLease?.Invoke())
-                    await _owner.ExecuteInputAsync(_workspace, new WorkspaceSubmitInputRequest {
-                        SessionId = session.Id, RequestId = input.OperationId, Message = input.Text },
-                        _settings.Clone(), _key, _progress, token, _digest, queuedInput: input).ConfigureAwait(false);
+                    await WorkspaceConversationService.DeferTerminalProgressAsync(_progress, report => _owner.ExecuteInputAsync(
+                        _workspace, new WorkspaceSubmitInputRequest {
+                            SessionId = session.Id, RequestId = input.OperationId, Message = input.Text },
+                        _settings.Clone(), _key, report, token, _digest, queuedInput: input)).ConfigureAwait(false);
             }
             public async Task ContinueWaitAsync(ChatSession session, CancellationToken token)
             {
                 ValidateBinding(session, new ConversationInput { DocumentRuntimeKey = _workspace.WorkspaceId });
                 using (_owner._runtimeUseLease?.Invoke())
-                    await _owner.ContinueOwnedAsync(_workspace, new WorkspaceRunControlRequest {
-                        SessionId = session.Id, RunId = session.LastRun.RunId, Cursor = ConversationEventFeed.Cursor(session) },
-                        _settings, _key, _progress, token, _digest, queuedWait: true).ConfigureAwait(false);
+                    await WorkspaceConversationService.DeferTerminalProgressAsync(_progress, report => _owner.ContinueOwnedAsync(
+                        _workspace, new WorkspaceRunControlRequest {
+                            SessionId = session.Id, RunId = session.LastRun.RunId, Cursor = ConversationEventFeed.Cursor(session) },
+                        _settings, _key, report, token, _digest, queuedWait: true)).ConfigureAwait(false);
             }
             public Task ContinuePendingAsync(ChatSession session, string pendingId, CancellationToken token)
             { throw new InvalidOperationException("Сначала подтвердите или отклоните ожидающее действие."); }

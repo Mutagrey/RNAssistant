@@ -16,6 +16,19 @@ to hide only for intersecting overlays and force one final visible layout afterw
 The Browser content slot uses the common typography/color tokens for its temporary
 `Starting` status; once `Ready` arrives the native viewport replaces that status.
 
+## Terminal cancellation и active requests — In Review, 2026-11-18
+
+Общий chat run продолжает использовать существующие retained-attempt disclosure,
+run status и счётчик «Запросы». Retained `model_attempt` и terminal diagnostic
+одного run не создают две отдельные карточки: при cancelled lifecycle retained
+attempt остаётся единственным раскрываемым объяснением, а generic outcome note не
+рисуется. Другие failed/completed состояния не подавляются.
+
+Active request count является disposable projection живого owner. Точный run
+удаляется из счётчика сразу при получении terminal snapshot; последующий poll
+сверяет тот же source/workspace/session/run и не может вернуть terminal запись.
+Новых controls, tokens или отдельного store для этого состояния нет.
+
 ## MaterialSurface shell — In Review, 2026-11-17
 
 `app-material-surface.js` is one presentation component for Material and Browser

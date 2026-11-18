@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using RNAssistant.Application.Conversations;
+using RNAssistant.Core.Agent;
 using RNAssistant.Core.Models;
 using RNAssistant.Runtime.Contracts;
 
@@ -44,11 +45,13 @@ namespace RNAssistant.Runtime
         {
             settings = settings?.Clone();
             return _conversationApplication.StartOperation<WorkspaceRunResult, WorkspaceInputReceipt, WorkspaceRunEvent>(async operation => {
-                var result = await ExecuteInputAsync(workspace, request, settings, apiKeyProvider,
-                    value => Report(operation, value), operation.Token, modelDigest,
-                    waitForLease: !detachAfterAcceptance).ConfigureAwait(false);
-                StartQueuedInputs(workspace, result.SessionId, settings, apiKeyProvider, progress, modelDigest);
-                return result;
+                return await DeferTerminalProgressAsync(value => Report(operation, value), async report => {
+                    var result = await ExecuteInputAsync(workspace, request, settings, apiKeyProvider,
+                        report, operation.Token, modelDigest,
+                        waitForLease: !detachAfterAcceptance).ConfigureAwait(false);
+                    StartQueuedInputs(workspace, result.SessionId, settings, apiKeyProvider, progress, modelDigest);
+                    return result;
+                }).ConfigureAwait(false);
             }, result => result.Receipt,
                 progress, callerToken, detachAfterAcceptance, _runtimeUseLease);
         }
@@ -77,13 +80,43 @@ namespace RNAssistant.Runtime
         {
             settings = settings?.Clone();
             return _conversationApplication.StartOperation<WorkspaceRunResult, WorkspaceInputReceipt, WorkspaceRunEvent>(async operation => {
-                var result = await ExecutePendingAsync(workspace, sessionId, pendingId, approve, settings, apiKeyProvider,
-                    value => Report(operation, value), operation.Token, modelDigest,
-                    operation.AcceptContinuation, waitForLease: !detachAfterAcceptance).ConfigureAwait(false);
-                StartQueuedInputs(workspace, sessionId, settings, apiKeyProvider, progress, modelDigest);
-                return result;
+                return await DeferTerminalProgressAsync(value => Report(operation, value), async report => {
+                    var result = await ExecutePendingAsync(workspace, sessionId, pendingId, approve, settings, apiKeyProvider,
+                        report, operation.Token, modelDigest,
+                        operation.AcceptContinuation, waitForLease: !detachAfterAcceptance).ConfigureAwait(false);
+                    StartQueuedInputs(workspace, sessionId, settings, apiKeyProvider, progress, modelDigest);
+                    return result;
+                }).ConfigureAwait(false);
             },
                 result => result.Receipt, progress, callerToken, detachAfterAcceptance, _runtimeUseLease);
+        }
+
+        // Publish a terminal projection only after the exact run reservation and
+        // session lease have left their owner scopes. Otherwise the UI can offer a
+        // new turn while admission still reports the finished run as busy.
+        private static async Task<T> DeferTerminalProgressAsync<T>(Action<WorkspaceRunEvent> publish,
+            Func<Action<WorkspaceRunEvent>, Task<T>> execute)
+        {
+            WorkspaceRunEvent terminal = null;
+            try
+            {
+                return await execute(value => {
+                    if (IsTerminalRunEvent(value)) terminal = value;
+                    else publish?.Invoke(value);
+                }).ConfigureAwait(false);
+            }
+            finally
+            {
+                // execute has left its using scopes, including the run reservation,
+                // before either a terminal projection or its failure is published.
+                if (terminal != null) publish?.Invoke(terminal);
+            }
+        }
+
+        private static bool IsTerminalRunEvent(WorkspaceRunEvent value)
+        {
+            var lifecycle = value?.Summary?.Lifecycle;
+            return lifecycle == RunLifecycle.Completed || lifecycle == RunLifecycle.Cancelled || lifecycle == RunLifecycle.Failed;
         }
 
         private static void Report(

@@ -553,7 +553,7 @@ function appendMessageRunOutcome(node, message, runView) {
   if (runView && ["completed", "failed", "cancelled"].indexOf(runView.lifecycle) >= 0 &&
       (runView.lifecycle !== "completed" || runView.executionHealth !== "clean" ||
         ["partial", "unable_to_complete"].indexOf(runView.modelOutcome) >= 0)) {
-    appendAgentRunViewState(node, runView);
+    appendAgentRunViewState(node, runView, activityKind(messageActivity(message)) === "model_attempt");
   }
 }
 

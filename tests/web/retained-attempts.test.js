@@ -18,7 +18,16 @@ withPreviewPage(async ({page,errors}) => {
         RetainedAttempt:attempt,Activity:{Kind:'model_attempt',StepId:'step',RunId:'retained-run',ModelAttemptId:'retained-body',Title:'Ответ не принят',Status:'retained'}};
       const next={...snapshot,messages:[message],messageStartIndex:0,messageTotalCount:1};
       if(target.source==='office') {next.sessionRevision=(snapshot.sessionRevision||0)+10; next.runViewState=null;}
-      else next.state={...snapshot.state,revision:(snapshot.state.revision||0)+10,status:'cancelled',runId:'retained-run'};
+      else {
+        const view={RunId:'retained-run',TurnId:'turn',Lifecycle:'cancelled',ExecutionHealth:'clean',SuccessfulReads:0,
+          VerifiedWrites:0,NoChangeWrites:0,UnverifiedWrites:0,FailedCalls:0,UnknownEffects:0,Reason:'cancelled',
+          CurrentAction:'Run cancelled.',StartedUtc:'2026-11-18T12:00:00Z'};
+        const diagnostic={Id:'terminal-retained-run',Role:'assistant',RunId:'retained-run',RuntimeProjection:true,
+          ExcludeFromModelContext:true,RunViewState:view,Activity:{Kind:'diagnostic',RunId:'retained-run',
+            Status:'cancelled',ExecutionStatus:'cancelled',Title:'Выполнение остановлено',ResultMessage:'Run cancelled.'}};
+        next.messages=[message,diagnostic]; next.messageTotalCount=2;
+        next.state={...snapshot.state,revision:(snapshot.state.revision||0)+10,status:'cancelled',runId:'retained-run',runViewState:view};
+      }
       panel.accept(next);
     }
   });
@@ -31,6 +40,12 @@ withPreviewPage(async ({page,errors}) => {
     assert.match(await disclosure.innerText(),/Видимая причина/);
     assert.match(await disclosure.innerText(),/Полученное рассуждение/);
     assert.match(await disclosure.innerText(),/Сохранённый текст усечён/);
+    if(source==='workspace') {
+      assert.equal(await panel.locator('.kind-diagnostic').count(),0,
+        'a cancelled run diagnostic does not repeat a retained attempt');
+      assert.doesNotMatch(await panel.innerText(),/Выполнение отменено\./,
+        'the retained attempt supplies the only cancellation outcome');
+    }
   }
   assert.equal(await page.evaluate(() => {
     RNAssistantConversationPanel.open(targets[0]);

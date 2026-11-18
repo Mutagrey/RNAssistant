@@ -11,6 +11,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Application;
 using RNAssistant.Application.Contracts;
+using RNAssistant.Application.Conversations;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
@@ -239,6 +240,7 @@ namespace RNAssistant.Harness
                 using (var transport = new CancellationTokenSource())
                 using (var service = new PluginApplicationService(paths))
                 {
+                    var terminalLeaseHeld = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                     listener.Prefixes.Add("http://127.0.0.1:" + port + "/"); listener.Start();
                     var server = Task.Run(async () =>
                     {
@@ -277,7 +279,11 @@ namespace RNAssistant.Harness
                             AssertTrue(cancelledBeforeAdmission && service.Conversations.ConversationStore.Load(chat.SessionId).Messages.Count == 0,
                                 "cancel before admission records no input and starts no model");
                         }
-                        var accepted = service.SubmitProjectChatAsync(request, settings, () => "", transport.Token).GetAwaiter().GetResult();
+                        var accepted = service.SubmitProjectChatAsync(request, settings, () => "", transport.Token,
+                            value => {
+                                if (value.Summary?.Lifecycle == RunLifecycle.Cancelled)
+                                    terminalLeaseHeld.TrySetResult(ConversationLeaseService.ForWorkspace(paths).IsHeld(chat.SessionId));
+                            }).GetAwaiter().GetResult();
                         AssertTrue(accepted.InputReceipt.DeliveryRecorded && entered.Wait(5000), "admission precedes the held model response");
                         transport.Cancel();
                         var worker = service.Conversations.RunsDrained;
@@ -301,6 +307,9 @@ namespace RNAssistant.Harness
                                 settings, () => "", CancellationToken.None).GetAwaiter().GetResult();
                             AssertEqual(WorkspaceCancellationStatus.Requested, cancelled.CancelStatus.Value, "explicit Stop reaches the exact run owner");
                             AssertTrue(worker.Wait(5000), "cancelled run drains");
+                            AssertTrue(terminalLeaseHeld.Task.Wait(5000), "terminal projection reaches the bridge");
+                            AssertTrue(!terminalLeaseHeld.Task.Result,
+                                "terminal projection is published after the exact session lease is released");
                         }
                         var durable = service.Conversations.ConversationStore.Load(chat.SessionId);
                         AssertEqual(RunLifecycle.Cancelled, durable.LastRun.KernelState.Summary.Lifecycle, "kernel stores terminal cancellation");

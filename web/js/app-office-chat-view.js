@@ -25,6 +25,9 @@
       if (response.inbox) applyChatInbox(response.inbox, true);
       reconcileChatInputEchoes(id, snapshot().messages);
       applyChatCatalogState(response);
+      var run = snapshot().activeRunViewState;
+      if (window.RNAssistantActiveRuns && run && ["completed", "failed", "cancelled"].indexOf(run.lifecycle) >= 0)
+        RNAssistantActiveRuns.terminal({ source: "office", sessionId: id }, run.runId);
       if (component.isCurrent()) component.render();
       return true;
     }

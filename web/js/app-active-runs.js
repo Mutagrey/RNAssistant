@@ -33,6 +33,17 @@
     clearTimeout(timer);
     if (started && !document.hidden) timer = setTimeout(refresh, 2000);
   }
+  function terminal(target, runId) {
+    if (!target || !target.sessionId || !runId) return;
+    var workspaceId = target.workspaceId || "";
+    var before = runs.length;
+    runs = runs.filter(function (run) {
+      var matched = run.sessionId === target.sessionId && (run.workspaceId || "") === workspaceId && run.runId === runId;
+      if (matched) { stopping.delete(key(run)); stopError = ""; }
+      return !matched;
+    });
+    if (runs.length !== before) render();
+  }
   function refresh() {
     if (!started || document.hidden || state.initializePromise || state.bridgeUnavailable) { schedule(); return Promise.resolve(); }
     if (pending && pending.generation === generation) return pending.promise;
@@ -67,5 +78,5 @@
   });
   document.addEventListener("visibilitychange", function () { if (document.hidden) clearTimeout(timer); else refresh(); });
   window.addEventListener("pagehide", function () { started = false; ++generation; clearTimeout(timer); });
-  window.RNAssistantActiveRuns = Object.freeze({ start: function () { if (!started) { started = true; refresh(); } }, refresh: refresh });
+  window.RNAssistantActiveRuns = Object.freeze({ start: function () { if (!started) { started = true; refresh(); } }, refresh: refresh, terminal: terminal });
 }());

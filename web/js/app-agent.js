@@ -82,7 +82,19 @@ function collapseAgentTimelineItems(timeline) {
     latestByKey[key] = result.length;
     result.push(nextItem);
   });
-  return result;
+  var retainedRuns = Object.create(null);
+  result.forEach(function (item) {
+    if (activityKind(item.activity) !== "model_attempt") return;
+    var runId = activityValue(item.activity, "RunId", "runId", "") || messageRunId(item.message);
+    if (runId) retainedRuns[runId] = true;
+  });
+  // The retained attempt already explains the rejected model body and transport
+  // cancellation. Its terminal diagnostic only repeats the same run outcome.
+  return result.filter(function (item) {
+    if (activityKind(item.activity) !== "diagnostic" || activityStatus(item.activity) !== "cancelled") return true;
+    var runId = activityValue(item.activity, "RunId", "runId", "") || messageRunId(item.message);
+    return !runId || !retainedRuns[runId];
+  });
 }
 
 function activityContains(activity, target) {
@@ -509,10 +521,12 @@ function appendAgentRunOverview(parent, steps, timeline, stats) {
   return details;
 }
 
-function appendAgentRunViewState(parent, runViewState) {
+function appendAgentRunViewState(parent, runViewState, retainedAttempt) {
   // Effects and assessments remain in details. Only an actual interruption
   // needs a separate line, and a visible diagnostic already supplies that line.
   if (!runViewState || ["failed", "cancelled"].indexOf(runViewState.lifecycle) < 0) return;
+  if (runViewState.lifecycle === "cancelled" &&
+      (retainedAttempt || parent.querySelector(".kind-model_attempt"))) return;
   var diagnostic = parent.querySelector(".kind-diagnostic");
   if (diagnostic && diagnostic.getAttribute("data-failure-reason") === runViewState.reason) return;
   var note = document.createElement("div");
@@ -576,7 +590,8 @@ function renderAgentRunArticle(run, presentation) {
     Title: "Ожидаю свободный слот выполнения…", Status: "running", RunId: run.runId || agentRunId(items, finalMessage) }, true, false));
   if (process.childNodes.length || run.live) body.appendChild(process);
   // A terminal interruption stays visible even when the action trace is collapsed.
-  if (!run.live) appendAgentRunViewState(body, runViewState);
+  if (!run.live) appendAgentRunViewState(body, runViewState,
+    timeline.some(function (item) { return activityKind(item.activity) === "model_attempt"; }));
   if (finalMessage) {
     var finalSection = document.createElement("section");
     finalSection.className = "agent-final-step";
