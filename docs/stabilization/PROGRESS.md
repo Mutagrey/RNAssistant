@@ -32,6 +32,18 @@ An unrelated baseline check, `resources: Markdown sections enforce source bounds
 also fails on the original `f8fadddd` fixture and is recorded in
 [BACKLOG](BACKLOG.md#markdown-truncated-fixture--observed-2026-11-16).
 
+## Plugin source production matrix — 2026-11-18
+
+The published mutation matrix is closed host-neutral. `plugins: results and prepared
+authority stay scoped` exercises prepared Check/Save/Apply with exact source-run
+ownership, stale entry rejection while later source edits are preserved, current
+tool-runtime descriptors and confirmation. `plugin versions: native run ownership and
+journal restore` exercises the actual PluginStore owner: actor provenance, immutable
+saved release/member CAS, receipt idempotency, journal rebuild, isolated restore and no
+legacy resource stream. These fixtures jointly cover prepare → dispatch → owner
+publication → terminal/runtime result → reopen/rebuild. Product version is unchanged;
+Windows/WebView2/plugin worker qualification remains open.
+
 ## Native prompt catalog production matrix — 2026-11-18
 
 Host-neutral test coverage now exercises a prompt source edit through catalog discovery,

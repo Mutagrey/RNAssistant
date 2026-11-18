@@ -31,12 +31,12 @@ Multi-target native `core.patch` receipts are closed in `17.3.19-dev`: two real 
 owners retain separate exact outcomes, preflight rejection writes nothing, a partial
 owner failure stops the package and rebuild performs no replay.
 
-Remaining work, in order:
-
-1. Add a production-composition execution matrix for the remaining published
-   mutation family for plugin source owners. Prompt/catalog publication is covered by
-   `native tools: prompt catalog mutation retains owner receipt`; Word and PowerPoint
-   replacement and VBA copy/move also have routed native owner-receipt cases.
+Production-composition mutation matrix is closed host-neutral. Prompt/catalog, Word,
+PowerPoint and VBA copy/move have routed native owner-receipt cases. Plugin source
+publication is covered jointly by `plugins: results and prepared authority stay scoped`
+(prepared Save/Apply, exact run ownership, source version and stale-entry guards) and
+`plugin versions: native run ownership and journal restore` (owner publication, CAS
+members, rebuild and isolated restore without a legacy resource stream).
    A descriptor or fake legacy adapter test alone is insufficient. Verify
    prepare → source dispatch → exact owner publication → terminal → reopen/rebuild,
    confirmation and failure after dispatch. This is a qualification gap, not a

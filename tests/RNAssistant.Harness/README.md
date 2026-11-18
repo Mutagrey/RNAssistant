@@ -10,6 +10,14 @@ project chat history uses shared pages` verifies the production plugin consumer,
 offsets and an unavailable run body without changing history. Windows/WebView2 latency
 remains separate.
 
+## Plugin source publication matrix — 2026-11-18
+
+Together, `plugins: results and prepared authority stay scoped` and
+`plugin versions: native run ownership and journal restore` cover the plugin source
+mutation matrix: prepared Save/Apply, exact run ownership, source version and stale-entry
+guards, owner actor provenance, immutable member CAS, journal rebuild and isolated
+restore. Full plugin worker/WebView2/Windows execution remains separate evidence.
+
 ## Native prompt catalog mutation receipt — 2026-11-18
 
 `native tools: prompt catalog mutation retains owner receipt` discovers and reads one
