@@ -79,10 +79,13 @@ Removal does not authorize deleting retained files. No old run/effect replay is 
 
 Owner: ChatStore.LegacyImport reads/validates the old source; ConversationJournal
 LegacyImport/LegacyResources publish one native chat import and immutable resource
-closure. PluginStore.Recovery stages complete retained plugin metadata and publishes
-all heads plus its receipt in one native authority commit. Consumers use typed
-Application/Office contracts and the existing Diagnostics owner. Old snapshots are
-provenance, not accepted execution facts; old journals are never active writers.
+closure. Office.Services.LegacyChatMigrationService owns the explicit all-chat
+background queue, bounded page progress and cancellation-after-current; it holds one
+storage activity marker without holding global coordination for the whole transfer.
+PluginStore.Recovery stages complete retained plugin metadata and publishes all heads
+plus its receipt in one native authority commit. Consumers use typed Application/Office
+contracts and the existing Diagnostics owner. Old snapshots are provenance, not
+accepted execution facts; old journals are never active writers.
 This is the explicit user-requested upgrade path, not a startup compatibility
 fallback. Native reads, new writes, index rebuild and receipt checks use only native
 owners. Source readers can be retired under the archive-reader condition above;

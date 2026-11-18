@@ -713,6 +713,15 @@ namespace RNAssistant.Office.WebView
                         var importChat = Payload<LegacyChatImportRequest>(payload);
                         responsePayload = await RunBridgeWorkAsync(() => _controller.ImportLegacyChat(importChat, cancellationToken), cancellationToken).ConfigureAwait(false);
                         break;
+                    case BridgeOperationId.StartLegacyChatMigration:
+                        responsePayload = _controller.StartLegacyChatMigration();
+                        break;
+                    case BridgeOperationId.GetLegacyChatMigrationStatus:
+                        responsePayload = _controller.GetLegacyChatMigrationStatus();
+                        break;
+                    case BridgeOperationId.CancelLegacyChatMigration:
+                        responsePayload = _controller.CancelLegacyChatMigration();
+                        break;
                     case BridgeOperationId.GetLegacyChatImport:
                         var readChatImport = Payload<LegacyChatImportReadRequest>(payload);
                         responsePayload = await RunBridgeWorkAsync(() => _controller.GetLegacyChatImport(readChatImport, cancellationToken), cancellationToken).ConfigureAwait(false);

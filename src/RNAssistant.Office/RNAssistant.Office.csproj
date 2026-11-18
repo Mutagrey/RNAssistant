@@ -93,6 +93,7 @@
     <Compile Include="Contracts\BridgeDtos.Logs.cs" />
     <Compile Include="Contracts\BridgeDtos.LegacyRecovery.cs" />
     <Compile Include="Controller\AssistantController.LegacyRecovery.cs" />
+    <Compile Include="Services\LegacyChatMigrationService.cs" />
     <Compile Include="Contracts\BridgeDtos.ModelDiagnostics.cs" />
     <Compile Include="Contracts\BridgeDtos.Html.cs" />
     <Compile Include="Contracts\BridgeDtos.Settings.cs" />

@@ -5,12 +5,14 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Application.Conversations;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
 
 namespace RNAssistant.Harness
@@ -127,6 +129,10 @@ namespace RNAssistant.Harness
                 JournalIndex.Repair(restored, StorageProtector.None, true, CancellationToken.None);
                 var native = new ConversationJournalRouter(restored, (host, key) => scope); var chat = native.Load(source.Id);
                 AssertEqual(1, chat.Artifacts.Count, "native-only replay retains attachment membership");
+                var projectedLibrary = ArtifactLibraryProjectionService.Project(chat);
+                AssertTrue(projectedLibrary.Heads.Any(head => head.Title == "retained.txt" ||
+                    head.ArtifactId == "attachment_" + upload.Id),
+                    "imported resource is visible in the native Artifact Library projection");
                 AssertTrue(chat.Artifacts.Single().AvailabilityIssue == null, "imported artifact metadata is available from native resources");
                 AssertEqual("the exact original attachment", new AttachmentStore(restored).ReadExtractedText(chat.Messages.Single().Attachments.Single()),
                     "exact attachment CAS remains usable without legacy files");
@@ -240,6 +246,74 @@ namespace RNAssistant.Harness
                 AssertEqual(3, evidence.Facts.Count, "only the new native call/start/terminal establish finish evidence");
                 AssertEqual(highWater + 1, restored.EvidenceReferenceSequence, "terminal does not reuse a historical evidence alias");
             });
+        }
+
+        private static void LegacyChatMigrationBackgroundAll()
+        {
+            WithCanonicalLegacyTempPaths(paths => {
+                var legacy = new ChatStore(paths);
+                var first = LegacyImportFixture(paths, legacy);
+                var attachmentStore = new AttachmentStore(paths);
+                var upload = attachmentStore.Import("legacy-material.txt", "text/plain", Encoding.UTF8.GetBytes("retained material"), first.Id);
+                var firstMessage = new ChatMessage { Role = "user", Content = "first legacy message",
+                    Attachments = new List<ChatAttachment> { upload } };
+                first.Messages.Add(firstMessage);
+                new ChatResourceIngestionService(attachmentStore, legacy.DocumentArtifacts).CommitAndLink(first, firstMessage, 0);
+                legacy.Save(first);
+                var authority = first.DocumentAuthorityId;
+                for (var index = 1; index < 26; index++)
+                {
+                    var chat = legacy.CreateTransient("Excel", "legacy-document", "Previous document", "Previous conversation " + index);
+                    chat.DocumentPath = Path.Combine(paths.Root, "original.xlsx");
+                    chat.DocumentAuthorityId = authority;
+                    chat.Messages.Add(new ChatMessage { Role = "user", Content = "legacy message " + index });
+                    legacy.Save(chat);
+                }
+                var scope = "document:" + authority;
+                var router = new ConversationJournalRouter(paths, (host, key) => scope);
+                using (var service = new LegacyChatMigrationService(paths, legacy, router, new DocumentAuthorityRegistry(paths)))
+                {
+                    var started = service.Start();
+                    AssertTrue(started.Running, "migration starts as an acknowledged background job");
+                    var deadline = DateTime.UtcNow.AddSeconds(30);
+                    LegacyChatMigrationStatusDto status = started;
+                    while (status.Running && DateTime.UtcNow < deadline)
+                    {
+                        Thread.Sleep(20);
+                        status = service.Status();
+                    }
+                    AssertTrue(!status.Running, "background migration reaches a terminal state");
+                    AssertTrue(string.Equals(status.Status, "completed", StringComparison.Ordinal),
+                        "all readable legacy chats are processed sequentially: " + status.Status + " — " + status.Message);
+                    AssertEqual(26, status.Total, "progress reports the complete archive page total");
+                    AssertEqual(26, status.Processed, "progress advances through every page");
+                    AssertEqual(26, status.Imported, "ordinary native imports retain every source chat");
+                    AssertEqual(0, status.Failed + status.Unknown + status.Skipped, "healthy archive has no refused or unknown outcomes");
+                    AssertEqual(26, router.ListHeaders(false).Count, "background migration publishes the full native catalog");
+                    var imported = router.Load(first.Id);
+                    var library = ArtifactLibraryProjectionService.Project(imported);
+                    AssertTrue(library.Heads.Any(head => head.Title == "legacy-material.txt" || head.ArtifactId == "attachment_" + upload.Id),
+                        "background migration publishes the imported resource into the native Materials projection");
+                    AssertTrue(!ConversationLeaseService.ForOffice(paths).AnyHeld(),
+                        "completed background migration releases its storage activity marker");
+                }
+            });
+        }
+
+        private static void WithCanonicalLegacyTempPaths(Action<AppDataPaths> action)
+        {
+            var temp = Path.GetTempPath();
+            if (temp.StartsWith("/var/", StringComparison.Ordinal)) temp = "/private" + temp;
+            var root = Path.Combine(temp, "RNAssistant.LegacyMigration." + Guid.NewGuid().ToString("N"));
+            try { action(AppDataPaths.CreateForRoot(root)); }
+            finally
+            {
+                for (var attempt = 0; Directory.Exists(root); attempt++)
+                {
+                    try { Directory.Delete(root, true); break; }
+                    catch (IOException) when (Directory.Exists(root) && attempt < 4) { Thread.Sleep(50); }
+                }
+            }
         }
     }
 }

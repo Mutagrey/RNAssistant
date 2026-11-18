@@ -850,6 +850,7 @@ namespace RNAssistant.Harness
                 Test("legacy chat import: original resources without legacy files", LegacyChatImportResources),
                 Test("legacy chat import: collisions tombstones and lost acknowledgements", LegacyChatImportGuards),
                 Test("legacy chat import: fresh native call and terminal aliases", LegacyChatImportNativeExecution),
+                Test("legacy chat migration: background all pages and progress", LegacyChatMigrationBackgroundAll),
                 Test("legacy plugin import: retained versions and identity", LegacyPluginImportRetainedVersions),
                 Test("legacy plugin import: interruption and receipt", LegacyPluginImportInterruptionAndReceipt),
                 Test("legacy plugin import: refuses conflict and incomplete closure", LegacyPluginImportRejectsIncompleteClosure),

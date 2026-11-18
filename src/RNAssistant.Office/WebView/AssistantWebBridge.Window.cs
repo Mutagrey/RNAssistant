@@ -31,7 +31,14 @@ namespace RNAssistant.Office.WebView
         }
         public bool CanShutdownWindow
         {
-            get { lock (_hostSwitchSync) return !_disposed && !_hostSwitchPending && _requestsInFlight == 0; }
+            // Shutdown is the user's escape hatch: the host cancels and drains
+            // active bridge work after acknowledging the window close.
+            get { lock (_hostSwitchSync) return !_disposed; }
+        }
+        public bool CanSwitchWindow
+        {
+            // A replacement still must not race another exclusive host switch.
+            get { lock (_hostSwitchSync) return !_disposed && !_hostSwitchPending; }
         }
         private void ReportWindowState(HostWindowStateDto state)
         { _postMessageJson?.Invoke(JsonConvert.SerializeObject(new HostWindowStateMessage { Payload = state })); }

@@ -29,6 +29,7 @@ namespace RNAssistant.Office
         { _toolExecutor.ResourceGateway.PowerQuerySyntaxAnalyzer = analyzer; }
         private readonly SettingsService _settingsService;
         private readonly ChatStore _legacyChatStore;
+        private readonly LegacyChatMigrationService _legacyChatMigration;
         private readonly ChatBlobStore _payloads;
         private readonly ConversationJournalRouter _conversationRouter;
         private readonly DocumentArtifactStore _artifacts;
@@ -104,6 +105,8 @@ namespace RNAssistant.Office
             _resourceAuthorityStore = new ResourceJournal(_paths, protection());
             _documentAuthorityRegistry = new DocumentAuthorityRegistry(_paths);
             _conversationRouter = new ConversationJournalRouter(_paths, ResolveConversationScope, protection());
+            _legacyChatMigration = new LegacyChatMigrationService(_paths, _legacyChatStore,
+                _conversationRouter, _documentAuthorityRegistry);
             _artifacts = new DocumentArtifactStore(_resourceAuthorityStore, _resourceAuthorityStore, _payloads);
             _workspaceFiles = new WorkspaceFileService(_paths, _resourceAuthorityStore, _resourceAuthorityStore, _resourceAuthorityStore);
             _artifactWorkingSet = new ArtifactWorkingSetService(_artifacts, _resourceAuthorityStore);

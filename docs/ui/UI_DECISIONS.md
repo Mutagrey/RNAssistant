@@ -1,5 +1,16 @@
 # Решения по UI RNAssistant
 
+## 2026-11-18 — Фоновый перенос истории: Approved behavior
+
+Пользователь запросил одну фоновую миграцию прежних чатов с видимым прогрессом,
+а не batch, которым владеет открытая Diagnostics-вкладка. Решение: host service
+последовательно переносит все доступные страницы, сохраняет accepted import и
+останавливает только следующие; Shell StatusBar показывает фактические
+`N из M`, текущий чат и итоговые confirmed/refused/skipped/unknown без процентов.
+Скрытие view или перезагрузка WebView не отменяют job; application shutdown
+отменяет его. Реализация In Review; Windows/Office/WebView2 long-profile и
+wide/narrow/125% visual acceptance открыты.
+
 ## 2026-11-16 — Native toolbar direct controls: Approved
 
 Пользователь уточнил native toolbar: левая/правая панели, pin «Оставлять окно

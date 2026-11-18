@@ -53,7 +53,7 @@
   <link rel="stylesheet" href="css/app-agent-data.css?v=compact-tool-json-20261029-1">
   <link rel="stylesheet" href="css/app-theme.css?v=plugin-materials-20261103">
   <link rel="stylesheet" href="css/app-product-tokens.css?v=material-surface-20261118-4">
-  <link rel="stylesheet" href="css/app-product-navigation.css?v=native-toolbar-actions-20261116">
+  <link rel="stylesheet" href="css/app-product-navigation.css?v=legacy-migration-20261118-1">
   <link rel="stylesheet" href="css/app-product-components.css?v=unified-workspace-20261118">
   <link rel="stylesheet" href="css/app-product-viewers.css?v=material-surface-20261118-4">
   <link rel="stylesheet" href="css/app-product-materials.css?v=material-surface-20261118-1">
@@ -96,7 +96,7 @@
       <button class="rail-button rail-settings" data-section="settings" data-tab="settings" data-rail-popover="settings-menu" aria-label="Настройки" title="Настройки"><svg data-rna-icon="settings" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
     </nav>
 
-    <footer class="workspace-statusbar"><span id="workspaceHostStatus"></span><span id="workspaceLayoutNotice" role="status" aria-live="polite"></span><span id="workspaceLayoutStatus"></span><button type="button" id="activeChatRunsButton" aria-label="Активные запросы" aria-haspopup="menu" aria-expanded="false"><svg data-rna-icon="chat" aria-hidden="true"></svg><span>Запросы</span><b id="activeChatRunsCount">0</b></button><button type="button" id="workspaceDiagnostics" title="Диагностика текущего чата"><svg data-rna-icon="chart" aria-hidden="true"></svg><span>Диагностика</span></button></footer>
+    <footer class="workspace-statusbar"><span id="workspaceHostStatus"></span><span id="workspaceOperationStatus" role="status" aria-live="polite" hidden></span><span id="workspaceLayoutNotice" role="status" aria-live="polite"></span><span id="workspaceLayoutStatus"></span><button type="button" id="activeChatRunsButton" aria-label="Активные запросы" aria-haspopup="menu" aria-expanded="false"><svg data-rna-icon="chat" aria-hidden="true"></svg><span>Запросы</span><b id="activeChatRunsCount">0</b></button><button type="button" id="workspaceDiagnostics" title="Диагностика текущего чата"><svg data-rna-icon="chart" aria-hidden="true"></svg><span>Диагностика</span></button></footer>
     <button type="button" class="navigation-scrim" id="productNavigationScrim" aria-label="Закрыть навигацию" tabindex="-1" hidden></button>
     <main class="content">
       <section class="panel active" id="tab-chat">
@@ -927,7 +927,7 @@
                     <div class="legacy-recovery-controls">
                       <button class="button compact" id="legacyRecoveryImportChat" type="button" disabled>Перенести в историю</button>
                       <button class="button compact" id="legacyRecoveryCheckChat" type="button" disabled>Проверить перенос</button>
-                      <button class="button compact" id="legacyRecoveryImportPage" type="button" disabled>Перенести показанные чаты</button>
+                      <button class="button compact" id="legacyRecoveryImportPage" type="button" disabled>Перенести все чаты</button>
                       <button class="button compact" id="legacyRecoveryStopImport" type="button" disabled>Остановить после текущего</button>
                     </div>
                     <p id="legacyRecoveryImportStatus" class="status" role="status" aria-live="polite"></p>
@@ -1169,7 +1169,7 @@
   <script src="js/app-material-surface.js?v=material-surface-20261118-4"></script>
   <script src="js/app-utils.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-run-view-state.js?v=feed-stability-20261103"></script>
-  <script src="js/app-layout.js?v=native-toolbar-actions-20261116"></script>
+  <script src="js/app-layout.js?v=legacy-migration-20261118-1"></script>
   <script src="js/app-window.js?v=native-toolbar-actions-20261116"></script>
   <script src="js/app-chat-inspector.js?v=chat-views-20261103-selected-inspector-20261113"></script>
   <script src="js/app-vba-completion.js?v=vba-completion-20260903-1"></script>
@@ -1178,8 +1178,8 @@
   <script src="js/app-markdown.js?v=accent-chat-20261012-1-visuals-20261025-4"></script>
   <script src="js/app-settings.js?v=deployment-config-20261112"></script>
   <script src="js/app-logs.js?v=diagnostic-files-20261116"></script>
-  <script src="js/app-legacy-recovery.js?v=storage-import-20261116"></script>
-  <script src="js/app-diagnostics-navigation.js?v=storage-recovery-20261116"></script>
+  <script src="js/app-legacy-recovery.js?v=legacy-migration-20261118-1"></script>
+  <script src="js/app-diagnostics-navigation.js?v=legacy-migration-20261118-1"></script>
   <script src="js/app-diagnostics.js?v=application-backup-20261116"></script>
   <script src="js/app-model-diagnostics.js?v=diagnostics-source-20261103"></script>
   <script src="js/app-viewer-registry.js?v=artifact-preview-20260902-2-materials-s3b2"></script>

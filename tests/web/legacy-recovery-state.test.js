@@ -38,8 +38,9 @@ const pluginReceipt = (item = plugin(), extra = {}) => Object.assign({ item: { p
 const pluginButton = (f, index, action) => f.recovery("PluginList").children[index].children[3].children[action];
 
 function fixture() {
-  const nodes = new Map(), calls = [], copied = [], events = {}, windowEvents = {}, refreshed = [], found = [];
+  const nodes = new Map(), calls = [], copied = [], events = {}, windowEvents = {}, refreshed = [], found = [], operations = [], timers = new Map();
   let shown = true;
+  let timerSequence = 0;
   const node = id => { if (!nodes.has(id)) nodes.set(id, new Node()); return nodes.get(id); };
   const recovery = id => node("legacyRecovery" + id);
   node("diagnosticsAppView").value = "health";
@@ -48,6 +49,7 @@ function fixture() {
       addEventListener: (name, handler) => { events[name] = handler; } },
     addEventListener: (name, handler) => { windowEvents[name] = handler; },
     RNAssistantDiagnostics: { isVisible: () => shown },
+    RNAssistantShellLayout: { operation: (id, value) => { operations.push({ id, value }); } },
     RNAssistantIcons: { renderPlugin: () => "" }, RNAssistantDockWorkspace: { refreshPresentation() {} },
     RNAssistantWorkspaceChat: { node: name => node("plugin" + name) },
     RNAssistantProjectChats: { refreshCatalog: async () => { refreshed.push({ type: "workspaceCatalog" }); } },
@@ -57,6 +59,8 @@ function fixture() {
     synchronizeChatState: async force => { assert.equal(force, true); refreshed.push({ type: "officeCatalog" }); },
     copyTextResult: value => { copied.push(value); return Promise.resolve(); },
     cancelBridgeRequest: requestId => { calls.push({ type: "cancelRequest", requestId }); return Promise.resolve(); },
+    setTimeout: (action, delay) => { const id = ++timerSequence; timers.set(id, { action, delay }); return id; },
+    clearTimeout: id => { timers.delete(id); },
     send: (type, payload) => {
       const call = { type, payload: JSON.parse(JSON.stringify(payload)), requestId: "request-" + calls.length };
       const promise = new Promise((resolve, reject) => {
@@ -75,7 +79,15 @@ function fixture() {
   const reply = (type, value) => { const call = pending(type); assert.ok(call, "expected pending " + type); call.resolve(value); return call; };
   const setVisible = value => { shown = value; ui.sync(); };
   ui.bind(); ui.sync();
-  return { context, ui, node, recovery, calls, copied, events, windowEvents, refreshed, found, requests, pending, reply, setVisible };
+  const startupStatus = pending("getLegacyChatMigrationStatus");
+  if (startupStatus) startupStatus.resolve({ status: "idle", running: false, processed: 0, total: 0, issues: [] });
+  const runNextTimer = async () => {
+    const next = Array.from(timers.entries())[0];
+    if (!next) return false;
+    timers.delete(next[0]); next[1].action(); await settle(); return true;
+  };
+  return { context, ui, node, recovery, calls, copied, events, windowEvents, refreshed, found, operations, timers,
+    requests, pending, reply, setVisible, runNextTimer };
 }
 
 async function load(f, chats = page([chat()]), plugins = page([plugin()])) {
@@ -86,10 +98,12 @@ async function load(f, chats = page([chat()]), plugins = page([plugin()])) {
 (async () => {
   {
     const f = fixture();
-    assert.equal(f.calls.length, 0, "bind/sync during startup performs no archive reads");
+    assert.deepEqual(f.requests("listLegacyChats"), [], "bind/sync during startup performs no archive reads");
+    assert.deepEqual(f.requests("listLegacyPlugins"), [], "bind/sync during startup performs no plugin reads");
+    assert.equal(f.requests("getLegacyChatMigrationStatus").length, 1, "bind reads only the in-memory background job state");
     f.ui.bind(); f.ui.sync(); f.context.document.hidden = true; f.events.visibilitychange();
     f.context.document.hidden = false; f.events.visibilitychange();
-    assert.equal(f.calls.length, 0, "visibility and repeated binding never start archive discovery");
+    assert.equal(f.requests("listLegacyChats").length, 0, "visibility and repeated binding never start archive discovery");
     const broken = Object.assign(chat("broken", 0), { status: "unreadable", error: "Protection key unavailable " + attack });
     const missing = Object.assign(plugin("missing"), { status: "missingSource", canConnect: false, error: "Folder is missing" });
     await load(f, page([chat(), broken], 25), page([plugin(), missing], 25));
@@ -302,48 +316,74 @@ async function load(f, chats = page([chat()]), plugins = page([plugin()])) {
 
   {
     const f = fixture(), items = Array.from({ length: 30 }, (_, index) => Object.assign(chat("source-" + index, index + 1), { chatId: "chat-" + index }));
-    await load(f, page(items, 30)); f.recovery("ImportPage").trigger("click"); f.recovery("ImportPage").trigger("click");
-    for (let index = 0; index < 25; index++) {
-      assert.equal(f.requests("importLegacyChat").length, index + 1, "batch sends one mutation at a time");
-      assert.equal(f.pending("importLegacyChat").payload.sourceId, items[index].sourceId);
-      f.reply("importLegacyChat", chatReceipt(items[index])); await settle();
-    }
-    assert.equal(f.requests("importLegacyChat").length, 25, "one user action imports at most 25 captured rows");
-    assert.equal(f.requests("listLegacyChats").length, 1, "batch never scans another archive page");
-    assert.match(f.recovery("BatchStatus").textContent, /25\/25; подтверждено: 25/);
+    await load(f, page(items, 30));
+    f.recovery("ImportPage").trigger("click"); f.recovery("ImportPage").trigger("click");
+    assert.equal(f.requests("startLegacyChatMigration").length, 1, "double click starts one host-owned job");
+    assert.equal(f.requests("importLegacyChat").length, 0, "the web view does not orchestrate background imports");
+    f.reply("startLegacyChatMigration", { status: "running", running: true, cancelling: false, total: 0,
+      processed: 0, imported: 0, failed: 0, unknown: 0, skipped: 0, issues: [] });
+    await settle();
+    assert.equal(f.recovery("ImportPage").disabled, true, "running migration blocks a duplicate start");
+    assert.equal(f.operations.at(-1).value.state, "running");
+    assert.match(f.operations.at(-1).value.text, /читаю каталог/);
+    f.setVisible(false); await settle();
+    assert.equal(f.operations.at(-1).value.state, "running", "status-bar progress survives diagnostics being hidden");
+    assert.ok(await f.runNextTimer(), "running job schedules one scoped status poll");
+    assert.ok(f.pending("getLegacyChatMigrationStatus"));
+    f.reply("getLegacyChatMigrationStatus", { status: "running", running: true, cancelling: false, total: 30,
+      processed: 12, imported: 11, failed: 1, unknown: 0, skipped: 0, currentTitle: "Old chat", issues: [] });
+    await settle();
+    assert.match(f.operations.at(-1).value.text, /12 из 30.*Old chat/);
+    assert.ok(await f.runNextTimer());
+    f.reply("getLegacyChatMigrationStatus", { status: "completed", running: false, cancelling: false, total: 30,
+      processed: 30, imported: 28, failed: 2, unknown: 0, skipped: 0, issues: [] });
+    await settle();
+    assert.equal(f.operations.at(-1).value.state, "warning");
+    assert.match(f.operations.at(-1).value.text, /завершён.*подтверждено 28.*отказов 2/);
+    assert.deepEqual(f.refreshed.map(value => value.type).sort(), ["officeCatalog", "workspaceCatalog"],
+      "terminal background result refreshes both existing catalogs once");
+    f.setVisible(true); await settle();
+    assert.match(f.recovery("BatchStatus").textContent, /30\/30; подтверждено: 28; отказов: 2; пропущено: 0; неизвестно: 0/);
+    assert.equal(f.recovery("StopImport").disabled, true);
     assert.equal(f.context.state.activeChatId, "unchanged-active-chat");
-    console.log("PASS legacy recovery: page import is sequential, captured, bounded to 25 and does not scan or select another chat");
+    console.log("PASS legacy recovery: host-owned all-page migration survives hide, exposes status-bar progress and refreshes catalogs once");
   }
 
-  for (const stop of ["hide", "stop", "unknown"]) {
-    const f = fixture(), items = [chat("one"), Object.assign(chat("two"), { chatId: "second-chat" })];
-    await load(f, page(items)); f.recovery("ImportPage").trigger("click");
-    if (stop === "hide") f.setVisible(false);
-    if (stop === "stop") f.recovery("StopImport").trigger("click");
-    if (stop === "unknown") f.pending("importLegacyChat").reject(new Error("Lost acknowledgement"));
-    else f.reply("importLegacyChat", chatReceipt(items[0]));
-    await settle(); f.setVisible(true); await settle();
-    assert.equal(f.requests("importLegacyChat").length, 1, stop + " prevents the next batch mutation");
-    assert.equal(f.requests("cancelRequest").length, 0, "a started import is never cancelled as a read");
-    assert.match(f.recovery("BatchStatus").textContent, /1\/2.*не начато: 1/);
-    if (stop === "hide") assert.equal(f.refreshed.filter(value => value.type === "officeCatalog").length, 1,
-      "an accepted hidden mutation still refreshes the main list");
-    console.log("PASS legacy recovery: " + stop + " stops the page batch between commands without replaying or cancelling its accepted mutation");
-  }
   {
-    const f = fixture(), items = [chat("unsupported"), Object.assign(chat("valid"), { chatId: "valid-chat" })];
-    await load(f, page(items)); f.recovery("ImportPage").trigger("click");
-    f.pending("importLegacyChat").reject(Object.assign(new Error("Unsupported historical payload " + attack), { code: "legacy_chat_import_unavailable" })); await settle();
-    assert.match(f.recovery("ImportStatus").textContent, /Перенос отклонён.*Unsupported historical payload/);
-    assert.equal(f.pending("importLegacyChat").payload.sourceId, "valid", "explicit batch may continue after a typed pre-write refusal");
-    f.context.synchronizeChatState = async () => { throw new Error("Catalog unavailable"); };
-    f.reply("importLegacyChat", chatReceipt(items[1])); await settle();
-    assert.equal(f.requests("importLegacyChat").length, 2, "neither a refused import nor a refresh failure is automatically replayed");
-    assert.match(f.recovery("BatchStatus").textContent, /подтверждено: 1; отказов: 1; неизвестно: 0/);
-    f.recovery("ChatSelect").value = "valid"; f.recovery("ChatSelect").trigger("change");
-    assert.match(f.recovery("ImportStatus").textContent, /Чат перенесён в историю.*список не обновлён: Catalog unavailable/);
-    assert.equal(f.recovery("ImportChat").disabled, true, "read-side refresh failure cannot discard durable import proof");
-    console.log("PASS legacy recovery: typed unsupported chat refusal and catalog refresh failure remain distinct from durable import success");
+    const f = fixture(); await load(f);
+    f.recovery("ImportPage").trigger("click");
+    f.reply("startLegacyChatMigration", { status: "running", running: true, cancelling: false, total: 4,
+      processed: 1, imported: 1, failed: 0, unknown: 0, skipped: 0, issues: [] }); await settle();
+    f.recovery("StopImport").trigger("click");
+    assert.equal(f.requests("cancelLegacyChatMigration").length, 1);
+    f.reply("cancelLegacyChatMigration", { status: "running", running: true, cancelling: true, total: 4,
+      processed: 1, imported: 1, failed: 0, unknown: 0, skipped: 0, message: "Останавливаю после текущего чата…", issues: [] }); await settle();
+    assert.equal(f.recovery("StopImport").disabled, true);
+    assert.match(f.operations.at(-1).value.text, /Останавливаю перенос/);
+    assert.ok(await f.runNextTimer());
+    f.reply("getLegacyChatMigrationStatus", { status: "cancelled", running: false, cancelling: false, total: 4,
+      processed: 1, imported: 1, failed: 0, unknown: 0, skipped: 0, message: "Перенос остановлен после 1 из 4.", issues: [] }); await settle();
+    assert.equal(f.operations.at(-1).value.state, "warning");
+    assert.match(f.operations.at(-1).value.text, /остановлен после 1 из 4/);
+    console.log("PASS legacy recovery: background migration cancellation stops after the accepted transfer and remains visible");
+  }
+
+  {
+    const f = fixture(), item = chat("unknown-source", 9); await load(f, page([item]));
+    f.recovery("ImportPage").trigger("click");
+    f.reply("startLegacyChatMigration", { status: "running", running: true, cancelling: false, total: 1,
+      processed: 0, imported: 0, failed: 0, unknown: 0, skipped: 0, issues: [] }); await settle();
+    assert.ok(await f.runNextTimer());
+    f.reply("getLegacyChatMigrationStatus", { status: "unknown", running: false, cancelling: false, total: 1,
+      processed: 1, imported: 0, failed: 0, unknown: 1, skipped: 0,
+      message: "Результат одного переноса неизвестен; перенос остановлен.",
+      issues: [{ sourceId: item.sourceId, sourceRevision: item.revision, title: attack, status: "unknown", message: "Lost acknowledgement " + attack }] }); await settle();
+    assert.equal(f.operations.at(-1).value.state, "error");
+    f.recovery("ChatSelect").value = item.sourceId; f.recovery("ChatSelect").trigger("change");
+    assert.match(f.recovery("ImportStatus").textContent, /Результат переноса неизвестен.*Lost acknowledgement/);
+    assert.equal(f.recovery("ImportStatus").children.length, 0);
+    assert.equal(f.recovery("ImportChat").disabled, true, "unknown background result cannot authorize replay");
+    console.log("PASS legacy recovery: unknown background result is attributed to the exact source/revision and never replayed");
   }
   console.log("OK legacy recovery state");
 })().catch(error => { console.error(error); process.exitCode = 1; });

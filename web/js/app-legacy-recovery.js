@@ -4,7 +4,11 @@
   var bound = false, active = false, generation = 0, pending = Object.create(null);
   var chats = null, plugins = null, transcript = null, chatOffset = 0, pluginOffset = 0;
   var connecting = new Set(), connected = new Map();
-  var imports = { chat: new Map(), plugin: new Map() }, batch = null, lastBatch = null;
+  var imports = { chat: new Map(), plugin: new Map() }, migration = null;
+  var migrationPollTimer = null, migrationPollPromise = null, migrationPollFailures = 0;
+  var migrationRefreshDone = false, pageActive = true;
+  var migrationStarting = false;
+  var migrationStatusId = "legacy-chat-migration";
   var statusLabels = { readable: "Доступен", unreadable: "Ошибка чтения", tooLarge: "Превышен предел чтения",
     incomplete: "Неполный журнал", missingSource: "Папка исходников недоступна", sourceChanged: "Источник изменился", linkedPath: "Ссылка вместо обычного пути" };
 
@@ -25,6 +29,42 @@
   }
   function importKey(kind, value) {
     return JSON.stringify(kind === "chat" ? [value.sourceId, value.expectedRevision] : [value.pluginId, value.expectedRegistrationRevision]);
+  }
+  function migrationRunning(value) { return !!(value && (value.running || value.status === "running")); }
+  function migrationState(value) {
+    if (!value || value.status === "idle") return "running";
+    if (migrationRunning(value)) return "running";
+    if (value.status === "failed" || value.status === "unknown") return "error";
+    if (value.status === "cancelled" || value.failed || value.unknown || value.skipped) return "warning";
+    return "success";
+  }
+  function migrationStatusText(value) {
+    if (!value || value.status === "idle") return "";
+    if (migrationRunning(value)) {
+      var progress = value.total ? value.processed + " из " + value.total : "читаю каталог";
+      var prefix = value.cancelling ? "Останавливаю перенос истории" : "Перенос истории";
+      return prefix + ": " + progress + (value.currentTitle ? " · " + value.currentTitle : "");
+    }
+    if (value.status === "completed")
+      return "Перенос истории завершён: подтверждено " + (value.imported || 0) +
+        ", отказов " + (value.failed || 0) + ", пропущено " + (value.skipped || 0) + ".";
+    if (value.status === "cancelled") return value.message || "Перенос истории остановлен.";
+    if (value.status === "unknown") return value.message || "Результат одного переноса неизвестен.";
+    return value.message || "Фоновый перенос истории не выполнен.";
+  }
+  function renderMigrationOperation() {
+    if (!window.RNAssistantShellLayout || !RNAssistantShellLayout.operation) return;
+    var text = migrationStatusText(migration);
+    RNAssistantShellLayout.operation(migrationStatusId, text ? { text: text, state: migrationState(migration) } : null);
+  }
+  function migrationBatchText(value) {
+    if (!value || value.status === "idle") return "";
+    var prefix = migrationRunning(value) ? value.cancelling ? "Остановка после текущего переноса. " : "Фоновый перенос. " :
+      value.status === "completed" ? "Перенос завершён. " : "Перенос остановлен. ";
+    return prefix + "Обработано: " + (value.processed || 0) + "/" + (value.total || 0) +
+      "; подтверждено: " + (value.imported || 0) + "; отказов: " + (value.failed || 0) +
+      "; пропущено: " + (value.skipped || 0) + "; неизвестно: " + (value.unknown || 0) +
+      (value.processed < value.total ? "; не начато: " + (value.total - value.processed) : "") + ".";
   }
   function importState(kind, item) { return item && imports[kind].get(importKey(kind, capture(kind, item))); }
   function canImport(kind, item) {
@@ -48,8 +88,8 @@
   }
   function controls() {
     if (!bound) return;
-    var item = selected(), reading = !!pending.transcript;
-    node("Refresh").disabled = !active || !!pending.chats || !!pending.plugins;
+    var item = selected(), reading = !!pending.transcript, migrating = migrationRunning(migration) || migrationStarting;
+    node("Refresh").disabled = !active || migrating || !!pending.chats || !!pending.plugins;
     node("Read").disabled = !active || !!pending.chats || reading || !item || item.status !== "readable";
     node("ChatSelect").disabled = !!pending.chats || reading || !chats || !chats.items.length;
     node("ChatFirst").disabled = !active || !!pending.chats || chatOffset === 0;
@@ -60,11 +100,12 @@
     node("PluginFirst").disabled = !active || !!pending.plugins || pluginOffset === 0;
     node("PluginNext").disabled = !active || !!pending.plugins || !plugins || plugins.nextOffset == null;
     var entry = importState("chat", item), key = item && importKey("chat", capture("chat", item));
-    node("ImportChat").disabled = !active || !!batch || !!pending.chats || !canImport("chat", item);
+    node("ImportChat").disabled = !active || migrating || !!pending.chats || !canImport("chat", item);
     node("CheckChat").disabled = !active || !item || !item.chatId || !!pending["chatImport:" + key] ||
       !!(entry && (entry.status === "pending" || entry.status === "imported"));
-    node("ImportPage").disabled = !active || !!batch || !!pending.chats || !chats || !chats.items.some(function (value) { return canImport("chat", value); });
-    node("StopImport").disabled = !batch || batch.stop;
+    node("ImportPage").textContent = migrating ? "Перенос выполняется…" : "Перенести все чаты";
+    node("ImportPage").disabled = !active || migrating || !!pending.chats || !chats || !chats.total;
+    node("StopImport").disabled = !migrating || !!(migration && migration.cancelling);
     text("ImportStatus", importMessage(entry));
   }
   function current(slot, request) { return active && visible() && pending[slot] === request && request.generation === generation; }
@@ -162,12 +203,10 @@
     });
   }
   function renderImports() {
+    renderMigrationOperation();
     if (!active || !visible()) return;
     renderChatOptions(); controls(); renderPlugins();
-    if (lastBatch) text("BatchStatus", (batch ? batch.stop ? "Остановка после текущего переноса. " : "Перенос показанных чатов. " : "Перенос страницы завершён. ") +
-      "Обработано: " + lastBatch.completed + "/" + lastBatch.total + "; подтверждено: " + lastBatch.confirmed +
-      "; отказов: " + lastBatch.failed + "; неизвестно: " + lastBatch.unknown +
-      (lastBatch.completed < lastBatch.total ? "; не начато: " + (lastBatch.total - lastBatch.completed) : "") + ".");
+    text("BatchStatus", migrationBatchText(migration));
   }
   function exactReceipt(kind, value, expected) {
     if (kind === "plugin") return value && value.item && value.item.pluginId === expected.pluginId &&
@@ -221,7 +260,7 @@
     return codes.some(function (code) { return error.code === "legacy_" + kind + "_import_" + code; });
   }
   async function importItem(kind, item) {
-    if (!active || !visible() || !canImport(kind, item)) return;
+    if (!active || !visible() || migrationRunning(migration) || !canImport(kind, item)) return;
     var expected = capture(kind, item), key = importKey(kind, expected);
     var entry = { status: "pending", message: "Перенос выполняется…" };
     imports[kind].set(key, entry); renderImports();
@@ -249,24 +288,79 @@
     });
     renderImports(); await checking; renderImports();
   }
-  async function importPage() {
-    if (!active || !visible() || batch || !chats) return;
-    var items = chats.items.slice(0, 25).filter(function (item) { return canImport("chat", item); });
-    if (!items.length) return;
-    var work = { total: items.length, completed: 0, confirmed: 0, failed: 0, unknown: 0, stop: false };
-    batch = lastBatch = work; renderImports();
+  function applyMigrationIssues(value) {
+    (value && value.issues || []).forEach(function (issue) {
+      if (!issue || !issue.sourceId || !issue.sourceRevision) return;
+      imports.chat.set(importKey("chat", { sourceId: issue.sourceId, expectedRevision: issue.sourceRevision }), {
+        status: issue.status === "unknown" ? "unknown" : "failed",
+        message: (issue.status === "unknown" ? "Результат переноса неизвестен: " :
+          issue.status === "skipped" ? "Пропущено: " : "Перенос отклонён: ") + (issue.message || issue.status || "")
+      });
+    });
+  }
+  async function refreshAfterMigration(value) {
+    if (!value || !value.imported || migrationRefreshDone) return;
+    migrationRefreshDone = true;
     try {
-      for (var index = 0; index < items.length; index++) {
-        if (work.stop || !active || !visible()) break;
-        var entry = await importItem("chat", items[index]);
-        if (!entry) continue;
-        work.completed++;
-        if (entry.status === "imported") work.confirmed++;
-        else if (entry.status === "failed") work.failed++;
-        else { work.unknown++; work.stop = true; }
-        renderImports();
-      }
-    } finally { if (batch === work) batch = null; renderImports(); }
+      var work = [];
+      if (window.RNAssistantProjectChats) work.push(RNAssistantProjectChats.refreshCatalog());
+      if (typeof synchronizeChatState === "function") work.push(synchronizeChatState(true));
+      await Promise.all(work);
+    } catch (error) {
+      log("Перенос завершён, но списки чатов не обновлены: " + (error.detail || error.message), "warning");
+    }
+  }
+  function applyMigration(value) {
+    if (!pageActive || !value || typeof value !== "object") return;
+    migration = value;
+    if (migrationRunning(value)) migrationRefreshDone = false;
+    applyMigrationIssues(value);
+    renderImports();
+    if (migrationRunning(value)) scheduleMigrationPoll(700);
+    else {
+      migrationPollFailures = 0;
+      refreshAfterMigration(value);
+    }
+  }
+  function scheduleMigrationPoll(delay) {
+    if (!pageActive || !migrationRunning(migration)) return;
+    if (migrationPollTimer) clearTimeout(migrationPollTimer);
+    migrationPollTimer = setTimeout(pollMigrationStatus, delay || 700);
+  }
+  async function pollMigrationStatus() {
+    migrationPollTimer = null;
+    if (!pageActive || migrationPollPromise) return;
+    try {
+      migrationPollPromise = send("getLegacyChatMigrationStatus", {});
+      applyMigration(await migrationPollPromise);
+      migrationPollFailures = 0;
+    } catch (error) {
+      migrationPollFailures++;
+      if (migrationPollFailures >= 3) {
+        if (window.RNAssistantShellLayout && RNAssistantShellLayout.operation)
+          RNAssistantShellLayout.operation(migrationStatusId, { text: "Не удалось получить состояние фонового переноса: " + (error.detail || error.message), state: "error" });
+      } else scheduleMigrationPoll(1500);
+    } finally { migrationPollPromise = null; }
+  }
+  async function startMigration() {
+    if (!active || !visible() || migrationRunning(migration) || migrationStarting) return;
+    migrationStarting = true;
+    migrationRefreshDone = false;
+    try {
+      if (window.RNAssistantShellLayout && RNAssistantShellLayout.operation)
+        RNAssistantShellLayout.operation(migrationStatusId, { text: "Запускаю фоновый перенос прежних чатов…", state: "running" });
+      applyMigration(await send("startLegacyChatMigration", {}));
+      if (active && visible()) notice("Фоновый перенос запущен. Следите за прогрессом в нижней строке состояния.");
+    } catch (error) {
+      if (window.RNAssistantShellLayout && RNAssistantShellLayout.operation)
+        RNAssistantShellLayout.operation(migrationStatusId, { text: "Фоновый перенос не запущен: " + (error.detail || error.message), state: "error" });
+      if (active && visible()) notice("Фоновый перенос не запущен: " + (error.detail || error.message));
+    } finally { migrationStarting = false; if (active && visible()) controls(); }
+  }
+  async function cancelMigration() {
+    if (!migrationRunning(migration) || migration.cancelling) return;
+    try { applyMigration(await send("cancelLegacyChatMigration", {})); }
+    catch (error) { if (active && visible()) notice("Не удалось остановить перенос: " + (error.detail || error.message)); }
   }
   async function reconnect(pluginId) {
     var item = plugins && plugins.items.find(function (value) { return value.pluginId === pluginId; }), entry = importState("plugin", item);
@@ -288,19 +382,23 @@
       if (active && visible()) renderPlugins();
     }
   }
-  function pause() {
+  function suspend() {
     active = false; generation++;
-    if (batch) batch.stop = true;
     Object.keys(pending).forEach(function (slot) {
       var request = pending[slot].promise;
       if (request.requestId) cancelBridgeRequest(request.requestId).catch(function () {});
     });
     pending = Object.create(null); controls();
   }
+  function pause() {
+    pageActive = false;
+    if (migrationPollTimer) { clearTimeout(migrationPollTimer); migrationPollTimer = null; }
+    suspend();
+  }
   function sync() {
     if (!bound) return;
-    if (!visible()) { if (active) pause(); return; }
-    active = true; renderImports();
+    if (!visible()) { if (active) suspend(); return; }
+    active = true; pageActive = true; renderImports();
   }
   function bind() {
     if (bound) return;
@@ -314,10 +412,10 @@
     });
     node("ChatSelect").addEventListener("change", function () { clearTranscript(); showChatInfo(); });
     node("Read").addEventListener("click", function () { readTranscript(0, 0); });
-    node("ImportChat").addEventListener("click", function () { if (!batch && selected()) importItem("chat", selected()); });
+    node("ImportChat").addEventListener("click", function () { if (selected()) importItem("chat", selected()); });
     node("CheckChat").addEventListener("click", function () { if (selected()) checkImport("chat", capture("chat", selected())); });
-    node("ImportPage").addEventListener("click", importPage);
-    node("StopImport").addEventListener("click", function () { if (batch) { batch.stop = true; renderImports(); } });
+    node("ImportPage").addEventListener("click", startMigration);
+    node("StopImport").addEventListener("click", cancelMigration);
     node("ChatFirst").addEventListener("click", function () { loadChats(0); });
     node("ChatNext").addEventListener("click", function () { if (chats && chats.nextOffset != null) loadChats(chats.nextOffset); });
     node("TextFirst").addEventListener("click", function () { readTranscript(0, 0); });
@@ -333,6 +431,7 @@
     document.addEventListener("visibilitychange", sync);
     window.addEventListener("pagehide", pause);
     sync();
+    pollMigrationStatus();
   }
-  window.RNAssistantLegacyRecovery = { bind: bind, sync: sync, pause: pause };
+  window.RNAssistantLegacyRecovery = { bind: bind, sync: sync, suspend: suspend, pause: pause };
 }());

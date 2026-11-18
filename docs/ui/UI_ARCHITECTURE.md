@@ -430,7 +430,10 @@ optional `hostWindow` bootstrap сообщает capabilities. Это additive c
 без document maintenance и не входит в счётчик exclusive rebind. Root source check
 сохранён; plugin/preview не получает native authority. Shutdown/SwitchDocument из Web
 исполняются после публикации ACK; закрытие останавливает active runs и закрывает
-admission до cleanup. Ошибка сохранения draft оставляет старую сессию открытой.
+admission до cleanup. Активные bridge-запросы не блокируют Shutdown: после flush
+draft хост принимает закрытие, затем отменяет и дренирует фоновую работу. SwitchDocument
+по-прежнему не пересекается с уже начавшейся exclusive сменой host-сессии. Ошибка
+сохранения draft оставляет старую сессию открытой.
 
 `app-window` отображает revisioned native snapshot, а Shell/DockWorkspace владеют
 presentation. Compact временно максимизирует группу выбранного exact Chat View;
@@ -1294,7 +1297,7 @@ Dockview. Это исторический snapshot; request добавлен п�
 | Tokens и навигационные элементы | `app-product-tokens.css`, `app-product-components.css` | Общие размеры/типографика/темы. Заголовки sidebar, дерево и контроли проверены в нескольких sections. CSS содержимого settings возвращён его screen owner |
 | View catalog / command routes | `views` в DockWorkspace; ещё не мигрировавшие sections — `switchTab` | Единого расширенного публичного panel/command API для plugins пока нет. Расширять существующий каталог при переносе следующего view; не откладывать единство до финальной чистки |
 | Chat / runtime data | Прежние ConversationState, WorkspaceChat, Office domain owners | Общие bounds/composer сохранены. Multiple live views, model/context/attachment parity и paged catalogs ещё открыты |
-| StatusBar | Shell отображает переданные mode/connection/layout facts | Общая агрегация фоновых operations пока не подключена; новых guessed progress/events/stores не вводилось |
+| StatusBar | Shell отображает переданные mode/connection/layout facts и один presentation slot `workspaceOperationStatus` | Slot принадлежит Shell presentation, а не domain owner. Первый consumer — host-owned legacy migration; общая multi-operation aggregation, проценты и второй journal пока не вводятся |
 | Portability | Общие Tree/Toolbar/ActionMenu/OperationView в browser fixture | Проверены без Shell/bridge, включая dispose и обе темы. Это ещё не экспортированный plugin, полная `file://` или WebView2 qualification |
 
 Архитектура соответствует направлению исходного плана, но **не объявляется полностью

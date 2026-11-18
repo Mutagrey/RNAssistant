@@ -124,6 +124,19 @@ accepted call, input, approval or effect is fabricated from history. The ordinar
 128-message commit limit and native execution validators are unchanged. A later
 user message starts normal current-contract work; it cannot resume the old run.
 
+Office composes the bulk upgrade path as `LegacyChatMigrationService`. It owns one
+in-memory job, reads legacy catalog pages of at most 25 records, and invokes the same
+exact `ImportLegacyRecoveryChat` transaction once per readable source. The job holds
+one `RuntimeStorageActivity` marker for its lifetime so CAS garbage collection, full
+backup, restore and runtime clear remain excluded; it does not hold the global
+registry while reading the archive or between imports. Catalog reads therefore remain
+available, while destructive maintenance fails closed until the job ends. Typed
+start/status/cancel operations expose bounded progress and the first 50 issues.
+Cancellation finishes the admitted import and starts no later one. WebView visibility
+does not own the job; application shutdown cancels it. The job itself is intentionally
+not persisted. A later start revalidates the archive and returns existing durable
+receipts as `alreadyImported`, without duplicating or overwriting native history.
+
 Saved attachments and supported immutable artifact revisions must have verified
 bytes and prior publication proof. Immutable resource metadata/snapshot heads are
 staged through the native resource owner before chat visibility. Mutable Office,

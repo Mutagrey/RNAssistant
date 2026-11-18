@@ -95,13 +95,16 @@ Dialog владеет focus/escape/progress/error; JS не создаёт пар
 каталога. Все архивные title/path/error/content и сообщения переноса вставляются
 через textContent.
 
-Chat import/check/page/stop используют тот же ряд `.legacy-recovery-controls`.
+Chat import/check/all/stop используют тот же ряд `.legacy-recovery-controls`.
 Plugin row содержит отдельные import/check/source-connect actions. Pending блокирует
 дубликаты; Unknown оставляет read-only проверку, подтверждённый результат блокирует
 новую запись. Статус привязан к исходной строке, а не к текущему selection. Выбранный
 чат и batch имеют существующий `status`/`aria-live="polite"`; прогресс разделяет
-подтверждения, отказы, Unknown и не начатые записи. Сообщение о недоступном источнике
-или неуспешной проверке не заменяется утверждением об успешном выполнении плагина.
+подтверждения, отказы, Unknown и не начатые записи. Фоновый перенос дополнительно
+использует единственный Shell StatusBar slot `workspaceOperationStatus` с общими
+текстом/цветовыми tokens; это presentation-owned progress от host service, не
+процент и не второй журнал. Сообщение о недоступном источнике или неуспешной
+проверке не заменяется утверждением об успешном выполнении плагина.
 
 В основной общей ленте метка «Перенесённая история» использует существующий
 `message-meta`, без нового message layout, activity controls или иконки успеха.

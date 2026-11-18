@@ -50,6 +50,15 @@ namespace RNAssistant.Office
                 request.ChatId, request.SourceId, request.ExpectedRevision, token));
         }
 
+        public LegacyChatMigrationStatusDto StartLegacyChatMigration()
+        { return _legacyChatMigration.Start(); }
+
+        public LegacyChatMigrationStatusDto GetLegacyChatMigrationStatus()
+        { return _legacyChatMigration.Status(); }
+
+        public LegacyChatMigrationStatusDto CancelLegacyChatMigration()
+        { return _legacyChatMigration.Cancel(); }
+
         internal LegacyPluginRecoveryItem ResolveLegacyPluginSource(LegacyPluginReconnectRequest request,
             CancellationToken token = default(CancellationToken))
         {

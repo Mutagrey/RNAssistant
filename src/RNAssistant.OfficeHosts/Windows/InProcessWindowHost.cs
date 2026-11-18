@@ -169,7 +169,10 @@ namespace RNAssistant.OfficeHosts.Windows
                     if (request.Command == HostWindowCommand.Shutdown || request.Command == HostWindowCommand.SwitchDocument)
                     {
                         var pane = _session.PanelControl as AssistantPaneControl;
-                        if (pane == null || !pane.CanShutdownWindow)
+                        var canClose = request.Command == HostWindowCommand.Shutdown
+                            ? pane != null && pane.CanShutdownWindow
+                            : pane != null && pane.CanSwitchWindow;
+                        if (!canClose)
                             throw new InvalidOperationException("Дождитесь завершения текущей операции и повторите закрытие.");
                         if (request.Command == HostWindowCommand.SwitchDocument && _switchAnchor == IntPtr.Zero)
                             throw new InvalidOperationException("Новая книга не выбрана.");

@@ -113,7 +113,7 @@
       if (window.RNAssistantActionMenu) RNAssistantActionMenu.closeWithin($("tab-diagnostics"));
       if (window.RNAssistantTrajectory) RNAssistantTrajectory.pause();
       if (window.RNAssistantFileLogs) RNAssistantFileLogs.pause();
-      if (window.RNAssistantLegacyRecovery) RNAssistantLegacyRecovery.pause();
+      if (window.RNAssistantLegacyRecovery) RNAssistantLegacyRecovery.suspend();
       return;
     }
     show(state.diagnosticsTab || "runs");
@@ -131,7 +131,7 @@
     onClose: function () {
       if (window.RNAssistantTrajectory) RNAssistantTrajectory.dispose();
       if (window.RNAssistantFileLogs) RNAssistantFileLogs.dispose();
-      if (window.RNAssistantLegacyRecovery) RNAssistantLegacyRecovery.pause();
+      if (window.RNAssistantLegacyRecovery) RNAssistantLegacyRecovery.suspend();
     },
     isVisible: function () { return window.RNAssistantDockWorkspace && RNAssistantDockWorkspace.isVisible("diagnostics"); },
     requestVisible: function () { return window.RNAssistantDockWorkspace && RNAssistantDockWorkspace.isVisible("request"); } };

@@ -10,6 +10,12 @@ const {spawn}=require('node:child_process'),{chromium}=require('playwright');
   browser=await chromium.launch({headless:true,...(process.env.BROWSER_EXECUTABLE?{executablePath:process.env.BROWSER_EXECUTABLE}:{})});
   const page=await browser.newPage({viewport:{width:1280,height:900}}),errors=[];page.setDefaultTimeout(8000);page.on('pageerror',e=>errors.push(e.message));
   await page.goto(address+'preview/web/?scenario=ready');await page.waitForFunction(()=>state.activeChatId==='preview-chat'&&!state.initializePromise);
+  // Background operation status uses the shared Shell slot rather than a per-screen overlay.
+  await page.evaluate(()=>RNAssistantShellLayout.operation('legacy-chat-migration',{text:'Перенос истории: 2 из 5',state:'running'}));
+  assert.equal(await page.locator('#workspaceOperationStatus').textContent(),'Перенос истории: 2 из 5');
+  assert.equal(await page.locator('#workspaceOperationStatus').getAttribute('data-state'),'running');
+  await page.evaluate(()=>RNAssistantShellLayout.operation('legacy-chat-migration',null));
+  assert.equal(await page.locator('#workspaceOperationStatus').isHidden(),true,'completed/cleared operations leave no stale StatusBar text');
   assert.equal(await page.evaluate(()=>!!document.activeElement.closest('#chatSessionList')),false,'initial selection must not steal focus into the tree');
   // Compare Shell chrome with Demo; tree indentation follows the newer production review.
   const demo=await browser.newPage({viewport:{width:1280,height:900}});

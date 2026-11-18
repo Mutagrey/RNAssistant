@@ -1,5 +1,21 @@
 # План модернизации production UI
 
+## Legacy migration progress in the shared StatusBar — In Review, 2026-11-18
+
+Scope: existing Diagnostics legacy controls, one Shell StatusBar operation slot and
+the Office legacy import owner. No screen, dock model, chat state or durable progress
+store is added. `LegacyChatMigrationService` owns sequential page/import work;
+`app-legacy-recovery.js` renders only typed status/receipts and polls one running job.
+StatusBar owns presentation of `N из M`, current title and terminal outcomes; it never
+invents a percentage or turns a native receipt into UI authority.
+
+Checks: Node `legacy-recovery-state.test.js`, prepared shared-Shell assertion in
+`shell-navigation.test.js`, Harness `legacy chat migration:` 1/1 and `host window:` 3/3.
+Playwright is not installed in this workspace, so the real-DOM Shell check was not run;
+Windows x64 / Office x64 / WebView2 long-profile migration and 125%-narrow visual
+acceptance remain open. Rollback is the scoped source/docs diff; the job has no durable
+state to migrate, and already published import receipts remain valid.
+
 ## Markdown structure and MaterialSurface — In Review, 2026-11-17
 
 Scope: shared Core Markdig analysis, current resource section/outline consumers,

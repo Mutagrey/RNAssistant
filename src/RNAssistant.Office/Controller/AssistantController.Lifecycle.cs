@@ -33,6 +33,7 @@ namespace RNAssistant.Office
             }
 
             try { _lifetimeCancellation.Cancel(); } catch (ObjectDisposedException) { }
+            if (_legacyChatMigration != null) _legacyChatMigration.Dispose();
             // Keep per-chat locks until each cancelled run actually leaves its lease. A COM/tool
             // call may not observe cancellation immediately, so releasing here would allow overlap.
             StopInboxWorkers();

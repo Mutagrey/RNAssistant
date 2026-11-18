@@ -108,6 +108,8 @@ namespace RNAssistant.Harness
                 var switching = send("createOfficeHostChat", new OfficeHostChatPayload { Host = "Excel" }, token);
                 await entered.Task;
                 AssertTrue(bridge.HostSwitchPending, "fixture owns exclusive domain switch");
+                AssertTrue(bridge.CanShutdownWindow, "shutdown remains available while bridge work is active");
+                AssertTrue(!bridge.CanSwitchWindow, "replacement cannot race an exclusive host switch");
                 AssertTrue((bool)JObject.Parse(await send("hostWindowCommand", payload, token))["ok"], "presentation remains available during domain switch");
                 AssertTrue(!(bool)JObject.Parse(await send("hostWindowCommand", payload, "wrong"))["ok"], "switch does not weaken token gate");
                 AssertTrue(host.Policy.Pinned && posts.Exists(p => p.Contains("hostWindowState")), "accepted command publishes typed state");

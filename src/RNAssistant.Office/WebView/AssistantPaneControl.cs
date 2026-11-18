@@ -75,6 +75,7 @@ namespace RNAssistant.Office.WebView
 
         public HostWindowActivity WindowActivity { get { return _bridge.WindowActivity; } }
         public bool CanShutdownWindow { get { return _bridge.CanShutdownWindow; } }
+        public bool CanSwitchWindow { get { return _bridge.CanSwitchWindow; } }
 
         public AssistantPaneControl(AssistantController controller, string webRoot, IAssistantWindowHost windowHost = null)
         {

@@ -10,6 +10,7 @@ using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office
 {
@@ -18,6 +19,7 @@ namespace RNAssistant.Office
         private readonly AppDataPaths _paths;
         private readonly SettingsService _settingsService;
         private readonly ChatStore _legacyChatStore;
+        private readonly LegacyChatMigrationService _legacyChatMigration;
         private readonly ConversationJournalRouter _conversationRouter;
         private readonly DocumentAuthorityRegistry _documentAuthorityRegistry;
         internal IBrowserReadSource BrowserReadSource { get; private set; }
@@ -50,6 +52,8 @@ namespace RNAssistant.Office
             _conversationRouter = new ConversationJournalRouter(paths,
                 (host, key) => throw new NotSupportedException("The archive fixture requires its exact persisted scope."),
                 _settingsService.LoadStorageProtector());
+            _legacyChatMigration = new LegacyChatMigrationService(paths, _legacyChatStore,
+                _conversationRouter, _documentAuthorityRegistry);
             _diagnosticLogs = new DiagnosticLogStore(paths.Root);
             var resources = new ResourceJournal(paths);
             WorkspaceFiles = new WorkspaceFileService(paths, resources, resources, resources);

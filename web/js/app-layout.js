@@ -9,6 +9,7 @@
   var navigationSizes = null;
   var workspaceNoticeTimer = null;
   var workspaceLayoutChanged = null;
+  var operationStatus = null;
 
   function renderWorkspaceChrome(model) {
     function text(id, value) { var node = document.getElementById(id); if (node.textContent !== value) node.textContent = value; }
@@ -45,6 +46,29 @@
     document.getElementById("workspaceLayoutNotice").textContent = message;
     clearTimeout(workspaceNoticeTimer);
     workspaceNoticeTimer = setTimeout(function () { document.getElementById("workspaceLayoutNotice").textContent = ""; }, 5000);
+  }
+
+  function renderOperationStatus() {
+    var node = document.getElementById("workspaceOperationStatus");
+    if (!node) return;
+    var text = operationSource();
+    node.textContent = text;
+    node.title = text;
+    node.hidden = !text;
+    node.dataset.state = operationStatus && operationStatus.state || "";
+  }
+
+  function operationSource() { return operationStatus && operationStatus.text || ""; }
+
+  function setOperationStatus(id, value) {
+    if (!id) return;
+    if (value === null || value === undefined || value === false) {
+      if (operationStatus && operationStatus.id === id) operationStatus = null;
+    } else {
+      var text = typeof value === "string" ? value : value.text;
+      operationStatus = { id: id, text: text == null ? "" : String(text), state: value && value.state || "running" };
+    }
+    renderOperationStatus();
   }
 
   function navigationMetrics() {
@@ -141,6 +165,7 @@
     command: function (name, trigger) { if (workspaceCommands && workspaceCommands[name]) return workspaceCommands[name](trigger); },
     renderWorkspace: renderWorkspaceChrome,
     notice: workspaceNotice,
+    operation: setOperationStatus,
     bindWorkspace: function (actions) {
       workspaceLayoutChanged = actions.onLayoutChanged; workspaceCommands = actions;
       [["workspaceLayout", actions.layout]].forEach(function (entry) {

@@ -1,5 +1,29 @@
 # Stabilization progress
 
+## Background legacy chat migration and reliable window shutdown — In Review, 2026-11-18
+
+Implemented host-neutral / In Review, `17.6.0-dev`. Office now owns one background
+legacy migration job instead of a Diagnostics-view batch loop. It reads retained chat
+pages of 25, imports readable records sequentially through the existing exact native
+transaction, exposes typed start/status/cancel states and reports bounded issues.
+The job holds one storage activity marker for its lifetime, so catalog reads remain
+available while destructive maintenance waits. Web UI navigation and WebView reload do
+not stop admitted work; application shutdown cancels it, and a later start safely
+returns durable `alreadyImported` receipts.
+
+The shared StatusBar exposes one `workspaceOperationStatus` presentation slot. The
+migration shows `N из M`, the current source and terminal confirmed/refused/skipped/
+unknown counts without invented percentages. The same slice makes window shutdown the
+user escape hatch: active bridge requests no longer reject close; the host acknowledges,
+cancels and drains them. Document replacement still cannot race an exclusive host
+switch.
+
+Checks: Harness build succeeds with the two existing PDF platform warnings; focused
+`legacy chat migration:` 1/1, `host window:` 3/3 and Node `legacy-recovery-state.test.js`
+pass. Real Windows x64 / Office x64 / WebView2 shutdown, long-profile migration, mixed
+window evidence and wide/narrow/125% visual acceptance remain open. No release
+qualification, commit or push is implied.
+
 ## Cross-host tool argument cutover and guarded inline replace — In Review, 2026-11-18
 
 Implemented host-neutral / In Review, `17.5.0-dev`. Office content search and text

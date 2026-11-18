@@ -38,6 +38,31 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("expectedRevision", Required = Required.Always)] public long ExpectedRevision { get; set; }
     }
 
+    public sealed class LegacyChatMigrationIssueDto
+    {
+        [JsonProperty("sourceId")] public string SourceId { get; set; }
+        [JsonProperty("sourceRevision")] public long SourceRevision { get; set; }
+        [JsonProperty("title")] public string Title { get; set; }
+        [JsonProperty("status")] public string Status { get; set; }
+        [JsonProperty("message")] public string Message { get; set; }
+    }
+
+    public sealed class LegacyChatMigrationStatusDto
+    {
+        [JsonProperty("status")] public string Status { get; set; }
+        [JsonProperty("running")] public bool Running { get; set; }
+        [JsonProperty("cancelling")] public bool Cancelling { get; set; }
+        [JsonProperty("total")] public int Total { get; set; }
+        [JsonProperty("processed")] public int Processed { get; set; }
+        [JsonProperty("imported")] public int Imported { get; set; }
+        [JsonProperty("failed")] public int Failed { get; set; }
+        [JsonProperty("unknown")] public int Unknown { get; set; }
+        [JsonProperty("skipped")] public int Skipped { get; set; }
+        [JsonProperty("currentTitle")] public string CurrentTitle { get; set; }
+        [JsonProperty("message")] public string Message { get; set; }
+        [JsonProperty("issues")] public IReadOnlyList<LegacyChatMigrationIssueDto> Issues { get; set; }
+    }
+
     public sealed class LegacyChatImportResultDto
     {
         [JsonProperty("status")] public string Status { get; set; }
