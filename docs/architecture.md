@@ -21,6 +21,47 @@ Canonical domain documents:
 - [Host Fabric](host-fabric.md) and [Local Automation](local-automation-agent.md): deferred contours that do not expand the current stable-core route.
 - [Desktop runtime](desktop-runtime.md): standalone shell, activation and Office target selection.
 
+## Excel Power Query ownership — 2026-11-16
+
+Offline syntax analysis uses the optional Core `IPowerQuerySyntaxAnalyzer` and
+closed source/result DTOs. Office captures exact M through the existing resource
+and CAS owner, releases the document gate before analysis, validates correlation
+and diagnostic bounds, then separately observes whether live M still matches.
+The syntax result retains source references without granting a whole-source model
+overwrite observation. `PowerQueryWebViewAnalyzer` is a fixed local language host,
+using `LocalBrowserEnvironment` and a hidden controller/dedicated Worker; it exposes
+no model-authored JavaScript, Office, Shell bridge, resource RPC or network access.
+Pane reset/close detaches the analyzer, stops its wait and retains cleanup until
+late controller creation/drain finishes. One active analysis per owner is bounded;
+unavailable/failed cleanup prevents reuse. The deadline is 15 seconds; physical
+native close still requires its UI dispatcher, and no hard V8 memory quota is claimed.
+The official fixed bundle/provenance stays in the existing vendor inventory; it is
+absent from Shell startup and the authored plugin/HTML catalog. No Jint consumer,
+Node/Python product runtime or general JavaScript executor is added.
+
+Power Query extends the existing resource and tool paths. Core owns only generic
+operation observations/replay resolution and host-neutral language contracts.
+`ExcelResourceProvider`, source mutation handlers and
+`ExcelPowerQueryExecutionService` in Office own resource projection, guarded M
+edits, bounded loaded-data checks and caller/native lifetime separation. The
+optional `IExcelPowerQueryBackend` in OfficeHosts owns bound Excel COM access;
+Core has no Excel, Mashup engine, process runner or external parser dependency.
+
+One execution owner is shared by wrappers/chats using the same bound document
+session. A retained `HostRuntime` reservation holds the actual document gate,
+cross-process exclusion and dispatcher lifetime until native execution is known to
+have stopped, dispatch was refused, or exact session closure is confirmed. Caller
+timeout/Stop and panel disposal do not end that reservation. Late completion is
+observed through the existing status resource and accepted read facts, never a
+second terminal callback. Busy/failed COM probes are not proof of closure.
+Fresh adapter rebinding does not adopt an old outstanding native operation.
+
+No new durable job store, generic scheduler, model read tool or UI shell is added.
+The operation cache is bounded to 64 entries; unresolved entries are not silently
+evicted. Resource/source/capability details belong to
+[Resource Fabric](resource-fabric.md#excel-power-query-resources--2026-11-16) and
+[Tool Library](tool-library.md). Real Excel/VSTO lifecycle qualification is separate.
+
 ## Product
 
 RNAssistant is a local Office assistant for Word, Excel, PowerPoint, and Outlook. It stores per-document chats and context, talks to an OpenAI-compatible endpoint, executes Office tools locally, and requires no backend.

@@ -197,7 +197,8 @@ namespace RNAssistant.Office.Tools
                     }
                     if (_id == ResourceMutationToolCatalog.Copy || _id == ResourceMutationToolCatalog.Move)
                         RequireAbsent(Value(context.Arguments, "destination"));
-                    if (_id == ResourceMutationToolCatalog.Patch && SourcePatch(source.Text, prepared.Source, context, token).Text == source.Text)
+                    if (_id == ResourceMutationToolCatalog.Patch && prepared.Operation != ExcelPowerQuerySourceToolHandler.Operation &&
+                        SourcePatch(source.Text, prepared.Source, context, token).Text == source.Text)
                         return new ToolHandlerResult(Result.Ok("Source already matches the prepared patch."), ToolEffectEvidence.VerifiedNoChange);
                     return await Owner(prepared).ExecuteAsync(OwnerContext(context, prepared,
                         Arguments(prepared, context, source?.Text, token)), token).ConfigureAwait(false);
@@ -383,6 +384,16 @@ namespace RNAssistant.Office.Tools
                 }
 
             }
+            else if (target.StartsWith(ExcelResourceProvider.QueryPrefix, StringComparison.Ordinal))
+            {
+                if (selected == null || selected.Descriptor.Kind != ExcelResourceProvider.QueryKind)
+                    throw new ResourceRequestException("Create a Power Query definition with excel.query.create before editing it.", "creation_target_invalid", false);
+                if (_id != ResourceMutationToolCatalog.Write && _id != ResourceMutationToolCatalog.Patch && _id != ResourceMutationToolCatalog.Replace)
+                    throw new ResourceRequestException("Power Query currently supports source patch/write; rename, copy, delete and restore are not published capabilities.", "unsupported_resource_operation", false);
+                prepared.Operation = ExcelPowerQuerySourceToolHandler.Operation;
+                args["queryName"] = ExcelResourceProvider.QueryNameFromTarget(selected.Target);
+                args["expectedRevision"] = prepared.Source.Revision;
+            }
             else if (_id == ResourceMutationToolCatalog.Delete && selected?.Descriptor.Kind == ChatHtmlResourceCatalog.DataKind)
             {
                 prepared.Operation = HtmlWorkspaceToolCatalog.DeleteToolId;
@@ -553,6 +564,8 @@ namespace RNAssistant.Office.Tools
             if (PromptToolCatalog.Owns(operation)) return new PromptSaveToolHandler(_prompts, prepared.SourceHash);
             if (SkillAuthoringCatalog.Owns(operation)) return new SkillAuthoringToolHandler(operation, _skills, prepared.SourceHash);
             if (VbaToolCatalog.Owns(operation)) return new VbaToolHandler(operation, _vba, _host, _session, prepared.OwnerSourceHash);
+            if (operation == ExcelPowerQuerySourceToolHandler.Operation)
+                return new ExcelPowerQuerySourceToolHandler(_gateway, _host, _session, prepared.SourceHash);
             if (HtmlWorkspaceToolCatalog.Owns(operation)) return new HtmlWorkspaceToolHandler(operation, _session, _html);
             if (AuthoredFileToolCatalog.Owns(operation)) return new AuthoredFileToolHandler(_files, _session);
             if (MarkdownDocumentToolCatalog.Owns(operation)) return new MarkdownDocumentToolHandler(_markdown, _session);

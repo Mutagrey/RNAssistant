@@ -15,7 +15,7 @@ using RNAssistant.Core.Tools.Contracts;
 
 namespace RNAssistant.Core.Storage
 {
-    internal sealed partial class ConversationJournal : IConversationContextStore
+    internal sealed partial class ConversationJournal : IConversationContextStore, IToolOperationResolutionStore
     {
         private const int ContextCandidateLimit = 64;
 
@@ -137,6 +137,48 @@ namespace RNAssistant.Core.Storage
             }, CancellationToken.None);
         }
 
+        ResourceEvidence IToolOperationResolutionStore.ReadOperationResolution(
+            ConversationMetadata session, ToolOperationReference operation)
+        {
+            if (operation == null) throw new ArgumentNullException(nameof(operation));
+            return Access((db, cursor) => {
+                RequireChatRevision(session, TextChat(db, session.Id));
+                return ReadOperationResolution(db, session.Id, operation);
+            }, CancellationToken.None);
+        }
+
+        internal ResourceEvidence ReadOperationResolution(string chat, ToolOperationReference operation)
+        {
+            if (string.IsNullOrWhiteSpace(chat) || operation == null)
+                throw new ArgumentException("An exact chat and native operation are required.");
+            return Access((db, cursor) => ReadOperationResolution(db, chat, operation), CancellationToken.None);
+        }
+
+        private ResourceEvidence ReadOperationResolution(SqliteConnection db, string chat, ToolOperationReference operation)
+        {
+            string original, resolved;
+            using (var command = Command(db, "SELECT operation,resolved_by FROM context_required WHERE stream=$stream AND chat=$chat AND run=$run AND call=$call AND signature=$signature AND repeat_guard=0 AND resolved_by IS NOT NULL"))
+            {
+                command.Parameters.AddWithValue("$chat", chat); command.Parameters.AddWithValue("$run", operation.RunId);
+                command.Parameters.AddWithValue("$call", operation.CallId); command.Parameters.AddWithValue("$signature", operation.CallSignature);
+                using (var reader = command.ExecuteReader())
+                {
+                    if (!reader.Read()) return null;
+                    original = reader.GetString(0); resolved = reader.GetString(1);
+                }
+            }
+            var prior = ReadContextOperation(db, chat, original)?.Result;
+            var read = Find(db, resolved);
+            if (prior == null || read == null || !InheritedFact(db, chat, read.Fact.ChatId, read.Position.Sequence) ||
+                read.Position.Sequence <= prior.Position.Sequence || read.Fact.Result.ExecutionProgress?.Outcome != ToolExecutionOutcome.Ok ||
+                read.Fact.Result.ExecutionProgress.IndependentLocalRead != true)
+                throw new InvalidDataException("Operation resolution locator has no later independent canonical observation.");
+            var pending = prior.Fact.Result.ExecutionProgress;
+            if (prior.Fact.Result.ToolCallId != operation.CallId || !operation.Matches(pending?.Operation)) return null;
+            return read.Fact.Result.ResourceEvidence.SingleOrDefault(evidence =>
+                evidence.OperationObservation != null && evidence.OperationObservation.Resolves(pending, evidence));
+        }
+
         private ConversationContextOperation FindContextReplayGuard(SqliteConnection db, string chat, ToolCall call)
         {
             using (var command = Command(db, "SELECT operation FROM context_required WHERE stream=$stream AND chat=$chat AND signature=$signature AND repeat_guard=1 ORDER BY sequence DESC LIMIT 1"))
@@ -216,7 +258,7 @@ namespace RNAssistant.Core.Storage
             var result = fact.Result;
             var progress = result.ExecutionProgress;
             // Resolve only from later successful facts, including excluded prompt bodies.
-            if (progress.Outcome == ToolExecutionOutcome.Ok) ResolveContextRecovery(db, tx, fact.ChatId, result);
+            if (progress.Outcome == ToolExecutionOutcome.Ok) ResolveContextRecovery(db, tx, fact.ChatId, result, operation);
             ToolResultWireReadResult wire; string error;
             if (!ToolResultHistoryReader.TryRead(result, out wire, out error)) throw new InvalidDataException(error);
             if (wire.Result.Status != ToolResultStatus.Ok || result.ResourceEffect != null || result.EvidenceReference != null)
@@ -227,7 +269,7 @@ namespace RNAssistant.Core.Storage
             var retry = recovery?.RetryPolicy ?? ToolRetryPolicy.None;
             if (unknown || retry != ToolRetryPolicy.None)
             {
-                using (var command = Command(db, "INSERT INTO context_required SELECT $stream,$chat,$operation,$run,$sequence,$unknown,$retry,$uri,$view,$read_scope,signature,$repeat_guard FROM call_fact WHERE stream=$stream AND chat=$chat AND run=$run AND call=$call", tx))
+                using (var command = Command(db, "INSERT INTO context_required SELECT $stream,$chat,$operation,$run,$sequence,$unknown,$retry,$uri,$view,$read_scope,signature,$repeat_guard,$call,NULL FROM call_fact WHERE stream=$stream AND chat=$chat AND run=$run AND call=$call", tx))
                 {
                     command.Parameters.AddWithValue("$chat", fact.ChatId); command.Parameters.AddWithValue("$operation", operation);
                     command.Parameters.AddWithValue("$run", result.RunId); command.Parameters.AddWithValue("$sequence", position.Sequence);
@@ -262,8 +304,9 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        private void ResolveContextRecovery(SqliteConnection db, SqliteTransaction tx, string chat, ChatMessage result)
+        private void ResolveContextRecovery(SqliteConnection db, SqliteTransaction tx, string chat, ChatMessage result, string operation)
         {
+            ResolveNativeOperation(db, tx, chat, result, operation);
             foreach (var evidence in result.ResourceEvidence ?? new List<ResourceEvidence>())
             {
                 var whole = evidence.Complete && evidence.Coverage.Kind == ResourceCoverageKinds.Whole;
@@ -295,6 +338,45 @@ namespace RNAssistant.Core.Storage
                         command.Parameters.AddWithValue("$change", (int)ToolRetryPolicy.ChangeRequired);
                         command.Parameters.AddWithValue("$uri", impact.Identity.Uri); command.Parameters.AddWithValue("$revision", impact.After.Revision);
                     });
+            }
+        }
+
+        private void ResolveNativeOperation(SqliteConnection db, SqliteTransaction tx, string chat, ChatMessage result, string observationOperation)
+        {
+            if (result.ExecutionProgress?.IndependentLocalRead != true) return;
+            foreach (var evidence in result.ResourceEvidence ?? new List<ResourceEvidence>())
+            {
+                var observation = evidence.OperationObservation;
+                if (observation == null || !observation.ExecutionStopped || !observation.SafeToInvokeAgain) continue;
+                var reference = observation.Operation;
+                var candidates = new List<string>();
+                using (var command = Command(db, "SELECT operation FROM context_required WHERE stream=$stream AND chat=$chat AND run=$run AND call=$call AND signature=$signature AND repeat_guard=1", tx))
+                {
+                    command.Parameters.AddWithValue("$chat", chat);
+                    command.Parameters.AddWithValue("$run", reference.RunId);
+                    command.Parameters.AddWithValue("$call", reference.CallId);
+                    command.Parameters.AddWithValue("$signature", reference.CallSignature);
+                    using (var reader = command.ExecuteReader()) while (reader.Read()) candidates.Add(reader.GetString(0));
+                }
+                foreach (var candidate in candidates)
+                {
+                    // The exact chat/run/call projection was created from an accepted
+                    // terminal (or its validated fork). Read its canonical bytes in
+                    // this transaction without re-entering the read-only context path.
+                    var receipt = Find(db, candidate, tx);
+                    if (receipt == null) throw new InvalidDataException("Native operation projection has no canonical terminal.");
+                    var prior = receipt.Fact.Result;
+                    if (prior.ToolCallId != reference.CallId || !observation.Resolves(prior.ExecutionProgress, evidence)) continue;
+                    // Derived replay authority only. The original Unknown fact and
+                    // any uncertainty about data content remain immutable history.
+                    using (var command = Command(db, "UPDATE context_required SET repeat_guard=0,resolved_by=$resolution WHERE stream=$stream AND chat=$chat AND operation=$operation", tx))
+                    {
+                        command.Parameters.AddWithValue("$chat", chat);
+                        command.Parameters.AddWithValue("$operation", candidate);
+                        command.Parameters.AddWithValue("$resolution", observationOperation);
+                        command.ExecuteNonQuery();
+                    }
+                }
             }
         }
 

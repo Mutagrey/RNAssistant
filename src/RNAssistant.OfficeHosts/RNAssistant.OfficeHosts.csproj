@@ -102,6 +102,11 @@
     <Compile Include="Excel\ExcelInteropBackend.cs" />
     <Compile Include="Excel\ExcelSheetInteropBackend.cs" />
     <Compile Include="Excel\ExcelTableInteropBackend.cs" />
+    <Compile Include="Excel\ExcelPowerQueryInteropBackend.cs" />
+    <Compile Include="Excel\ExcelPowerQueryInteropBackend.Bindings.cs" />
+    <Compile Include="Excel\ExcelPowerQueryInteropBackend.Refresh.cs" />
+    <Compile Include="Excel\ExcelPowerQueryInteropBackend.Load.cs" />
+    <Compile Include="Excel\ExcelPowerQueryInteropBackend.Errors.cs" />
     <Compile Include="Identity\DocumentIdentity.cs" />
     <Compile Include="InProcessPanelSession.cs" />
     <Compile Include="OutlookAdapter.cs" />

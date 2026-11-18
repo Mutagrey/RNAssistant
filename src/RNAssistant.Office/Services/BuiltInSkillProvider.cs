@@ -163,6 +163,10 @@ namespace RNAssistant.Office.Services
                     case "skills.excel.analysis.reporting": ids.AddRange(new[] {
                         "excel.inspect", "excel.sheet.add", "excel.range.write", "excel.table.add",
                         "excel.range.format", "excel.chart.upsert", "excel.chat.chart.create" }); break;
+                    case "skills.excel.powerquery":
+                        ids.Remove("resources.outline");
+                        ids.AddRange(new[] { "core.write", "core.patch", "excel.query.create", "excel.query.validate",
+                            "excel.query.refresh", "excel.query.load", "excel.columns.summarize" }); break;
                     case "skills.word.document.editing": ids.AddRange(new[] {
                         "word.inspect", "word.text.find", "word.text.replace", "word.text.write",
                         "word.text.format", "word.table.add", "word.page.break.insert", "word.comment.add" }); break;

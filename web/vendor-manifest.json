@@ -571,6 +571,63 @@
         }
       ],
       "gitHead": "6035014bca619c5aeb2076e13b8538bbc0a9ae6c"
+    },
+    {
+      "id": "powerquery-parser",
+      "npmPackage": "@microsoft/powerquery-parser",
+      "version": "5.0.0",
+      "license": "MIT",
+      "npmTarball": "https://registry.npmjs.org/@microsoft/powerquery-parser/-/powerquery-parser-5.0.0.tgz",
+      "npmIntegrity": "sha512-I5U/hDb4Lr5tdgeNy1VavkXS7DKdtdG0Y6/gsrEvgto44T0lrrL6s0pzPHp0DjN/4BH29NfrHnM5dD5jRFv+Mg==",
+      "npmTarballSha256": "d861c0edd7332abfc1b24674add65ff44372f62d6aab6e2bbd89f1b963acc10f",
+      "sourceRevision": "npm-tarball-only",
+      "sourceRevisionNotes": "The 5.0.0 npm release declares no gitHead. Its verified npm SHA-512 and tarball SHA-256 identify the acquired bytes. Monorepo commit 0eb2cc282fa594e9bd54c63b843e526878ef85d6 was inspected as API documentation; it is not asserted to be the tarball build commit.",
+      "internalOnly": true,
+      "packageDependencies": {
+        "grapheme-splitter": "^1.0.4",
+        "performance-now": "^2.1.0"
+      },
+      "bundledDependencies": [
+        {
+          "npmPackage": "grapheme-splitter",
+          "version": "1.0.4",
+          "npmTarball": "https://registry.npmjs.org/grapheme-splitter/-/grapheme-splitter-1.0.4.tgz",
+          "npmIntegrity": "sha512-bzh50DW9kTPM00T8y4o8vQg89Di9oLJVLW/KaOGIXJWP/iqCN6WKYkbNOF04vFLJhwcpYUh9ydh/+5vpOqV4YQ==",
+          "npmTarballSha256": "7615f25fb6d0196bf7c407423de690e2d379cf26542b09b40c5eddadb2321931",
+          "gitHead": "0609d90dcbc93b42d8ceebb7aec0eda38b5d916d",
+          "license": "MIT"
+        },
+        {
+          "npmPackage": "performance-now",
+          "version": "2.1.0",
+          "npmTarball": "https://registry.npmjs.org/performance-now/-/performance-now-2.1.0.tgz",
+          "npmIntegrity": "sha512-7EAHlyLHI56VEIdK57uwHdHKIaAGbnXPiw0yWbarQZOKaKpvUIgW0jWRVLiatnM+XXlSwsanIBH/hzGMJulMow==",
+          "npmTarballSha256": "068f99ddeff11741bd1ebbbe3ee4c6f782731bd9ae0a2d598536cce74e289045",
+          "gitHead": "107bb703494cc5a8071cdf45a87e53f248a5e0f3",
+          "license": "MIT"
+        }
+      ],
+      "browserRuntimeDependencies": [],
+      "dependencyNotes": "Fixed offline expression-syntax analyzer only, loaded in the dedicated isolated Power Query Worker. Dependencies are bundled. Not exposed in the authored HTML/plugin vendor catalog and not loaded by Shell startup. No Node runtime, runtime package restore, evaluation engine, CDN or source-map request.",
+      "buildInputsLock": "tools/powerquery-parser.lock.json",
+      "licenseFiles": [
+        {
+          "path": "licenses/powerquery-parser-5.0.0/grapheme-splitter-LICENSE.txt",
+          "sha256": "80420e1ac2df657805043343290631f7f709e821c5f6c97fb7699dc362fcd049"
+        },
+        {
+          "path": "licenses/powerquery-parser-5.0.0/parser-LICENSE.txt",
+          "sha256": "dea9265341829002e2c23a7372393eb2ed6e26085fb623f38a4ba0af833f30a6"
+        },
+        {
+          "path": "licenses/powerquery-parser-5.0.0/parser-NOTICE.txt",
+          "sha256": "55e1308cc0c3d73822d6d1357925f5edde19aae3167c4af80a8c084b266bdc36"
+        },
+        {
+          "path": "licenses/powerquery-parser-5.0.0/performance-now-LICENSE.txt",
+          "sha256": "c3af1272f30870168177e888b184c1f802e5081e75a126c794670c0b562d3783"
+        }
+      ]
     }
   ],
   "files": [
@@ -954,6 +1011,14 @@
       "bytes": 561173,
       "sha256": "e4b6a433d5af93cef6bfcb456906844d1fc048679979dd2f540bce68b8488f55",
       "provenanceUrl": "https://unpkg.com/dockview-core@8.8.3/dist/dockview-core.min.js"
+    },
+    {
+      "path": "js/vendor/powerquery-parser-5.0.0.js",
+      "package": "powerquery-parser",
+      "bytes": 609916,
+      "sha256": "c3529d675c5b3a0f4938948a48d0a739978e4b6176ff709fd07e637bd55df8c0",
+      "provenanceUrl": "https://registry.npmjs.org/@microsoft/powerquery-parser/-/powerquery-parser-5.0.0.tgz",
+      "localTransform": "Deterministic browser IIFE built by esbuild 0.25.12 from exact published CommonJS modules and fixed dependencies; full input hashes and settings are in tools/powerquery-parser.lock.json. No source maps."
     }
   ]
 }

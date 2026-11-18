@@ -105,6 +105,117 @@ section and repair locks, verifies typed `index_sections_busy` / `index_repair_b
 bounds both waits and confirms intent leases are released. The mandatory durable
 write remains a separate owner.
 
+## Power Query current-main integration — 2026-11-18
+
+`17.4.0-dev` combines the source/worksheet and offline syntax slices on current `main`
+at `650aa2d6213ee20780da84b54dfd31520c4cf4b5`; the patch itself was prepared against
+`8963150f2294750d6a286a519748e52063570473` (`17.3.10-dev`). Fresh host-neutral results
+on this tree: Harness build 0 errors / 2 existing PDF warnings. The focused filters
+`power query:` (10/10), `power query syntax:` (3/3), `power query native receipts:`
+(2/2), and the full existing `native tools:` filter (18/18) pass: 33 cases total.
+
+The native receipt cases use actual conversation/resource journals plus a fake
+Excel backend. Source read → accepted patch → exact nested owner receipt → rebuild
+exposed and now covers the source-only `rawContentIncluded` flag. Complete/partial
+coverage and the observation guard remain unchanged. Unknown → accepted exact
+stopped observation → new refresh preserves the original immutable Unknown receipt.
+
+JS parser 4 groups, fixed page/worker transport 4 groups and vendor gate 7/7 pass
+on this tree; the pinned offline bundle rebuild was not rerun. These checks do not
+launch native WebView2 or Excel. The passing counts and
+**55 passed / 8 failed / 63 cases** result in the two Power Query sections below are
+historical observations on the earlier `06664fc`-based patch only. They are not
+results for the current tree; the disposition of the eight old failures remains
+unchecked. No Windows/Office/VSTO/WebView2 qualification is implied by either the
+old evidence or the integration itself.
+
+## Power Query syntax continuation — 2026-11-16
+
+Historical result on the earlier `06664fc`-based patch: `power query syntax:`
+passed 3/3. It executes the actual Validate handler with a deferred analyzer: exact
+source/CAS capture, release of the real document gate during analysis, live M drift,
+retained source refs and no implicit
+whole-source observation grant. Strict result checks cover request/hash/version,
+missing or numeric status, contradictory verdicts, bounded diagnostics and UTF-16
+offsets/CRLF positions. Bounds, unavailable host, provider faults/timeouts and user
+cancellation stay separate from syntax failure. On that same historical tree,
+`power query:` passed 10/10 with the extended stopped/unverified and closure cases below.
+
+Historical upstream parser check: `node tests/web/powerquery-parser.test.js` passed 4
+groups in a JS VM without Node globals/network; grammar/Unicode, first lexical or
+parse failure, expression-only mode, bounds and internal failure classification.
+`node tests/web/powerquery-host.test.js` covers the fixed page/worker handshake,
+exact request forwarding, mismatch/duplicate/oversize/failure and termination.
+`node tests/web/vendor-gate.test.js` passed 7/7 on that earlier tree. The
+development-only pinned bundle rebuild is documented in `web/licenses/powerquery-parser-5.0.0/README.md` and checked
+byte-identically; Node/esbuild are not product runtime dependencies.
+
+The earlier Harness build had 0 errors / 2 existing PDF warnings. Actual Windows
+WebView2 controller creation, worker interception and native cleanup/deadline behavior are
+not exercised by JS mocks or the source-linked controller build; they remain open.
+The eight failures confirmed on the old baseline were not included in those
+13 focused passing cases. Their disposition on `8963150` requires a new run.
+
+## Power Query — 2026-11-16
+
+Run `power query:` for the 10 focused cases. Coverage includes exact semantic
+source reads without execution, metadata-only discovery, unsupported-name
+incompleteness, Unicode/CRLF and bounded revision cursors; shared source
+patch/write/create guards and exact readback; exact Mashup provider/Location;
+complete loaded-data checks, shape/source drift and native boolean error masks.
+
+Lifecycle cases cover timeout versus cancellation, one native dispatch/terminal,
+late status reads while the native gate is held, wrong view/session/authority,
+partial load objects, stopped/closed ownership and dispatcher disposal. Injected
+terminal publication failures test immediate and late completion without a second
+callback or a known-stopped gate leak. Durable cases cover exact generation/call,
+newer same-signature Unknown, bounded restore and disposable-index rebuild.
+Stopped-but-unverified completion is covered separately: the original Unknown is
+preserved, fresh independent status permits a new invocation, stale/immutable
+observations do not, and a closed session never supplies safe replay authority.
+These use native fakes plus the real neutral gate/STA dispatcher; no Excel COM is
+executed. A fixture cannot establish native prompt, overflow, mask or VSTO behavior.
+
+```sh
+dotnet build tests/RNAssistant.Harness/RNAssistant.Harness.csproj --no-restore -v:q
+dotnet tests/RNAssistant.Harness/bin/Debug/net8.0/RNAssistant.Harness.dll "power query:"
+dotnet build demo/RNAssistant.MockDemo/RNAssistant.MockDemo.csproj --no-restore -v:q
+dotnet msbuild tests/RNAssistant.Harness/RNAssistant.Harness.csproj -t:ValidateVersionFormat -nologo -v:minimal
+node --check web/js/app-tool-result-preview.js
+```
+
+MockDemo compilation includes the actual controller/application composition and
+is host-neutral. The existing `tests/web/tool-result-presentation.test.js` needs
+Chromium: this environment's managed binary is absent, and system Chromium fails
+at process-singleton `socket()` with EPERM. Its browser/visual result is **not
+qualified**; no environment restriction is bypassed. Windows x64 / Office x64 /
+Framework/VSTO verification stays open in
+[RISK_REGISTER](../../docs/stabilization/RISK_REGISTER.md#power-query-native-qualification--2026-11-16).
+
+Historical selection on the old `06664fc`-based patch: **55 passed / 8 failed /
+63 cases**. The initial Power Query group passed 10/10; existing groups: HostRuntime 10/10, indexed context 1/1,
+journal fork 11/11, atomic authority 1/1, completion inspection 1/1, source
+inclusion 1/1, context continuity 15/18 and kernel replay 5/10. Harness build:
+0 errors / 2 existing PDF warnings. Actual-controller MockDemo build: 0 errors /
+11 existing warnings. Version format, source inclusion, JS syntax and diff checks
+passed on that historical tree. No full-suite or native Office qualification is claimed.
+
+Eight existing regression failures were reproduced identically on pristine
+`06664fc35edb1b70794255fb201febebb7da8d46`, without Power Query changes:
+
+- `context continuity: source-bound failure becomes historical` — archived diagnostic hydration expectation.
+- `context continuity: archived diagnostics preserve exact payloads` — incompatible retained tool-result fixture.
+- `context continuity: archived operation materialization is bounded` — missing expected archived item.
+- `kernel replay: normal effect and own trace CAS` — infrastructure finish lacks explicit model outcome.
+- `kernel replay: write error` — same finish/outcome fixture mismatch.
+- `kernel replay: confirmation and stale cursor` — scripted `skills.upsert` terminal expectation.
+- `kernel replay: cancelled confirmation` — scripted queue exhausted before confirmation.
+- `kernel replay: known effect survives model preparation failure` — same confirmation queue issue.
+
+BACKLOG retains these as historical findings pending recheck on `8963150`; no
+validator was weakened for them. Do not infer either current failures or an entirely
+green broader Harness from those old runs or from the focused Power Query cases.
+
 ## Browser repeated reset ownership — 2026-11-16
 
 Node `bridge-bootstrap.test.js` now also recreates one Browser tab ID twice, disposes

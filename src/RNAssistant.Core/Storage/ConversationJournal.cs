@@ -500,10 +500,10 @@ namespace RNAssistant.Core.Storage
             return RNAssistant.Core.Tools.TextPatternEngine.Sha256(value.ToString(Formatting.None));
         }
 
-        private ConversationResultReceipt Find(SqliteConnection db, string operation)
+        private ConversationResultReceipt Find(SqliteConnection db, string operation, SqliteTransaction transaction = null)
         {
             if (operation == null) return null;
-            using (var command = Command(db, "SELECT fingerprint,segment,start_offset,end_offset,sequence,hash,first_sequence FROM result_fact WHERE stream=$stream AND operation=$operation"))
+            using (var command = Command(db, "SELECT fingerprint,segment,start_offset,end_offset,sequence,hash,first_sequence FROM result_fact WHERE stream=$stream AND operation=$operation", transaction))
             {
                 command.Parameters.AddWithValue("$operation", operation);
                 string fingerprint; JournalCursor position;

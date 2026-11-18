@@ -153,7 +153,8 @@ namespace RNAssistant.Office.Services
             string query,
             string scope)
         {
-            query = (query ?? string.Empty).Trim();
+            query = query ?? string.Empty;
+            if (!query.StartsWith(ExcelResourceProvider.QueryPrefix, StringComparison.Ordinal)) query = query.Trim();
             scope = NormalizeIntentScope(scope);
             var direct = ResolveDirectIntentQuery(session, query, scope);
             if (direct != null)
@@ -183,6 +184,7 @@ namespace RNAssistant.Office.Services
                 };
             }
             var unavailable = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var unavailableFailures = new Dictionary<string, ResourceRequestException>(StringComparer.OrdinalIgnoreCase);
             var sourceTruncated = false;
             var plans = IntentPlansForScope(scope).ToList();
             if (!string.Equals(scope, "all", StringComparison.Ordinal) &&
@@ -191,7 +193,7 @@ namespace RNAssistant.Office.Services
                 unavailable.Add(scope);
             }
             var states = EnumerateIntentResources(
-                session, plans, unavailable, null, ref sourceTruncated);
+                session, plans, unavailable, unavailableFailures, ref sourceTruncated);
             Dictionary<string, ResourceSearchMatch> matches = null;
             if (query.Length > 0)
             {
@@ -242,7 +244,9 @@ namespace RNAssistant.Office.Services
 
 
                 AvailabilityHint = unavailable.Count == 0 ? null :
-                    "Discovery is incomplete for unavailableScopes. Explicit message attachment targets can still be read directly. Restore unavailable sources or search a healthy scope; do not infer absence or generic target uniqueness within an unavailable scope. Repeat only after availability changes.",
+                    "Discovery is incomplete for unavailableScopes. Explicit message attachment targets can still be read directly. Restore unavailable sources or search a healthy scope; do not infer absence or generic target uniqueness within an unavailable scope. Repeat only after availability changes." +
+                    string.Concat(unavailableFailures.Values.Where(failure => failure.ErrorCode == "excel_query_names_unavailable")
+                        .Select(failure => " " + failure.Message)),
 
                 UnavailableScopes = unavailable
                     .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
@@ -303,6 +307,9 @@ namespace RNAssistant.Office.Services
             if (query.StartsWith("Excel name: ", StringComparison.Ordinal))
                 return excel == null ? null : WithProvider(excel, session,
                     () => excel.ResolveName(session, query.Substring(12)));
+            if (query.StartsWith(ExcelResourceProvider.QueryPrefix, StringComparison.Ordinal))
+                return excel == null ? null : WithProvider(excel, session,
+                    () => excel.ResolveQuery(session, ExcelResourceProvider.QueryNameFromTarget(query)));
             if (query.IndexOf('!') > 0)
                 return excel == null ? null : WithProvider(excel, session,
                     () => excel.ResolveRange(session, query));
@@ -342,7 +349,8 @@ namespace RNAssistant.Office.Services
             ChatSession session,
             string target, bool allowUniqueBase = false)
         {
-            target = (target ?? string.Empty).Trim();
+            target = target ?? string.Empty;
+            if (!target.StartsWith(ExcelResourceProvider.QueryPrefix, StringComparison.Ordinal)) target = target.Trim();
             if (target.Length == 0)
             {
                 throw new ResourceRequestException(
@@ -508,6 +516,14 @@ namespace RNAssistant.Office.Services
                 return new ResourceIntentTarget { Target = IntentTarget(descriptor), Type = "Excel name", Scope = "document",
                     Descriptor = descriptor, Reference = descriptor.Reference };
             }
+            if (target.StartsWith(ExcelResourceProvider.QueryPrefix, StringComparison.Ordinal))
+            {
+                var excel = _registry.All().OfType<ExcelResourceProvider>().SingleOrDefault();
+                if (excel == null) throw new ResourceRequestException("Excel resource provider is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
+                var descriptor = WithProvider(excel, session, () => excel.ResolveQuery(session, ExcelResourceProvider.QueryNameFromTarget(target)));
+                return new ResourceIntentTarget { Target = IntentTarget(descriptor), Type = "Excel query", Scope = "document",
+                    Descriptor = descriptor, Reference = descriptor.Reference };
+            }
             if (target.StartsWith("Excel table: ", StringComparison.Ordinal))
             {
                 var excel = _registry.All().OfType<ExcelResourceProvider>().SingleOrDefault();
@@ -661,7 +677,15 @@ namespace RNAssistant.Office.Services
                         // A normal page is completed by its continuation. Terminal
                         // truncation is missing source coverage, not a finished catalog.
                         if (page.Truncated && string.IsNullOrWhiteSpace(page.NextCursor)) truncated = true;
-                        if (page.UnavailableResources > 0) unavailable.Add(plan.Scope);
+                        if (page.UnavailableResources > 0)
+                        {
+                            unavailable.Add(plan.Scope);
+                            if (plan.Kind == ExcelResourceProvider.QueryKind && failures != null)
+                                failures["excel-query:names"] = new ResourceRequestException(
+                                    page.UnavailableResources.ToString(CultureInfo.InvariantCulture) +
+                                    " Power Query names are outside the supported exact semantic/URI name rules and were omitted. Supported query targets remain readable; this catalog does not prove absence.",
+                                    "excel_query_names_unavailable", false);
+                        }
                         foreach (var descriptor in page.Items ??
                             new List<ResourceDescriptor>())
                         {
@@ -777,6 +801,8 @@ namespace RNAssistant.Office.Services
                     yield return new ResourceIntentPlan(provider, ExcelResourceProvider.SearchKind, "document");
                     yield return new ResourceIntentPlan(provider, ExcelResourceProvider.TableKind, "document");
                     yield return new ResourceIntentPlan(provider, ExcelResourceProvider.NameKind, "document");
+                    if (((ExcelResourceProvider)provider).PowerQueryBackend != null)
+                        yield return new ResourceIntentPlan(provider, ExcelResourceProvider.QueryKind, "document");
                 }
                 else if (provider is CatalogResourceProvider)
                 {
@@ -923,6 +949,8 @@ namespace RNAssistant.Office.Services
                 return "Read text for compact conversation groups ranked by message count. Grouping without ConversationID is approximate; samples do not prove decisions or complete issue coverage. Open cited archive pages and rows for evidence.";
             if (type == "Excel search scope")
                 return "Discovery only: use excel.cells.find with a query. Do not read this target to enumerate worksheet data; read an Excel range, table, or name target instead.";
+            if (type == "Excel query")
+                return "Read source for exact M and edit through core.patch/write. Read bindings for loaded table targets, status for the session observer, and dependencies for analysis coverage. Source reads/edits never execute M. excel.query.refresh executes the selected worksheet load; read its Excel table separately and report verification coverage.";
             if (type == "Excel range" && ExcelResourceProvider.NeedsRangeOverview(descriptor))
                 return "Read structure for dimensions and small sample targets, then read selected targets for values. Samples cannot establish whole-range totals; excel.cells.find locates text.";
             if (descriptor.Kind == LiveDocumentResourceProvider.DocumentKind &&
@@ -1142,6 +1170,7 @@ namespace RNAssistant.Office.Services
                 case "Excel range": return "document";
                 case "Excel table": return "document";
                 case "Excel name": return "document";
+                case "Excel query": return "document";
                 case "Excel search scope": return "document";
                 case "Outlook attachment":
                 case "Outlook mail":
@@ -1196,6 +1225,7 @@ namespace RNAssistant.Office.Services
                 case ExcelResourceProvider.RangeKind: return "Excel range";
                 case ExcelResourceProvider.TableKind: return "Excel table";
                 case ExcelResourceProvider.NameKind: return "Excel name";
+                case ExcelResourceProvider.QueryKind: return "Excel query";
                 case ExcelResourceProvider.SearchKind: return "Excel search scope";
                 case LiveDocumentResourceProvider.OutlookAttachmentKind: return "Outlook attachment";
                 case LiveDocumentResourceProvider.OutlookMailKind: return "Outlook mail";
@@ -1238,6 +1268,7 @@ namespace RNAssistant.Office.Services
             if (type == "Excel search scope") return "document";
             if (type == "Excel table") return "document";
             if (type == "Excel name") return "document";
+            if (type == "Excel query") return "document";
             if (type == "Outlook search scope") return "document";
             if (string.Equals(type, "document", StringComparison.Ordinal) || type == "Excel range" || type == "Word range" || type == "Word search scope" || type == "PowerPoint search scope" || type == "PowerPoint slide" || type == "PowerPoint notes" || type == "Outlook attachment" || type == "Outlook mail" || type == "Outlook collection" || type == "Outlook archive page" || type == "Outlook archive digest" || type == "Outlook archive mail" || type == "Office observation") return "document";
             if (string.Equals(type, "selection", StringComparison.Ordinal)) return "selection";

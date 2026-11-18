@@ -17,8 +17,17 @@ using TerminalResult = RNAssistant.Core.Tools.Contracts.ToolResult;
 
 namespace RNAssistant.Office.Services
 {
-    internal sealed partial class ConversationKernelAdapter
+    internal sealed partial class ConversationKernelAdapter : IRunOperationResolutionReader
     {
+        public Task<ResourceEvidence> ReadOperationResolutionAsync(ToolOperationReference operation,
+            long expectedRevision, CancellationToken cancellationToken)
+        {
+            if (expectedRevision != _cursor) throw new InvalidOperationException("Stale operation-resolution cursor.");
+            cancellationToken.ThrowIfCancellationRequested();
+            var reader = _eventStore as IToolOperationResolutionStore;
+            return Task.FromResult(reader?.ReadOperationResolution(ConversationMetadata.From(_session), operation));
+        }
+
         public Task<ToolExecutionProgress> ReadReplayGuardAsync(ToolCall call,
             long expectedRevision, CancellationToken cancellationToken)
         {

@@ -16,12 +16,16 @@ namespace RNAssistant.Office.Services
         internal const string RangeKind = "excel-range";
         private readonly ExcelReadService _reader;
         private readonly LiveOfficeResourceScope _scope;
+        private readonly IOfficeApplicationAdapter _powerQueryAdapter;
         private readonly RNAssistant.Core.Storage.ChatBlobStore _payloads;
+        internal IExcelPowerQueryBackend PowerQueryBackend { get; private set; }
         public string Id { get { return ProviderName; } }
         internal ExcelResourceProvider(IOfficeApplicationAdapter adapter, IExcelReadBackend backend,
             RNAssistant.Core.Storage.ChatBlobStore payloads)
         { _reader = new ExcelReadService(backend); _scope = new LiveOfficeResourceScope(adapter); _payloads = payloads;
-            _searchBackend = (adapter as IExcelBackendProvider)?.ExcelFindReplaceBackend; }
+            _powerQueryAdapter = adapter;
+            _searchBackend = (adapter as IExcelBackendProvider)?.ExcelFindReplaceBackend;
+            PowerQueryBackend = (adapter as IExcelPowerQueryBackendProvider)?.ExcelPowerQueryBackend; }
 
         internal ResourceDescriptor ResolveRange(ChatSession session, string target)
         {
@@ -41,6 +45,7 @@ namespace RNAssistant.Office.Services
             {
                 if (kind == TableKind) return ListTables(session, cursor, limit);
                 if (kind == NameKind) return ListNames(session, cursor, limit);
+                if (kind == QueryKind) return ListQueries(session, cursor, limit);
                 var structure = _reader.CaptureStructure(kind == SearchKind ? "sheets" : "workbook");
                 List<ResourceDescriptor> items;
                 if (kind == SearchKind)
@@ -61,11 +66,13 @@ namespace RNAssistant.Office.Services
 
         public ResourceDescriptor Resolve(ChatSession session, string uri)
         {
+            if (IsQueryStatusUri(uri)) return ResolveQueryStatus(session, uri);
             return _scope.Read(session, () => {
                 var address = Parse(session, uri);
                 if (address.Segments[1] == "search") return DescribeSearch(session, SearchRequest(address));
                 if (address.Segments[1] == "table") return FindTable(session, address.Segments[2]);
                 if (address.Segments[1] == "name") return DescribeName(session, FindName(address.Segments[2]));
+                if (address.Segments[1] == "query") return DescribeQuery(session, ReadQuerySnapshot(address.Segments[2]));
                 return Describe(session, address.Segments[2], address.Segments[3]);
             });
         }
@@ -76,6 +83,7 @@ namespace RNAssistant.Office.Services
             var items = page.Items.Where(item => item.Title.IndexOf(query ?? "", StringComparison.OrdinalIgnoreCase) >= 0).ToList();
             var maximum = Math.Max(1, Math.Min(20, limit));
             return new ResourceSearchResult { Query = query, ScanTruncated = page.Truncated || items.Count > maximum,
+                UnavailableResources = page.UnavailableResources,
                 Matches = items.Take(maximum)
                 .Select(item => new ResourceSearchMatch { Reference = item.Reference, Title = item.Title, Kind = item.Kind, Representation = "metadata" }).ToList() };
         }
@@ -83,12 +91,15 @@ namespace RNAssistant.Office.Services
         public ResourceReadSelection Read(ChatSession session, ResourceReadRequest request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (IsQueryStatusUri(request.Reference.Uri))
+                throw Error("RESOURCE_VIEW_UNSUPPORTED", "Read the session-owned Power Query status through the shared resource gateway.");
             return _scope.Read(session, () =>
             {
                 var parsed = Parse(session, request.Reference.Uri);
                 if (parsed.Segments[1] == "search") return ReadSearch(session, request, parsed, cancellationToken);
                 if (parsed.Segments[1] == "table") return ReadTable(session, request, parsed.Segments[2]);
                 if (parsed.Segments[1] == "name") return ReadName(session, request, parsed.Segments[2]);
+                if (parsed.Segments[1] == "query") return ReadQuery(session, request, parsed.Segments[2]);
                 var view = string.IsNullOrWhiteSpace(request.Representation) || request.Representation == "auto" ? "text" : request.Representation;
                 if (view != "text" && view != "formulas" && view != "structure") throw Error("RESOURCE_VIEW_UNSUPPORTED", "This range supports text, formulas, structure (profile), table and records views.");
                 var range = parsed.Segments[3];
@@ -105,7 +116,8 @@ namespace RNAssistant.Office.Services
             });
         }
 
-        private ResourceReadSelection SelectCapture(ResourceReadRequest request, ResourceDescriptor descriptor, string text, string view)
+        private ResourceReadSelection SelectCapture(ResourceReadRequest request, ResourceDescriptor descriptor, string text, string view,
+            string mimeType = "application/json")
         {
             var hash = TextPatternEngine.Sha256(text);
             var binding = ResourceReadCursor.ReadBinding(request.Reference.Uri, view);
@@ -119,7 +131,7 @@ namespace RNAssistant.Office.Services
             descriptor.Reference = new ResourceRef(request.Reference.Uri, hash);
             return new ResourceReadSelection { Result = new ResourceReadResult { Resource = descriptor, Representation = view,
                 Text = text.Substring(position.Offset, count), ContentSha256 = hash, Offset = position.Offset,
-                CompleteViewPayload = _payloads == null ? null : PayloadRef.FromBlob(_payloads.StoreText(text, "application/json")),
+                CompleteViewPayload = _payloads == null ? null : PayloadRef.FromBlob(_payloads.StoreText(text, mimeType)),
                 ReturnedCharacters = count, TotalCharacters = text.Length, Complete = next == text.Length, Truncated = next < text.Length,
                 NextCursor = next < text.Length ? ResourceReadCursor.CreateRevisionBound(next, hash, binding) : null },
                 ResourceRefs = new[] { descriptor.Reference.Copy() } };
@@ -143,6 +155,9 @@ namespace RNAssistant.Office.Services
         private ResourceAddress Parse(ChatSession session, string uri)
         {
             var address = ResourceUri.Parse(uri);
+            if (address.Provider == Id && address.Segments.Count == 3 && address.Segments[1] == "query" &&
+                _scope.MatchesDocumentToken(session, address.Segments[0]) && ValidateQueryName(address.Segments[2]) == address.Segments[2])
+                return address;
             if (address.Provider == Id && address.Segments.Count == 3 && address.Segments[1] == "name" &&
                 _scope.MatchesDocumentToken(session, address.Segments[0]) && NormalizeName(address.Segments[2]) == address.Segments[2])
                 return address;

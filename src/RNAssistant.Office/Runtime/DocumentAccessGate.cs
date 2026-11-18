@@ -27,6 +27,15 @@ namespace RNAssistant.Office.Runtime
             return new OperationScope(previous, new object(), previous == null ? null : previous.Held);
         }
 
+        // Called only while the ordinary document gate is held. The retained
+        // owner keeps both the semaphore and the process lock alive after the
+        // admitting stack unwinds; ownership moves only through BeginExecution.
+        internal static RetainedAccess RetainCurrentAccess(string key, object boundGateToken,
+            IDisposable dispatcherLifetime = null)
+        {
+            return RetainedAccess.Retain(key, boundGateToken, dispatcherLifetime);
+        }
+
         internal static IDisposable Enter(
             string key,
             object boundGateToken,
@@ -58,7 +67,7 @@ namespace RNAssistant.Office.Runtime
                 ValidateOrder(scope, isDocumentAccess);
 
                 var elapsed = Stopwatch.StartNew();
-                entry = RetainEntry(key, boundGateToken, isDocumentAccess);
+                entry = RetainEntry(key, boundGateToken, isDocumentAccess, scope.Reservation);
                 if (!entry.Semaphore.Wait(mayWait ? RemainingWait(elapsed) : 0, token)) throw Busy();
                 semaphoreHeld = true;
                 token.ThrowIfCancellationRequested();
@@ -93,6 +102,7 @@ namespace RNAssistant.Office.Runtime
             if (action == null) throw new ArgumentNullException("action");
             var source = _current;
             var operation = source != null && source.TaskId == Task.CurrentId ? source.Operation : null;
+            var reservation = source != null && source.TaskId == Task.CurrentId ? source.Reservation : null;
             var held = source == null ? null : source.Held;
             for (var frame = held; frame != null; frame = frame.Previous)
                 if (!frame.Disposed && !ReferenceEquals(frame.Owner.Operation, operation)) throw Busy();
@@ -105,7 +115,7 @@ namespace RNAssistant.Office.Runtime
                 {
                     if (!frame.Disposed && !ContainsOwner(held, frame.Owner)) throw Busy();
                 }
-                using (new OperationScope(previous, operation, held)) return action();
+                using (new OperationScope(previous, operation, held, reservation)) return action();
             });
         }
 
@@ -133,7 +143,8 @@ namespace RNAssistant.Office.Runtime
             }
         }
 
-        private static GateEntry RetainEntry(string key, object boundGateToken, bool isDocumentAccess)
+        private static GateEntry RetainEntry(string key, object boundGateToken, bool isDocumentAccess,
+            RetainedAccess reservation)
         {
             lock (RegistryLock)
             {
@@ -144,6 +155,8 @@ namespace RNAssistant.Office.Runtime
                     Entries.Add(key, entry);
                 }
                 else ValidateEntryUnderLock(entry, boundGateToken, isDocumentAccess);
+                if (entry.Reservation != null && !ReferenceEquals(entry.Reservation, reservation))
+                    throw Busy();
                 entry.References++;
                 return entry;
             }
@@ -221,6 +234,7 @@ namespace RNAssistant.Office.Runtime
             internal readonly SemaphoreSlim Semaphore = new SemaphoreSlim(1, 1);
             internal object BoundToken;
             internal int References;
+            internal RetainedAccess Reservation;
 
             internal GateEntry(string key, object boundToken, bool isDocumentAccess)
             {
@@ -234,15 +248,18 @@ namespace RNAssistant.Office.Runtime
         {
             internal readonly object Operation;
             internal readonly int? TaskId;
+            internal readonly RetainedAccess Reservation;
             internal HeldFrame Held;
             private readonly OperationScope _previous;
             private int _disposed;
 
-            internal OperationScope(OperationScope previous, object operation, HeldFrame held)
+            internal OperationScope(OperationScope previous, object operation, HeldFrame held,
+                RetainedAccess reservation = null)
             {
                 _previous = previous;
                 Operation = operation;
                 TaskId = Task.CurrentId;
+                Reservation = reservation;
                 Held = held;
                 _current = this;
             }
@@ -253,6 +270,118 @@ namespace RNAssistant.Office.Runtime
                 var previous = _previous;
                 while (previous != null && previous._disposed != 0) previous = previous._previous;
                 _current = previous;
+            }
+        }
+
+        internal sealed class RetainedAccess : IDisposable
+        {
+            private readonly object _sync = new object();
+            private HeldGate _owner;
+            private bool _executing;
+            private bool _disposeRequested;
+            private readonly IDisposable _dispatcherLifetime;
+
+            private RetainedAccess(HeldGate owner, IDisposable dispatcherLifetime)
+            {
+                _owner = owner;
+                _dispatcherLifetime = dispatcherLifetime;
+            }
+
+            internal static RetainedAccess Retain(string key, object boundGateToken,
+                IDisposable dispatcherLifetime)
+            {
+                var scope = _current;
+                if (scope == null || scope.TaskId != Task.CurrentId)
+                    throw new InvalidOperationException("A current document operation is required for reservation.");
+                var owner = FindHeld(scope.Held, key);
+                if (owner == null || !ReferenceEquals(owner.Operation, scope.Operation) ||
+                    !owner.Entry.IsDocumentAccess)
+                    throw new InvalidOperationException("The exact document gate must be held before reservation.");
+                lock (RegistryLock)
+                {
+                    ValidateEntryUnderLock(owner.Entry, boundGateToken, true);
+                    if (owner.Entry.Reservation != null) throw Busy();
+                    var retained = new RetainedAccess(owner, dispatcherLifetime);
+                    owner.AddReference();
+                    owner.Entry.Reservation = retained;
+                    return retained;
+                }
+            }
+
+            internal bool IsDisposed { get { lock (_sync) return _disposeRequested; } }
+            internal bool IsExecuting { get { lock (_sync) return _executing; } }
+
+            internal IDisposable BeginExecution()
+            {
+                lock (_sync)
+                {
+                    if (_disposeRequested || _owner == null)
+                        throw new ObjectDisposedException(nameof(RetainedAccess));
+                    if (_executing) throw Busy();
+                    var previous = _current;
+                    for (var frame = previous == null ? null : previous.Held;
+                        frame != null; frame = frame.Previous)
+                        if (!frame.Disposed) throw Busy();
+                    _executing = true;
+                    var scope = new OperationScope(previous, _owner.Operation,
+                        new HeldFrame(_owner, null), this);
+                    return new RetainedExecution(this, scope);
+                }
+            }
+
+            public void Dispose()
+            {
+                HeldGate release = null;
+                lock (_sync)
+                {
+                    if (_disposeRequested) return;
+                    _disposeRequested = true;
+                    if (!_executing) { release = _owner; _owner = null; }
+                }
+                ReleaseReservation(release);
+            }
+
+            private void EndExecution()
+            {
+                HeldGate release = null;
+                lock (_sync)
+                {
+                    _executing = false;
+                    if (_disposeRequested) { release = _owner; _owner = null; }
+                }
+                ReleaseReservation(release);
+            }
+
+            private void ReleaseReservation(HeldGate owner)
+            {
+                if (owner == null) return;
+                lock (RegistryLock)
+                {
+                    if (ReferenceEquals(owner.Entry.Reservation, this))
+                        owner.Entry.Reservation = null;
+                }
+                try { owner.Release(); }
+                finally { if (_dispatcherLifetime != null) _dispatcherLifetime.Dispose(); }
+            }
+
+            private sealed class RetainedExecution : IDisposable
+            {
+                private RetainedAccess _owner;
+                private readonly IDisposable _scope;
+
+                internal RetainedExecution(RetainedAccess owner, IDisposable scope)
+                {
+                    _owner = owner;
+                    _scope = scope;
+                }
+
+                public void Dispose()
+                {
+                    var owner = Interlocked.Exchange(ref _owner, null);
+                    if (owner == null) return;
+                    try { _scope.Dispose(); }
+                    finally { owner.EndExecution(); }
+                }
             }
         }
 

@@ -21,11 +21,15 @@ namespace RNAssistant.Core.Agent
         private sealed class PendingInspection
         {
             internal ResourceIdentity Target;
+            internal string View;
+            internal ToolOperationReference Operation;
             internal DateTime? AfterUtc;
         }
         private readonly List<PendingInspection> _inspections = new List<PendingInspection>();
         private readonly HashSet<string> _unknown = new HashSet<string>(StringComparer.Ordinal);
         private readonly HashSet<string> _opaqueUnknown = new HashSet<string>(StringComparer.Ordinal);
+        private readonly Dictionary<string, ToolExecutionProgress> _nativeUnknown =
+            new Dictionary<string, ToolExecutionProgress>(StringComparer.Ordinal);
         private readonly Dictionary<string, Failure> _failures = new Dictionary<string, Failure>(StringComparer.Ordinal);
         private readonly Dictionary<string, string> _seenResults = new Dictionary<string, string>(StringComparer.Ordinal);
         private readonly Dictionary<string, int> _unchanged = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -71,6 +75,8 @@ namespace RNAssistant.Core.Agent
                 throw new InvalidOperationException("A replay guard must identify an unresolved dispatch.");
             var key = Signature(call);
             _unknown.Add(key);
+            if (progress.Operation != null) _nativeUnknown[key] = progress;
+            else _nativeUnknown.Remove(key);
             if (progress.OpaqueAction) _opaqueUnknown.Add(key);
         }
 
@@ -120,11 +126,17 @@ namespace RNAssistant.Core.Agent
                 if (!progress.OpaqueActionCompleted)
                 {
                     _unknown.Add(key);
+                    if (progress.Operation != null) _nativeUnknown[key] = progress;
+                    else _nativeUnknown.Remove(key);
                     if (progress.OpaqueAction) _opaqueUnknown.Add(key);
                 }
                 var targets = (effect?.Impacts ?? new ResourceImpact[0]).Select(impact => impact.Identity)
                     .Concat(progress.Recovery?.ResourceIdentity == null ? new ResourceIdentity[0] :
                         new[] { progress.Recovery.ResourceIdentity }).Distinct().ToArray();
+                // Native work owns an exact status scope, not a whole-table scan.
+                if (progress.Operation != null) targets = new[] { progress.Operation.StatusResource };
+                else if (progress.Recovery?.ReadScope == ToolRecoveryReadScope.Whole)
+                    targets = new[] { progress.Recovery.ResourceIdentity };
                 // Earlier identical reads describe the state BEFORE this possible
                 // effect. Permit fresh inspection; immutable/schema repetitions
                 // remain advisory, while failed calls and the uncertain operation's
@@ -142,13 +154,20 @@ namespace RNAssistant.Core.Agent
                 {
                     if (targets.Length == 0) targets = new ResourceIdentity[] { null };
                     foreach (var target in targets)
-                        _inspections.Add(new PendingInspection { Target = target, AfterUtc = progress.CompletedUtc });
+                        _inspections.Add(new PendingInspection { Target = target, AfterUtc = progress.CompletedUtc,
+                            Operation = progress.Operation,
+                            View = progress.Operation != null ? progress.Operation.StatusView :
+                                target != null && target.Equals(progress.Recovery?.ResourceIdentity)
+                                ? progress.Recovery.View : null });
                 }
                 if (!progress.OpaqueActionCompleted) return;
                 // A new model-proposed invocation after normal return is allowed
                 // by policy. Equal results advise planning; run limits still apply.
             }
             var observations = (evidence ?? new ResourceEvidence[0]).Where(e => e != null).ToArray();
+            if (progress.Outcome == ToolExecutionOutcome.Ok && progress.IndependentLocalRead)
+                foreach (var observed in observations.Where(item => item.OperationObservation != null))
+                    ObserveOperationResolution(observed);
             if (progress.Outcome == ToolExecutionOutcome.Error)
             {
                 Failure previous;
@@ -176,6 +195,7 @@ namespace RNAssistant.Core.Agent
             if (progress.Outcome == ToolExecutionOutcome.Ok && progress.IndependentLocalRead)
                 _inspections.RemoveAll(pending => pending.Target != null && pending.AfterUtc.HasValue &&
                     observations.Any(observation => pending.Target.Equals(observation.Resource.Identity) &&
+                        (pending.View == null || string.Equals(pending.View, observation.View, StringComparison.Ordinal)) &&
                         !observation.Immutable && observation.ObservedAt > pending.AfterUtc.Value &&
                         observation.Complete && observation.Coverage.Kind == ResourceCoverageKinds.Whole));
             foreach (var pair in _failures.ToArray())
@@ -207,6 +227,23 @@ namespace RNAssistant.Core.Agent
             int previousCount;
             var repeats = _unchanged.TryGetValue(key, out previousCount) ? previousCount + 1 : 2;
             _unchanged[key] = repeats;
+        }
+
+        internal ToolOperationReference PendingNativeOperation(ToolCall call)
+        {
+            ToolExecutionProgress pending;
+            return _nativeUnknown.TryGetValue(Signature(call), out pending) ? pending.Operation : null;
+        }
+
+        internal void ObserveOperationResolution(ResourceEvidence evidence)
+        {
+            var observation = evidence?.OperationObservation;
+            if (observation == null) return;
+            var key = observation.Operation.CallSignature;
+            ToolExecutionProgress pending;
+            if (!_nativeUnknown.TryGetValue(key, out pending) || !observation.Resolves(pending, evidence)) return;
+            _unknown.Remove(key); _opaqueUnknown.Remove(key); _nativeUnknown.Remove(key);
+            _inspections.RemoveAll(item => item.Operation != null && item.Operation.Matches(pending.Operation));
         }
 
         internal void Restore(IEnumerable<AgentMessage> messages)

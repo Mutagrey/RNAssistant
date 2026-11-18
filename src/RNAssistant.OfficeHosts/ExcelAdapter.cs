@@ -15,7 +15,7 @@ using RNAssistant.OfficeHosts.Vba;
 
 namespace RNAssistant.OfficeHosts
 {
-    public sealed partial class ExcelAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IOfficeDocumentSessionProvider, IOfficeDispatcherProvider, IExcelBackendProvider, IVbaHostBackendProvider
+    public sealed partial class ExcelAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IOfficeDocumentSessionProvider, IOfficeDispatcherProvider, IExcelBackendProvider, IExcelPowerQueryBackendProvider, IVbaHostBackendProvider
     {
         private const int MaxContextPreviewCells = 2000;
 
@@ -28,6 +28,7 @@ namespace RNAssistant.OfficeHosts
         private readonly ExcelRangeMutationInteropBackend _excelRangeMutationBackend;
         private readonly ExcelTableInteropBackend _excelTableBackend;
         private readonly ExcelChartInteropBackend _excelChartBackend;
+        private readonly ExcelPowerQueryInteropBackend _excelPowerQueryBackend;
         private readonly VbaInteropBackend _vbaHostBackend;
 
         public ExcelAdapter(
@@ -49,6 +50,7 @@ namespace RNAssistant.OfficeHosts
                 new ExcelRangeMutationInteropBackend(_documentSession);
             _excelTableBackend = new ExcelTableInteropBackend(_documentSession);
             _excelChartBackend = new ExcelChartInteropBackend(_documentSession);
+            _excelPowerQueryBackend = new ExcelPowerQueryInteropBackend(_documentSession);
             _vbaHostBackend = new VbaInteropBackend(
                 _documentSession, _application);
         }
@@ -69,6 +71,7 @@ namespace RNAssistant.OfficeHosts
         }
         public IExcelTableBackend ExcelTableBackend { get { return _excelTableBackend; } }
         public IExcelChartBackend ExcelChartBackend { get { return _excelChartBackend; } }
+        public IExcelPowerQueryBackend ExcelPowerQueryBackend { get { return _excelPowerQueryBackend; } }
         public IVbaHostBackend VbaHostBackend { get { return _vbaHostBackend; } }
 
         public string DocumentKey { get { return _documentSession.StableDocumentId; } }

@@ -17,7 +17,7 @@ namespace RNAssistant.Core.Services
         public static string Office()
         {
             var target = "\"target\":" + SemanticTarget().ToString(Formatting.None);
-            const string representation = "\"representation\":{\"type\":\"string\",\"description\":\"Representation to read. Complete views cannot be combined with table/tree selectors.\",\"enum\":[\"metadata\",\"text\",\"structure\",\"source\",\"media\",\"formulas\",\"table\",\"tree\"]}";
+            const string representation = "\"representation\":{\"type\":\"string\",\"description\":\"Representation to read. Complete views cannot be combined with table/tree selectors.\",\"enum\":[\"metadata\",\"text\",\"structure\",\"source\",\"media\",\"formulas\",\"bindings\",\"dependencies\",\"status\",\"table\",\"tree\"]}";
             const string procedure = "\"procedure\":{\"type\":\"string\",\"minLength\":1,\"description\":\"Unique VBA procedure name, case-insensitive and without brackets. Selects its declaration through End Sub/Function/Property from one exact source snapshot.\"},\"procedureKind\":{\"type\":\"string\",\"enum\":[\"sub\",\"function\",\"property-get\",\"property-let\",\"property-set\"],\"description\":\"Optional exact kind; use to disambiguate property accessors. Conditional duplicate declarations still require line/character selectors.\"}";
             const string section = "\"section\":{\"type\":\"string\",\"description\":\"Exact unique visible ATX or Setext heading title copied from the Markdown outline, without heading markers. Includes nested subsections; maximum selected text is 32000 characters. Does not grant whole-resource read evidence.\",\"minLength\":1,\"maxLength\":200}";
             const string part = "\"partNumber\":{\"type\":\"integer\",\"minimum\":1,\"description\":\"1-based text/source part of an indexed uploaded or authored artifact, not a live VBA module; each part has at most 32000 characters.\"}";
@@ -30,7 +30,7 @@ namespace RNAssistant.Core.Services
             return "{\"type\":\"object\",\"properties\":{" + target + "," + representation + "," + section + "," + procedure + "," + part + "," + page + "," + pageRange + "," + selectors + "," + lines + "," + chars + "," + treeSelector +
                 "},\"required\":[\"target\"],\"additionalProperties\":false,\"anyOf\":[" +
                 "{\"type\":\"object\",\"description\":\"Read one complete metadata, text, structure, source, media, or formulas representation. Do not send limit, offset, path, or fields.\",\"properties\":{" + target + "," +
-                "\"representation\":{\"type\":\"string\",\"description\":\"Complete representation to read; omit for provider-selected auto.\",\"enum\":[\"metadata\",\"text\",\"structure\",\"source\",\"media\",\"formulas\"]}},\"required\":[\"target\"],\"additionalProperties\":false}," +
+                "\"representation\":{\"type\":\"string\",\"description\":\"Complete representation to read; omit for provider-selected auto.\",\"enum\":[\"metadata\",\"text\",\"structure\",\"source\",\"media\",\"formulas\",\"bindings\",\"dependencies\",\"status\"]}},\"required\":[\"target\"],\"additionalProperties\":false}," +
                 "{\"type\":\"object\",\"description\":\"Read bounded rows. Structural selectors are valid only in this table branch.\",\"properties\":{" + target + "," +
                 "\"representation\":{\"type\":\"string\",\"description\":\"Bounded structural representation to read.\",\"enum\":[\"table\"]}," +
                 selectors +

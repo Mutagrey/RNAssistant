@@ -25,6 +25,8 @@ namespace RNAssistant.Office
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly AppDataPaths _paths;
         internal AppDataPaths StoragePaths { get { return _paths; } }
+        internal void SetPowerQuerySyntaxAnalyzer(IPowerQuerySyntaxAnalyzer analyzer)
+        { _toolExecutor.ResourceGateway.PowerQuerySyntaxAnalyzer = analyzer; }
         private readonly SettingsService _settingsService;
         private readonly ChatStore _legacyChatStore;
         private readonly ChatBlobStore _payloads;
@@ -132,6 +134,7 @@ namespace RNAssistant.Office
             _toolExecutor.MigratePromptSchemaIfNeeded(
                 published => _settingsService.HasPromptMigrationEvidence(published),
                 () => _settingsService.Save(_settingsService.Load()));
+            _toolExecutor.ResourceGateway.PowerQueryOperationResolutions = _eventStore as IToolOperationResolutionStore;
             _resourceData = new ResourceDataPlaneService(_toolExecutor.ResourceGateway, ResourceOwnerIsActive);
             _resourceDataRouter = new ResourceDataRouter(_resourceData);
             _uploadedHtmlResources = new UploadedHtmlResourceService(_toolExecutor.ResourceGateway);

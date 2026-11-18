@@ -27,7 +27,8 @@
     else if (coverage.path != null) location = "путь " + JSON.stringify(coverage.path);
     else if (coverage.kind === "record-range") location = "записи [" + coverage.start + ", " + coverage.end + ")";
     var views = { text: "текст", source: "исходник", metadata: "метаданные", structure: "структура",
-      table: "таблица", tree: "дерево", media: "медиа", formulas: "формулы" };
+      table: "таблица", tree: "дерево", media: "медиа", formulas: "формулы",
+      bindings: "привязки", dependencies: "зависимости", status: "состояние" };
     var text = (source.reference ? source.reference + " — " : "") + (source.target || "Источник");
     if (location) text += ", " + location;
     else if (source.view) text += " · " + (views[source.view] || source.view);

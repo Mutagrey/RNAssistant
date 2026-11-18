@@ -15,6 +15,13 @@ namespace RNAssistant.Office.Services
         private readonly ResourceAuthorityService _authority;
         private readonly ArtifactViewerService _mediaViews;
         internal ResourceAuthorityService Authority { get { return _authority; } }
+        internal ExcelResourceProvider PowerQueryProvider
+        { get { return _registry.All().OfType<ExcelResourceProvider>().SingleOrDefault(); } }
+        internal RNAssistant.Office.Domains.Excel.IExcelPowerQueryBackend PowerQueryBackend
+        { get { return PowerQueryProvider?.PowerQueryBackend; } }
+        internal IOfficeApplicationAdapter PowerQueryAdapter { get; private set; }
+        internal RNAssistant.Core.Persistence.IToolOperationResolutionStore PowerQueryOperationResolutions { get; set; }
+        internal RNAssistant.Core.Services.IPowerQuerySyntaxAnalyzer PowerQuerySyntaxAnalyzer { get; set; }
         internal ResourceAuthorityScopeId ScopeFor(ChatSession session, ResourceRef reference)
         { return _authority.ScopeFor(session, reference, ProviderFor(reference.Uri) is ILiveOfficeResourceProvider); }
 
@@ -61,6 +68,7 @@ namespace RNAssistant.Office.Services
             Func<bool> agentJavaScriptEnabled = null,
             Func<RNAssistant.Application.Contracts.IBrowserReadSource> externalBrowser = null)
         {
+            PowerQueryAdapter = adapter;
             var providers = new List<IResourceProvider>
             {
                 new ChatArtifactResourceProvider(loadArtifactBody, readAttachmentText, authority?.Payloads,
@@ -178,7 +186,10 @@ namespace RNAssistant.Office.Services
         public ResourceResolveResult Resolve(ChatSession session, string resourceUri)
         {
             var provider = ProviderFor(resourceUri);
-            var resolved = WithProvider(provider, session, delegate
+            var excelStatus = provider as ExcelResourceProvider;
+            var resolved = excelStatus != null && ExcelResourceProvider.IsQueryStatusUri(resourceUri)
+                ? new ResourceResolveResult { Resource = excelStatus.ResolveQueryStatus(session, resourceUri), Complete = true }
+                : WithProvider(provider, session, delegate
             {
                 return new ResourceResolveResult
                 {
@@ -308,6 +319,8 @@ namespace RNAssistant.Office.Services
                 !request.PageIndex.HasValue && (request.PageStartChar != 0 || request.PageCharCount != 0))
                 throw new ResourceRequestException("PDF page text requires pageIndex and a bounded character window on an attachment text view.",
                     "resource_page_selector_invalid", false);
+            if (provider is ExcelResourceProvider && ExcelResourceProvider.IsQueryStatusUri(request.Reference.Uri))
+                return ReadPowerQueryStatus(session, request, (ExcelResourceProvider)provider);
             var outlook = provider as LiveDocumentResourceProvider;
             if (outlook?.IsOutlookAttachment(request.Reference.Uri) == true)
                 return ReadOutlookAttachment(session, request, outlook);
@@ -340,6 +353,33 @@ namespace RNAssistant.Office.Services
                 cancellationToken.ThrowIfCancellationRequested();
                 return _authority == null ? result : _authority.PublishRead(session, result, request, live);
             });
+        }
+
+        private ResourceReadSelection ReadPowerQueryStatus(ChatSession session, ResourceReadRequest request,
+            ExcelResourceProvider provider)
+        {
+            var descriptor = provider.ResolveQueryStatus(session, request.Reference.Uri);
+            if (request.Representation != null && request.Representation != "auto" && request.Representation != "status" ||
+                request.Section != null || request.PartNumber.HasValue || request.PageIndex.HasValue || request.PageStart.HasValue ||
+                request.PageRangeCount != 0 || request.PageStartChar != 0 || request.PageCharCount != 0 ||
+                request.ViewPath != null || request.Fields != null || request.RowOffset != 0 || request.MaxRows != 0)
+                throw new ResourceRequestException("Power Query operation status supports its complete status view without source/data selectors.",
+                    "excel_query_status_selectors_unsupported", false);
+            var normalized = new ResourceReadRequest { Reference = request.Reference.Copy(), Representation = "status",
+                Cursor = request.Cursor, MaxChars = request.MaxChars <= 0 ? ResourceReadRequest.MaximumCharacters :
+                    Math.Min(request.MaxChars, ResourceReadRequest.MaximumCharacters) };
+            if (request.Reference.IsExact)
+            {
+                var retained = _authority?.ReadRetained(session, normalized, true);
+                if (retained != null) return retained;
+                throw new ResourceRequestException("The exact retained Power Query status is unavailable; a current observation cannot replace it.",
+                    "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
+            }
+            if (!string.IsNullOrEmpty(request.Cursor))
+                throw new ResourceRequestException("A current Power Query status is one complete observation. Use its exact revision for retained paging.",
+                    "RESOURCE_CURSOR_INVALID", false);
+            return ExcelPowerQueryExecutionService.For(PowerQueryAdapter).ReadStatusSelection(this, session,
+                descriptor.Metadata["queryName"], normalized.MaxChars);
         }
 
         internal string ReadObservedText(ResourceEvidence evidence)

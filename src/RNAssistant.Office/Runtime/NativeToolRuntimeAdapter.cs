@@ -143,6 +143,11 @@ namespace RNAssistant.Office.Runtime
                     binding = registration.Binding;
                     handler = new JsToolHandler(gateway, session, registration.PackageMetadata?.Source);
                 }
+                else if (ExcelPowerQueryToolCatalog.Owns(registration.Descriptor.Id))
+                {
+                    binding = ExcelPowerQueryToolCatalog.BindingFor(registration.Descriptor.Id);
+                    handler = new ExcelPowerQueryToolHandler(registration.Descriptor.Id, gateway, hostRuntime, session);
+                }
                 else if (ExcelReadToolIds.Owns(registration.Descriptor.Id))
                 {
                     if (excelReads == null || hostRuntime == null)
@@ -362,7 +367,7 @@ namespace RNAssistant.Office.Runtime
                 string.Equals(toolId, ResourceToolCatalog.OutlineToolId, StringComparison.Ordinal) ||
                 string.Equals(toolId, JsToolHandler.RunId, StringComparison.Ordinal) ||
                 ResourceMutationToolCatalog.Owns(toolId) || ResourceDefinitionToolHandler.Owns(toolId) ||
-                ExcelReadToolIds.Owns(toolId) || ExcelWriteToolIds.Owns(toolId) ||
+                ExcelReadToolIds.Owns(toolId) || ExcelWriteToolIds.Owns(toolId) || ExcelPowerQueryToolCatalog.Owns(toolId) ||
                 ExcelFindReplaceToolIds.Owns(toolId) || ExcelSheetToolIds.Owns(toolId) ||
                 ExcelRangeMutationToolIds.Owns(toolId) ||
                 ExcelTableToolIds.Owns(toolId) || ExcelChartToolIds.Owns(toolId) ||

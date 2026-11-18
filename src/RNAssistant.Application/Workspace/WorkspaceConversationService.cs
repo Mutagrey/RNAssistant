@@ -1181,7 +1181,7 @@ namespace RNAssistant.Runtime
             }
         }
 
-        internal sealed class WorkspacePorts : IModelProtocol, IRunStore
+        internal sealed class WorkspacePorts : IModelProtocol, IRunStore, IRunOperationResolutionReader
         {
             private readonly IConversationStore _conversations;
             private readonly IConversationContextStore _contextStore;
@@ -2128,6 +2128,15 @@ namespace RNAssistant.Runtime
             }
 
             private IReadOnlyList<string> _deliveredEvidenceReferences = new string[0];
+
+            public Task<ResourceEvidence> ReadOperationResolutionAsync(ToolOperationReference operation,
+                long expectedRevision, CancellationToken cancellationToken)
+            {
+                if (expectedRevision != _cursor) throw new InvalidOperationException("Stale operation-resolution cursor.");
+                cancellationToken.ThrowIfCancellationRequested();
+                var reader = _events as IToolOperationResolutionStore;
+                return Task.FromResult(reader?.ReadOperationResolution(ConversationMetadata.From(_session), operation));
+            }
 
             public Task<ToolExecutionProgress> ReadReplayGuardAsync(ToolCall call,
                 long expectedRevision, CancellationToken cancellationToken)

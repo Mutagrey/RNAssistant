@@ -11,13 +11,14 @@ using RNAssistant.Office.Domains.Vba;
 
 namespace RNAssistant.Office
 {
-    public sealed class UiThreadOfficeApplicationAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IOfficeDocumentExecutionGuard, IOfficeDispatcherProvider, IOfficeDocumentSessionProvider, IExcelBackendProvider, IWordBackendProvider, IPowerPointBackendProvider, IOutlookBackendProvider, IVbaHostBackendProvider
+    public sealed class UiThreadOfficeApplicationAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IOfficeDocumentExecutionGuard, IOfficeDispatcherProvider, IOfficeDocumentSessionProvider, IExcelBackendProvider, IExcelPowerQueryBackendProvider, IWordBackendProvider, IPowerPointBackendProvider, IOutlookBackendProvider, IVbaHostBackendProvider
     {
         private readonly IOfficeApplicationAdapter _inner;
         private readonly OfficeUiDispatcher _dispatcher;
         private readonly IOfficeDocumentSession _documentSession;
         private readonly OfficeDocumentMetadata _metadata;
         private readonly IExcelReadBackend _excelReadBackend;
+        private readonly IExcelPowerQueryBackend _excelPowerQueryBackend;
         private readonly IExcelWriteBackend _excelWriteBackend;
         private readonly IExcelFindReplaceBackend _excelFindReplaceBackend;
         private readonly IExcelSheetBackend _excelSheetBackend;
@@ -37,6 +38,7 @@ namespace RNAssistant.Office
             IOfficeDocumentSession documentSession = null;
             OfficeDocumentMetadata metadata = null;
             IExcelReadBackend excelReadBackend = null;
+            IExcelPowerQueryBackend excelPowerQueryBackend = null;
             IExcelWriteBackend excelWriteBackend = null;
             IExcelFindReplaceBackend excelFindReplaceBackend = null;
             IExcelSheetBackend excelSheetBackend = null;
@@ -52,6 +54,7 @@ namespace RNAssistant.Office
                 var provider = _inner as IOfficeDocumentSessionProvider;
                 documentSession = provider == null ? null : provider.DocumentSession;
                 metadata = new OfficeDocumentMetadata(_inner, documentSession);
+                excelPowerQueryBackend = (_inner as IExcelPowerQueryBackendProvider)?.ExcelPowerQueryBackend;
                 var excel = _inner as IExcelBackendProvider;
                 excelReadBackend = excel == null ? null : excel.ExcelReadBackend;
                 excelWriteBackend = excel == null ? null : excel.ExcelWriteBackend;
@@ -76,6 +79,7 @@ namespace RNAssistant.Office
             _documentSession = documentSession;
             _metadata = metadata;
             _excelReadBackend = excelReadBackend;
+            _excelPowerQueryBackend = excelPowerQueryBackend;
             _excelWriteBackend = excelWriteBackend;
             _excelFindReplaceBackend = excelFindReplaceBackend;
             _excelSheetBackend = excelSheetBackend;
@@ -102,6 +106,8 @@ namespace RNAssistant.Office
                 return _documentSession;
             }
         }
+
+        public IExcelPowerQueryBackend ExcelPowerQueryBackend { get { return _excelPowerQueryBackend; } }
 
         public IExcelReadBackend ExcelReadBackend { get { return _excelReadBackend; } }
         public IExcelWriteBackend ExcelWriteBackend { get { return _excelWriteBackend; } }

@@ -299,6 +299,11 @@ namespace RNAssistant.Core.Persistence
             ConversationMetadata session, string operationId, long throughSequence);
     }
 
+    public interface IToolOperationResolutionStore
+    {
+        ResourceEvidence ReadOperationResolution(ConversationMetadata session, ToolOperationReference operation);
+    }
+
     public interface IEventStore
     {
         // Explicit migration capability. The old backend uses transcript guards;

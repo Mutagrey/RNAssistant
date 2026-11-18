@@ -27,6 +27,8 @@ namespace RNAssistant.Core.Models
         public string ContentSha256 { get; private set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public ResourceReadMetadata ReadMetadata { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public ToolOperationObservation OperationObservation { get; private set; }
 
         [JsonConstructor]
         public ResourceEvidence(string evidenceId, ResourceAuthorityScopeId scopeId,
@@ -34,7 +36,7 @@ namespace RNAssistant.Core.Models
             long authorityGeneration, PayloadRef payload = null,
             IEnumerable<ResourceDependency> dependencies = null, DateTime? observedAt = null,
             string sourceEventId = null, bool immutable = false, string contentSha256 = null,
-            ResourceReadMetadata readMetadata = null)
+            ResourceReadMetadata readMetadata = null, ToolOperationObservation operationObservation = null)
         {
             if (string.IsNullOrWhiteSpace(evidenceId) || scopeId == null || resource == null || !resource.IsExact)
                 throw new ArgumentException("Evidence requires an id, authority scope and exact resource revision.");
@@ -53,6 +55,11 @@ namespace RNAssistant.Core.Models
             Immutable = immutable;
             ContentSha256 = contentSha256;
             ReadMetadata = readMetadata;
+            if (operationObservation != null &&
+                (!resource.Identity.Equals(operationObservation.Operation.StatusResource) ||
+                 view != operationObservation.Operation.StatusView))
+                throw new ArgumentException("An operation observation must describe its exact status resource.");
+            OperationObservation = operationObservation;
         }
     }
 

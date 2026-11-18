@@ -72,12 +72,15 @@ namespace RNAssistant.Core.Tools
         public EvidenceEligibility EvidenceEligibility { get; private set; }
         public DateTime? CompletedUtc { get; private set; }
         public string AdmissionRevision { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public RNAssistant.Core.Models.ToolOperationReference Operation { get; private set; }
 
         [JsonConstructor]
         public ToolExecutionProgress(ToolExecutionOutcome outcome, ToolRecoveryContract recovery = null,
             string resultFingerprint = null, bool independentLocalRead = false, string admissionRevision = null,
             DateTime? completedUtc = null, bool opaqueAction = false, EvidenceEligibility evidenceEligibility = EvidenceEligibility.None,
-            bool opaqueActionCompleted = false, bool waitTimedOut = false)
+            bool opaqueActionCompleted = false, bool waitTimedOut = false,
+            RNAssistant.Core.Models.ToolOperationReference operation = null)
         {
             Outcome = outcome; Recovery = recovery; ResultFingerprint = resultFingerprint;
             CompletedUtc = completedUtc;
@@ -93,6 +96,7 @@ namespace RNAssistant.Core.Tools
                 independentLocalRead || opaqueAction || evidenceEligibility != EvidenceEligibility.None))
                 throw new ArgumentException("A timed-out wait is a successful non-evidentiary event observation.", nameof(waitTimedOut));
             WaitTimedOut = waitTimedOut;
+            Operation = operation;
         }
 
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
@@ -114,7 +118,9 @@ namespace RNAssistant.Core.Tools
                 record.Context.Policy.Policy?.EvidenceEligibility ?? EvidenceEligibility.None,
                 record.Context.Policy.Policy?.ExecutionClass == ToolExecutionClass.OpaqueAction &&
                     record.Outcome == ToolExecutionOutcome.Unknown && record.Evidence.InvocationCompleted,
-                record.WaitTimedOut);
+                record.WaitTimedOut, record.ResourceEvidence.Select(item => item.OperationObservation?.Operation)
+                    .FirstOrDefault(item => item != null && item.RunId == record.Context.RunId &&
+                        item.CallId == record.Context.Call.Id && item.CallSignature == AgentProgressTracker.Signature(record.Context.Call)));
         }
     }
 
@@ -235,8 +241,10 @@ namespace RNAssistant.Core.Tools
                 throw new ArgumentException("Cancellation metadata requires a non-dispatched call.", nameof(wasCancelled));
             if (awaitingUser && outcome != ToolExecutionOutcome.Ok)
                 throw new ArgumentException("Only a successful local interaction can await user input.", nameof(awaitingUser));
-            if (outcome != ToolExecutionOutcome.Error && recovery != null)
-                throw new ArgumentException("Only a failed execution can require recovery.", nameof(recovery));
+            if (recovery != null && outcome != ToolExecutionOutcome.Error &&
+                !(outcome == ToolExecutionOutcome.Unknown && recovery.RetryPolicy == ToolRetryPolicy.None &&
+                  recovery.ResourceIdentity != null && recovery.ReadScope == ToolRecoveryReadScope.Whole))
+                throw new ArgumentException("Unknown execution permits only an exact inspection scope, never a retry policy.", nameof(recovery));
             var dispatch = mayHaveDispatched ? ToolDispatchEvidence.MayHaveDispatched : ToolDispatchEvidence.NotDispatched;
             if (evidence != null && evidence.Dispatch != dispatch)
                 throw new ArgumentException("Dispatch evidence disagrees with the execution record.", nameof(evidence));

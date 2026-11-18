@@ -5,7 +5,7 @@ const root=path.resolve(__dirname,'../web'), hash=b=>crypto.createHash('sha256')
 function generate(){
   const inventory=JSON.parse(fs.readFileSync(path.join(root,'vendor-manifest.json')));
   const tabular=JSON.parse(fs.readFileSync(path.join(root,'data-templates/vendor-lock.json'))).packages;
-  return inventory.packages.filter(p=>!p.sourceOnly).map(p=>{
+  return inventory.packages.filter(p=>!p.sourceOnly && !p.internalOnly).map(p=>{
     const files=[],sources=[],entrypoints=[],licenses=[],dt=tabular.find(d=>d.id===p.id);
     function add(name,source,kind,carrierField){
       const original=fs.readFileSync(path.join(root,source));let bytes=original;

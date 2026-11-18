@@ -9,6 +9,34 @@ same assertion also fails on the original `f8fadddd`. Either bind the fixture to
 explicit incomplete extraction or update the intended size/bound assertion. This is
 separate from the shared Markdig viewer/resource checks and is not claimed as passing.
 
+## Power Query later capabilities — 2026-11-16
+
+The source/worksheet slice and offline expression syntax are integrated for
+`17.4.0-dev` onto current `main`; focused host-neutral Power Query, native-journal and
+`native tools:` checks pass. Real Windows qualification is tracked in
+[RISK_REGISTER](RISK_REGISTER.md#power-query-native-qualification--2026-11-16),
+including the native WebView2 analyzer. Separate later work, not advertised as
+current capability: name and scope-aware dependency analysis; a supported
+evaluation/preview provider; Data Model/connection-only refresh with truthful
+completion evidence; native cancellation; dependency-safe rename/delete;
+reconciling an outstanding operation across a newly bound adapter/process. Do not
+approximate these with regex dependency claims, RefreshAll, deleting/recreating a
+same-named query, old table values or success from merely assigning M. Each
+capability requires an exact owner and evidence boundary.
+
+## Archival and replay Harness failures — historical baseline 2026-11-16
+
+The Power Query checks on the old `06664fc`-based patch reproduced eight failures
+identically on pristine `06664fc35edb1b70794255fb201febebb7da8d46`: three
+`context continuity:` cases for archived diagnostic hydration/materialization and
+five `kernel replay:` cases for historical effect/finish and confirmation fixtures.
+This is historical evidence only; it neither reports their disposition nor proves
+regression safety on the new `8963150f2294750d6a286a519748e52063570473` base.
+Recheck the exact filters after integration before assigning current dispositions.
+The historical filters and results are in the
+[Harness guide](../../tests/RNAssistant.Harness/README.md#power-query--2026-11-16).
+Do not weaken current tool-result/finish validators to make old fixtures pass.
+
 ## Workspace missing running chat poll — closed host-neutral 2026-11-16
 
 Owner: `app-workspace-chat.js` exact-view run observer. `project_chat_missing` now

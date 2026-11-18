@@ -66,6 +66,45 @@ typed bridge к Core `CasMaintenanceService`. Новый route, Dock view, modal
 WebView2 wide/narrow/125% visual review остаётся открытым. Канонический runtime
 контракт — [CAS maintenance](../cas-maintenance.md#full-application-backup-and-clean-restore--in-review-2026-11-16).
 
+## Power Query через общие result surfaces — In Review, 2026-11-16
+
+Scope: существующие source/list/table/text_changes blocks и JSON результата в
+Office conversation. Runtime сохраняет точный M, mutation evidence, worksheet
+наблюдения и status; общий renderer показывает эти данные. Видимое Web-изменение —
+подписи новых views. Специальный Query Editor, native preview, tree navigation и
+refresh/cancel buttons не входят в этот срез; UI не добавляет второй lifecycle
+или независимый store статусов.
+
+Расширение `17.4.0-dev`: fixed offline syntax parser в отдельном hidden
+WebView2/Worker, диагностики отдельного `excel.query.validate(kind=source)` в общей
+JSON-карточке. Source viewer сохраняет M как plain text; Shell CSP, геометрия и
+навигация не меняются. Pane reset/close/rebind отделяет active analyzer и
+дожидается его drain перед новым поколением. Native UI-thread availability и
+physical close после deadline требуют отдельной Windows проверки.
+
+Проверка кода подтверждает связь `ResourceReadProjection` →
+`ToolResultPresentationService` → `app-tool-result-preview.js` и существующий
+journal → `RunChanges` → `text_changes`. Host-neutral проверки ресурса/мутаций и
+native operation observer выполняются отдельно; они не закрывают Office/WebView2
+и визуальное принятие. Для Windows остаются следующие сценарии:
+
+1. Найти запрос, прочитать M с длинными строками и Unicode-именем, применить
+   точный patch и открыть сохранённый diff; проверить читаемость и отсутствие
+   HTML-интерпретации исходника.
+2. Открыть bindings, обновить выбранную worksheet load, прочитать её таблицу и
+   результат проверок; проверить видимость `not_checked` и границ чтения.
+3. Дождаться timeout или остановить ожидание, прочитать status, переключить/закрыть
+   панель и вернуться; проверить исходный chat/run/call, честное Unknown и позднее
+   подтверждение native завершения без автоматического повторения mutation.
+4. Повторить чтение source/diff/table/status в широкой и узкой панели при 125%.
+5. Проверить valid/invalid M через source validation, UTF-16 позиции, изменившийся
+   во время анализа исходник, отсутствие host, deadline и закрытие/reset панели;
+   неподтверждённый анализ должен остаться `not_checked`. Синтаксическая проверка
+   не должна запускать M или открывать сетевые источники.
+
+Пользовательское evidence — фотографии экрана. Статус среза остаётся In Review до
+native и visual acceptance; документы не заявляют готовность отсутствующих controls.
+
 ## Restore и доступ к прежним данным — In Review, 2026-11-16
 
 Scope: порядок init/restore, адресный missing-chat terminal, чтение архива и явный

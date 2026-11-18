@@ -210,6 +210,104 @@ same shutdown/drain and caller-cancellation ownership as Workspace continuations
 and absence of a second public async lifecycle. Harness build and version validation
 pass. Windows/Office/WebView2 qualification remains separate.
 
+## Power Query integration on current main — 2026-11-18
+
+**Host-neutral verified / In Review**, `17.4.0-dev`, applied to current `main` at
+`650aa2d6213ee20780da84b54dfd31520c4cf4b5`. The patch was prepared against
+`8963150f2294750d6a286a519748e52063570473` (`17.3.10-dev`); later main changes are
+retained. Both earlier Power Query slices now belong to this single product version,
+and assembly binding remains `16.0.4.0`.
+
+Fresh checks on this tree: Harness builds with 0 errors / 2 existing PDF warnings;
+Power Query 10/10, source syntax 3/3, actual native-journal Power Query receipts 2/2
+and the full existing `native tools:` filter 18/18 pass. These are host-neutral cases.
+The new source case exposed a missing `rawContentIncluded` flag; source reads now
+deliver exact M with unchanged coverage, and the accepted patch retains its nested
+owner receipt through rebuild. The second case preserves original Unknown while
+an exact accepted stopped observation permits a new invocation. Both use native
+storage owners with a fake Excel backend, not real COM.
+
+Parser JS checks pass 4 groups, fixed host transport 4 groups and vendor gate 7/7.
+The pinned offline bundle rebuild was not rerun for this application. All 20 added
+production C# files have explicit old-style project includes. The Power Query
+evidence in the next two sections, including the 55/8/63 selection, remains historical
+for the earlier patch on `06664fc`. Those eight failures were not rerun or declared
+fixed. Windows x64 / Office x64 / Framework/VSTO / native WebView2 and visual
+qualification remain open.
+
+## Power Query offline syntax and stopped-result reconciliation — 2026-11-16
+
+Historical implementation and test evidence from the earlier `06664fc`-based
+patch, before integration onto `8963150`; the syntax continuation and initial source
+slice are now combined under `17.4.0-dev`. Source validation uses the
+official pinned Microsoft parser 5.0.0, a fixed browser bundle and the existing
+isolated local WebView2 environment through a narrow optional analyzer. Exact
+source is retained through the current CAS/read path before releasing the document
+gate. Bounded diagnostics refer to that snapshot; a separate live comparison
+reports drift/unavailability. No whole-source model write authority is granted by
+validation. Unknown names/dependencies/source access and evaluation remain unproven.
+
+`StoppedUnverified` resolves the specific never-retry dead end where native work
+was positively stopped but its outcome remained unresolved. Only an exact fresh
+independent accepted status read permits a new intended call; historical Unknown
+and the session-close prohibition remain. The new-load native path now checks
+its actual connection's Data Model flag before invoking refresh.
+
+Historical host-neutral Harness on the old `06664fc`-based patch: source syntax
+3/3, previous Power Query cases 10/10 including expanded stopped/unresolved/closure
+evidence; build 0 errors / 2 existing PDF warnings. Source-linked MockDemo with the
+real controller built with 0 errors / 11 existing warnings. Real upstream JS parser
+checks passed 4 groups without Node globals; host transport checks passed 4 groups,
+vendor gate passed 7/7 and the bundle rebuild was byte-identical. Windows/Office/
+WebView2 native transport, callback/cleanup timing and visible diagnostics remain
+open evidence. The earlier eight archival/replay failures were confirmed only
+on the old baseline and require fresh disposition on `8963150`.
+No Node/Python product requirement, Jint consumer, generic execution platform,
+new view/shell, commit/push or release is introduced. See
+[syntax contract](../tool-library.md#excel-power-query--2026-11-16),
+[vendor notes](../../web/licenses/powerquery-parser-5.0.0/README.md) and
+[open evidence](RISK_REGISTER.md#power-query-syntax-host--2026-11-16).
+
+## Excel Power Query — 2026-11-16
+
+Historical initial source/worksheet slice, originally labelled `17.3.0-dev` on
+`06664fc35edb1b70794255fb201febebb7da8d46`; it is now included in `17.4.0-dev`.
+The scoped implementation covers exact query discovery/source reads, guarded M patch/write, definition creation, targeted
+worksheet refresh and explicit loading to a new/empty sheet. Binding/status views
+and bounded loaded-data checks use the existing resource plane; built-in guidance
+and shared result captions follow the same path. Native adapter code is present
+but has not been executed against Excel here.
+
+Caller timeout and native lifetime are separate. The retained document and
+dispatcher leases prevent overlapping execution; late accepted status observations
+resolve only the exact replay guard through canonical facts, including bounded
+history restore and disposable-index rebuild. Closure ends native ownership without
+claiming the uncertain effect succeeded. Terminal publication is attempted once,
+including persistence failure. No automatic restart/replay or broad RefreshAll is
+introduced. See [architecture](../architecture.md#excel-power-query-ownership--2026-11-16),
+[resources](../resource-fabric.md#excel-power-query-resources--2026-11-16),
+[events](../session-events.md#exact-native-operation-resolution--2026-11-16) and
+[checks](../../tests/RNAssistant.Harness/README.md#power-query--2026-11-16).
+
+Historical host-neutral evidence on the old `06664fc`-based patch: all 10 Power
+Query cases passed; selected existing regressions passed 45/53, for **55 passed / 8
+failed / 63 cases**. The eight failures (archival continuity and kernel replay
+fixtures) reproduced identically on pristine `06664fc` and are retained in BACKLOG
+as historical observations pending recheck on the new base.
+Harness and source-linked actual-controller MockDemo builds had 0 errors, with
+2/11 existing warnings respectively. Project source inclusion, version format,
+JavaScript syntax and diff checks passed on that historical tree. The browser
+result-viewer test was blocked by the environment's Chromium socket restriction;
+visual acceptance remains open.
+
+Windows x64 / Office x64 / VS 2022 Framework/VSTO build, actual Mashup bindings,
+refresh failure/cancellation prompts, Excel UI responsiveness, panel-close lifetime,
+ISERROR masks and source/load readback remain open qualification. Source compare
+and write cannot be atomic against human Excel edits. This initial slice did not
+include syntax parsing; the continuation above adds the official offline parser.
+Computed preview, Data Model refresh/load, native cancel and safe query rename/delete
+remain unsupported. Product bump does not imply release, commit, push or qualification.
+
 ## Unified accepted-run configuration — W5, 2026-11-16
 
 Implemented host-neutral / In Review, `17.3.9-dev`. Workspace continuation now calls

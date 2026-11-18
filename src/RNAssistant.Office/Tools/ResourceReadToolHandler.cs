@@ -40,8 +40,17 @@ namespace RNAssistant.Office.Tools
 
         protected override ToolHandlerResult Execute(ToolHandlerContext context, System.Threading.CancellationToken cancellationToken)
         {
-            var target = ToolArgumentReader.String(
-                context.Arguments, "target", string.Empty).Trim();
+            var target = ToolArgumentReader.String(context.Arguments, "target", string.Empty);
+            if (!target.StartsWith(ExcelResourceProvider.QueryPrefix, StringComparison.Ordinal)) target = target.Trim();
+            if (target.StartsWith(ExcelResourceProvider.QueryPrefix, StringComparison.Ordinal) &&
+                ToolArgumentReader.String(context.Arguments, "representation", "auto") == "status")
+            {
+                if (context.Arguments.Keys.Any(key => key != "target" && key != "representation"))
+                    throw new ResourceRequestException("Operation status is one complete scope and accepts no source/data selectors.",
+                        "excel_query_status_selectors_unsupported", false);
+                return ExcelPowerQueryExecutionService.For(Gateway.PowerQueryAdapter).ReadStatusTool(
+                    Gateway, Session, ExcelResourceProvider.QueryNameFromTarget(target), _maximumTextCharacters);
+            }
             if (RNAssistant.Application.Conversations.ConversationCatalogAccess.IsTarget(target))
             {
                 if (_chats == null) throw new ResourceRequestException("Chat overview is unavailable.", "chat_catalog_unavailable", false);
@@ -146,7 +155,7 @@ namespace RNAssistant.Office.Tools
                     Fields = Fields(context.Arguments) }, cancellationToken)
                 : Gateway.ReadAdaptiveText(Session, reference, selected.Descriptor, representation,
                     _maximumTextCharacters, cancellationToken);
-            if (selected.Descriptor.CurrentTarget != null)
+            if (selected.Descriptor.CurrentTarget != null && ChatHtmlResourceCatalog.SupportsKind(selected.Descriptor.Kind))
                 Gateway.EnsureCurrentHtmlReference(Session, selected.Reference);
             var observation = new ResourceReadObservation(selection.Result,
                 Gateway.Evidence(Session, selection.Result));

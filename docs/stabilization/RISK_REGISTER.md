@@ -1,5 +1,43 @@
 # Stabilization risk register
 
+## Power Query syntax host — 2026-11-16
+
+Evidence status: the Power Query patch is applied to current `main`; focused JS,
+source capture, guards, native-journal receipts and existing `native tools:` checks pass
+host-neutral. Earlier integration results for `8963150f2294750d6a286a519748e52063570473`
+and the original `06664fc` patch remain historical. None qualifies native
+Windows/Office/WebView2 behavior.
+
+**P1 / open Windows evidence.** The official fixed parser and wrapper pass isolated
+JS-context checks without Node globals; host-neutral source capture, guards and
+result validation have separate tests. This does not qualify actual WebView2 hidden
+controller/worker creation, local asset interception, pane reset/disposal, late
+creation, native timeout or interaction with a busy Excel UI thread. The wait has
+a deadline and one owner; physical close needs the UI dispatcher. No hard per-worker
+V8 memory quota or process isolation from every other local page is claimed.
+Malformed/partial/unavailable analysis stays `not_checked`. Existing Windows UI
+evidence uses screen photographs only. Full semantic M analysis and source access
+remain unsupported even when syntax passes.
+
+## Power Query native qualification — 2026-11-16
+
+**P1 / open native evidence.** OfficeHosts implements bound `Workbook.Queries`
+source access and synchronous, exact SQL QueryTable refresh. Windows x64 / Office
+x64 / VS 2022 must establish API availability, provider/Location identity, real
+failure/overflow signals, partial load objects, native credentials/privacy prompts,
+cell error masks and retained dispatcher/session lifetime after panel close. A
+successful host-neutral fixture does not qualify these COM paths. Native UI may be
+occupied by a synchronous refresh; a tool timeout is not cancellation. Evidence
+from the user's machine is screen photographs only.
+
+M compare/write/readback is guarded against RNAssistant concurrency, not atomic
+against human edits in Excel. Dynamic M dependencies remain incomplete; name,
+folding and computed-preview checks are not available. Crash/rebind without an
+accepted exact late-completion observation leaves Unknown protected; no background
+operation is automatically adopted or replayed. Only operations on the same bound
+session share its owner. Exact session close releases ownership without releasing
+the uncertain replay guard. These are explicit limits of the first slice.
+
 ## Native tool contract review — 2026-11-16
 
 `17.3.6-dev`, host-neutral corrected; Windows qualification remains separate.

@@ -7,6 +7,15 @@ using RNAssistant.Core.ModelProtocol;
 
 namespace RNAssistant.Core.Persistence
 {
+    // Optional runtime-only evidence lookup for an exact native operation whose
+    // original Unknown may survive outside the prompt's retained read window.
+    public interface IRunOperationResolutionReader
+    {
+        Task<RNAssistant.Core.Models.ResourceEvidence> ReadOperationResolutionAsync(
+            RNAssistant.Core.Models.ToolOperationReference operation, long expectedRevision,
+            CancellationToken cancellationToken);
+    }
+
     public interface IRunStore
     {
         // Mandatory ordered append with a per-turn compare-and-swap cursor. Zero

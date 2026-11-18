@@ -54,7 +54,7 @@ namespace RNAssistant.Office.Tools
                     verification: ToolVerification.Tool),
                 Define("Excel", "excel.range.filter", ExcelRangeMutationToolHandler.BindingFor("excel.range.filter"), "Mutates document: Apply AutoFilter criteria to a range.", "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name; omit only when the active sheet is intended.\"},\"address\":{\"type\":\"string\",\"description\":\"A1-style range address.\"},\"field\":{\"type\":\"integer\",\"description\":\"One-based column index within the filter range.\",\"default\":1},\"criteria\":{\"type\":\"string\",\"description\":\"AutoFilter criterion understood by Excel.\"}},\"required\":[\"address\"],\"additionalProperties\":false}", true, true, 2, true,
                     verification: ToolVerification.Tool)
-            };
+            }.Concat(ExcelPowerQueryToolCatalog.Entries());
         }
 
         private static IEnumerable<ToolCatalogEntry> WordTools()

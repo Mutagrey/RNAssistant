@@ -140,6 +140,42 @@ namespace RNAssistant.Office.Runtime
             });
         }
 
+        internal RetainedDocumentOperation ReserveDocumentOperation(
+            OfficeDocumentExecutionExpectation target, CancellationToken cancellationToken)
+        {
+            using (DocumentAccessGate.BeginOperation())
+            {
+                var access = CaptureAccess(target);
+                using (EnterAccess(access, cancellationToken))
+                {
+                    return ExecuteGuarded(access, target, cancellationToken, delegate
+                    {
+                        // Freeze the expectation before leaving the admitting stack.
+                        // Callers cannot retarget a queued native operation by changing
+                        // a mutable request or the currently active workbook.
+                        var frozen = new OfficeDocumentExecutionExpectation
+                        {
+                            Host = access.Session.Host,
+                            DocumentKey = access.Session.StableDocumentId,
+                            RuntimeDocumentKey = access.Session.RuntimeDocumentId
+                        };
+                        var lifetime = access.Dispatcher as IOfficeDispatcherLifetime;
+                        var retainedDispatcher = lifetime == null ? null : lifetime.RetainForDocumentOperation();
+                        try
+                        {
+                            return new RetainedDocumentOperation(this, access, frozen,
+                                DocumentAccessGate.RetainCurrentAccess(access.Key, access.Gate, retainedDispatcher));
+                        }
+                        catch
+                        {
+                            if (retainedDispatcher != null) retainedDispatcher.Dispose();
+                            throw;
+                        }
+                    });
+                }
+            }
+        }
+
         private T ExecuteDocumentOperation<T>(OfficeDocumentExecutionExpectation target,
             CancellationToken cancellationToken, Func<T> action)
         {
@@ -274,7 +310,7 @@ namespace RNAssistant.Office.Runtime
                 exception.Retryable);
         }
 
-        private sealed class DocumentAccess
+        internal sealed class DocumentAccess
         {
             internal readonly string Key;
             internal readonly string LockName;
@@ -291,6 +327,84 @@ namespace RNAssistant.Office.Runtime
                 Session = session;
                 Dispatcher = dispatcher;
             }
+        }
+
+        // The session owner disposes this lease only after confirmed native stop or
+        // pre-dispatch refusal. Caller cancellation/timeout never disposes it. Execute
+        // is synchronous at the COM boundary; an ordinary worker can await it without
+        // receiving or moving any COM reference.
+        internal sealed class RetainedDocumentOperation : IDisposable
+        {
+            private readonly HostRuntime _runtime;
+            private readonly DocumentAccess _access;
+            private readonly OfficeDocumentExecutionExpectation _target;
+            private readonly DocumentAccessGate.RetainedAccess _reservation;
+
+            internal RetainedDocumentOperation(HostRuntime runtime, DocumentAccess access,
+                OfficeDocumentExecutionExpectation target,
+                DocumentAccessGate.RetainedAccess reservation)
+            {
+                _runtime = runtime;
+                _access = access;
+                _target = target;
+                _reservation = reservation;
+            }
+
+            internal bool IsDisposed { get { return _reservation.IsDisposed; } }
+            internal bool IsExecuting { get { return _reservation.IsExecuting; } }
+
+            internal bool? TryObserveDocumentClosed()
+            {
+                if (IsDisposed || IsExecuting) return null;
+                try
+                {
+                    using (_reservation.BeginExecution())
+                    {
+                        // Normal guards reject a closed document. This one narrow
+                        // probe must inspect the exact captured session after close,
+                        // without switching to another adapter or active document.
+                        return DocumentAccessGate.Invoke(_access.Dispatcher, delegate
+                        {
+                            var probe = _access.Session as IOfficeDocumentClosureProbe;
+                            return probe == null ? (bool?)null : probe.ProbeDocumentClosed();
+                        });
+                    }
+                }
+                catch (Exception) { return null; }
+            }
+
+            internal T Execute<T>(Func<T> action, Action<T> publish = null,
+                Action<Exception> failure = null)
+            {
+                if (action == null) throw new ArgumentNullException(nameof(action));
+                using (_reservation.BeginExecution())
+                {
+                    var current = _runtime.CaptureAccess(_target);
+                    if (!ReferenceEquals(current.Session, _access.Session) ||
+                        !ReferenceEquals(current.Gate, _access.Gate) ||
+                        !string.Equals(current.Key, _access.Key, StringComparison.Ordinal))
+                        throw new OfficeDocumentGuardException(ToolRunResult.Error(
+                            "The reserved Office document session changed. No native action was started.",
+                            null, "document_session_unavailable", false));
+                    using (_runtime.EnterAccess(_access, CancellationToken.None))
+                    {
+                        return _runtime.ExecuteGuarded(_access, _target, CancellationToken.None, delegate
+                        {
+                            T result;
+                            try { result = action(); }
+                            catch (Exception ex)
+                            {
+                                if (failure != null) failure(ex);
+                                throw;
+                            }
+                            if (publish != null) publish(result);
+                            return result;
+                        });
+                    }
+                }
+            }
+
+            public void Dispose() { _reservation.Dispose(); }
         }
 
         internal sealed class MutationLockException : InvalidOperationException

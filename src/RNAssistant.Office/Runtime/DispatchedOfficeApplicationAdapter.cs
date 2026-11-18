@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using RNAssistant.Core.Models;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Diagnostics;
 using RNAssistant.Office.Domains.Excel;
 using RNAssistant.Office.Domains.Word;
 using RNAssistant.Office.Domains.PowerPoint;
@@ -11,7 +13,7 @@ using RNAssistant.Office.Domains.Vba;
 
 namespace RNAssistant.Office
 {
-    public sealed class DispatchedOfficeApplicationAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IOfficeDocumentExecutionGuard, IOfficeDispatcherProvider, IOfficeDocumentSessionProvider, IExcelBackendProvider, IWordBackendProvider, IPowerPointBackendProvider, IOutlookBackendProvider, IVbaHostBackendProvider, IDisposable
+    public sealed class DispatchedOfficeApplicationAdapter : IOfficeApplicationAdapter, IOfficeContextProvider, IOfficeBuiltInSkillProvider, IOfficeDocumentCatalog, IOfficeDocumentExecutionGuard, IOfficeDispatcherProvider, IOfficeDocumentSessionProvider, IExcelBackendProvider, IExcelPowerQueryBackendProvider, IWordBackendProvider, IPowerPointBackendProvider, IOutlookBackendProvider, IVbaHostBackendProvider, IDisposable
     {
         private readonly Func<IOfficeStaDispatcher, IOfficeApplicationAdapter> _adapterFactory;
         private readonly OfficeStaDispatcher _dispatcher;
@@ -20,6 +22,7 @@ namespace RNAssistant.Office
         private IOfficeDocumentSession _documentSession;
         private OfficeDocumentMetadata _metadata;
         private IExcelReadBackend _excelReadBackend;
+        private IExcelPowerQueryBackend _excelPowerQueryBackend;
         private IExcelWriteBackend _excelWriteBackend;
         private IExcelFindReplaceBackend _excelFindReplaceBackend;
         private IExcelSheetBackend _excelSheetBackend;
@@ -31,7 +34,8 @@ namespace RNAssistant.Office
         private IOutlookBackend _outlookBackend;
         private IVbaHostBackend _vbaHostBackend;
         private volatile bool _innerInitialized;
-        private bool _disposed;
+        private volatile bool _disposed;
+        private readonly object _disposeGate = new object();
 
         public DispatchedOfficeApplicationAdapter(
             Func<IOfficeStaDispatcher, IOfficeApplicationAdapter> adapterFactory)
@@ -71,6 +75,7 @@ namespace RNAssistant.Office
         {
             get
             {
+                if (_disposed) throw new ObjectDisposedException(GetType().FullName);
                 if (!_innerInitialized)
                 {
                     _dispatcher.Invoke(delegate
@@ -93,6 +98,7 @@ namespace RNAssistant.Office
                     var provider = _inner as IOfficeDocumentSessionProvider;
                     _documentSession = provider == null ? null : provider.DocumentSession;
                     _metadata = new OfficeDocumentMetadata(_inner, _documentSession);
+                    _excelPowerQueryBackend = (_inner as IExcelPowerQueryBackendProvider)?.ExcelPowerQueryBackend;
                     var excel = _inner as IExcelBackendProvider;
                     _excelReadBackend = excel == null ? null : excel.ExcelReadBackend;
                     _excelWriteBackend = excel == null ? null : excel.ExcelWriteBackend;
@@ -122,6 +128,9 @@ namespace RNAssistant.Office
                 return _inner;
             }
         }
+
+        public IExcelPowerQueryBackend ExcelPowerQueryBackend
+        { get { EnsureInitialized(); return _excelPowerQueryBackend; } }
 
         public IExcelReadBackend ExcelReadBackend
         {
@@ -317,12 +326,29 @@ namespace RNAssistant.Office
 
         public void Dispose()
         {
-            if (_disposed)
+            lock (_disposeGate)
             {
+                if (_disposed) return;
+                _disposed = true;
+            }
+            var nativeCompletion = _dispatcher.DocumentOperationCompletion;
+            if (!nativeCompletion.IsCompleted)
+            {
+                // Closing a panel/adapter is not cancellation of an already
+                // dispatched native operation. Retain its STA for late observation.
+                nativeCompletion.ContinueWith(ignored =>
+                {
+                    try { DisposeBinding(); }
+                    catch (Exception ex) { RuntimeLog.Error("Retained Office binding cleanup failed.", ex); }
+                },
+                    TaskContinuationOptions.ExecuteSynchronously);
                 return;
             }
+            DisposeBinding();
+        }
 
-            _disposed = true;
+        private void DisposeBinding()
+        {
             try
             {
                 _dispatcher.Invoke(delegate

@@ -227,7 +227,11 @@ namespace RNAssistant.Core.Storage
             using (var command = Command(db,
                 "INSERT INTO chat_sequence VALUES($stream,$chat,$next_e,$next_t); " +
                 "INSERT INTO chat_reference SELECT stream,$chat,scope_kind,scope_id,uri,revision,ordinal,version,operation FROM chat_reference WHERE stream=$stream AND chat=$source; " +
-                "INSERT INTO context_required SELECT stream,$chat,operation,run,sequence,unknown_effect,0,uri,view,read_scope,signature,repeat_guard FROM context_required WHERE stream=$stream AND chat=$source AND sequence<=$revision AND (unknown_effect=1 OR repeat_guard=1)", tx))
+                "INSERT INTO context_required SELECT q.stream,$chat,q.operation,q.run,q.sequence,q.unknown_effect,0,q.uri,q.view,q.read_scope,q.signature," +
+                "CASE WHEN q.resolved_by IS NOT NULL AND r.sequence>$revision THEN 1 ELSE q.repeat_guard END,q.call," +
+                "CASE WHEN r.sequence<=$revision THEN q.resolved_by ELSE NULL END FROM context_required q " +
+                "LEFT JOIN result_fact r ON r.stream=q.stream AND r.operation=q.resolved_by " +
+                "WHERE q.stream=$stream AND q.chat=$source AND q.sequence<=$revision AND (q.unknown_effect=1 OR q.repeat_guard=1)", tx))
             {
                 command.Parameters.AddWithValue("$chat", fact.Card.ChatId); command.Parameters.AddWithValue("$source", fact.Fork.Parent.Id);
                 command.Parameters.AddWithValue("$revision", fact.Fork.Parent.Revision);

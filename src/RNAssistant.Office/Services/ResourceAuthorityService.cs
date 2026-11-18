@@ -7,6 +7,7 @@ using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office.Services
 {
@@ -494,6 +495,24 @@ namespace RNAssistant.Office.Services
                 arguments = new Dictionary<string, object>(arguments ?? new Dictionary<string, object>());
                 arguments["moduleName"] = prepared.ModuleName;
                 if (!string.IsNullOrWhiteSpace(prepared.TargetModuleName)) arguments["newModuleName"] = prepared.TargetModuleName;
+            }
+            if (operation == ExcelPowerQuerySourceToolHandler.Operation)
+            {
+                var query = JsonConvert.DeserializeObject<ExcelPowerQuerySourcePrepared>(preparedStateJson ?? "null");
+                if (query == null || string.IsNullOrWhiteSpace(query.QueryName))
+                    throw new ToolMutationPreparationException("excel_query_preparation_missing", "Prepared Power Query source identity is required.");
+                arguments = new Dictionary<string, object>(arguments) { ["affectedTables"] = query.AffectedTables ?? new string[0] };
+            }
+            if (ExcelPowerQueryMutationDomain.OwnsOperation(operation) && route == null)
+            {
+                var query = JsonConvert.DeserializeObject<RNAssistant.Office.Tools.ExcelPowerQueryToolPrepared>(preparedStateJson ?? "null");
+                if (query == null || query.Operation != operation || string.IsNullOrWhiteSpace(query.QueryName))
+                    throw new ToolMutationPreparationException("excel_query_preparation_missing", "Exact prepared Power Query bindings are required.");
+                arguments = new Dictionary<string, object> {
+                    ["queryName"] = query.QueryName,
+                    ["sheet"] = query.Refresh?.Sheet ?? query.Load?.Sheet,
+                    ["table"] = query.Refresh?.Table ?? query.Load?.Table
+                };
             }
             var scope = ResourceMutationDomains.Scope(_authority, _session, operation);
             var expected = StringArgument(arguments, "expectedRevision");

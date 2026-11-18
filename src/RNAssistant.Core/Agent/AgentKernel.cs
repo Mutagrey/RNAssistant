@@ -633,6 +633,11 @@ namespace RNAssistant.Core.Agent
             int retryDelay = 0;
             var retainedGuard = await _store.ReadReplayGuardAsync(call, state.Revision, cancellationToken).ConfigureAwait(false);
             state.Progress.RetainReplayGuard(call, retainedGuard);
+            var nativeOperation = state.Progress.PendingNativeOperation(call);
+            var resolutions = _store as IRunOperationResolutionReader;
+            if (nativeOperation != null && resolutions != null)
+                state.Progress.ObserveOperationResolution(await resolutions.ReadOperationResolutionAsync(
+                    nativeOperation, state.Revision, cancellationToken).ConfigureAwait(false));
             if ((!confirmed || retainedGuard != null) && !state.Progress.CanDispatch(call, out progressReason, out progressMessage, out retryDelay, policy))
             {
                 await RecordNotDispatchedAsync(state, call, policy, stepId, progressMessage,

@@ -1,0 +1,857 @@
+{
+  "formatVersion": 1,
+  "description": "Exact published npm bytes; npm release has no gitHead. The inspected monorepo commit is a reference, not asserted tarball source identity.",
+  "referenceSourceCommit": "0eb2cc282fa594e9bd54c63b843e526878ef85d6",
+  "sourceRevision": "npm-tarball-only",
+  "runtimePackages": [
+    {
+      "name": "@microsoft/powerquery-parser",
+      "version": "5.0.0",
+      "tarball": "https://registry.npmjs.org/@microsoft/powerquery-parser/-/powerquery-parser-5.0.0.tgz",
+      "integrity": "sha512-I5U/hDb4Lr5tdgeNy1VavkXS7DKdtdG0Y6/gsrEvgto44T0lrrL6s0pzPHp0DjN/4BH29NfrHnM5dD5jRFv+Mg==",
+      "sha256": "d861c0edd7332abfc1b24674add65ff44372f62d6aab6e2bbd89f1b963acc10f",
+      "gitHead": null,
+      "license": "MIT",
+      "bytes": 250706
+    },
+    {
+      "name": "grapheme-splitter",
+      "version": "1.0.4",
+      "tarball": "https://registry.npmjs.org/grapheme-splitter/-/grapheme-splitter-1.0.4.tgz",
+      "integrity": "sha512-bzh50DW9kTPM00T8y4o8vQg89Di9oLJVLW/KaOGIXJWP/iqCN6WKYkbNOF04vFLJhwcpYUh9ydh/+5vpOqV4YQ==",
+      "sha256": "7615f25fb6d0196bf7c407423de690e2d379cf26542b09b40c5eddadb2321931",
+      "gitHead": "0609d90dcbc93b42d8ceebb7aec0eda38b5d916d",
+      "license": "MIT",
+      "bytes": 34119
+    },
+    {
+      "name": "performance-now",
+      "version": "2.1.0",
+      "tarball": "https://registry.npmjs.org/performance-now/-/performance-now-2.1.0.tgz",
+      "integrity": "sha512-7EAHlyLHI56VEIdK57uwHdHKIaAGbnXPiw0yWbarQZOKaKpvUIgW0jWRVLiatnM+XXlSwsanIBH/hzGMJulMow==",
+      "sha256": "068f99ddeff11741bd1ebbbe3ee4c6f782731bd9ae0a2d598536cce74e289045",
+      "gitHead": "107bb703494cc5a8071cdf45a87e53f248a5e0f3",
+      "license": "MIT",
+      "bytes": 4564
+    }
+  ],
+  "buildTool": {
+    "name": "esbuild",
+    "version": "0.25.12",
+    "tarball": "https://registry.npmjs.org/esbuild/-/esbuild-0.25.12.tgz",
+    "integrity": "sha512-bbPBYYrtZbkt6Os6FiTLCTFxvq4tt3JKall1vRwshA3fdVztsLAatFaZobhkBC8/BrPetoa0oksYoKXoG4ryJg==",
+    "sha256": "227584145829e5c4782734b3fb7b91b49c6aa12876d6cf070e6a3d9d4de543f9",
+    "gitHead": "208f539945b145e7c9d6d844290f81c3fe5af320",
+    "license": "MIT",
+    "bytes": 30947
+  },
+  "referenceBuildBinary": {
+    "name": "@esbuild/linux-x64",
+    "version": "0.25.12",
+    "tarball": "https://registry.npmjs.org/@esbuild/linux-x64/-/linux-x64-0.25.12.tgz",
+    "integrity": "sha512-uqZMTLr/zR/ed4jIGnwSLkaHmPjOjJvnm6TVVitAa08SLS9Z0VM8wIRx7gWbJB5/J54YuIMInDquWyYvQLZkgw==",
+    "sha256": "f7efc127658a108dcda9d4210b01804ee8f5d6b3acbd6d63f20aa51d3b50bd5f",
+    "gitHead": "208f539945b145e7c9d6d844290f81c3fe5af320",
+    "license": "MIT",
+    "bytes": 4395720
+  },
+  "options": {
+    "platform": "browser",
+    "format": "iife",
+    "globalName": "RNPowerQueryParser",
+    "target": [
+      "es2020"
+    ],
+    "minify": true,
+    "legalComments": "eof",
+    "charset": "utf8",
+    "banner": "/* Microsoft Power Query parser 5.0.0. MIT and dependency notices: web/licenses/powerquery-parser-5.0.0/. Offline fixed bundle; built by tools/build-powerquery-parser.js. */"
+  },
+  "inputs": [
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/common/patterns.js",
+      "sha256": "28fd36b65de12859033f1cedb85c4fb845ef0e57a43b7bdc274416dd6fdeea1d"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/common/arrayUtils.js",
+      "sha256": "4c3c403c9673e3055d50032296dd9e93f4be1e6ddf84f9f94bee1ec1938282d4"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/common/assert.js",
+      "sha256": "63df097ecc5386cba3f282b779290a0a0e99b7b28349d9c1ae7b68f5592352c0"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.bg-BG.json",
+      "sha256": "5b417a1777ff90dca718810c54c465995f97c7701cf86bc646688a690f2315fc"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.ca-ES.json",
+      "sha256": "aeff700bd6835e3d971403216e1c08320e71e81c7737c4e348cb959665297af6"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.cs-CZ.json",
+      "sha256": "e137c42d1e3f847a8b6d5bd996994eabe5bc6973019c77ac28f3bdd4e641a1d7"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.da-DK.json",
+      "sha256": "82fa9735e6129179ea264aa10d708c5d9a2df91839fa702fae72a6ed337c5883"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.de-DE.json",
+      "sha256": "f6f63255536f5728a0e6f32d40b1819cddb94d106155d883f84bced317433309"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.el-GR.json",
+      "sha256": "8b38104369425eabf1649897888bd87f785bfa8e5e6ca6f182e6780b4e97ca51"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.json",
+      "sha256": "fa73e8d4973caf7b6dbba1ecf87bd19b5b38dd648a1aa2923b2fb2f259452e50"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.es-ES.json",
+      "sha256": "4a27c0b6c52157114bff1d66594f59af26e4ca0aeb020c1a98473d7e406e45ee"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.et-EE.json",
+      "sha256": "96e70b25918c8c5a79783bfcc6b0887cfdc750e99c46e655ed223df5dfa72bfe"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.eu-ES.json",
+      "sha256": "e2fbc762fb34e7c322ee042582a48a7a926f2cba41be4f281caed7c9d0e5fc2b"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.fi-FI.json",
+      "sha256": "df202f052be9b32c05cbfd1a5eb792da36956a16597e09ffdbf08ce2eec070ab"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.fr-FR.json",
+      "sha256": "e77ece67596d9db1326f3557b737821d69a333f559656810f5373d6f95975fab"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.gl-ES.json",
+      "sha256": "afbc025ee0b36159ebf22cd142a5cf0fb1146e7d4370c4b2e2c9e710b9a9772c"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.hi-IN.json",
+      "sha256": "42b121bb6266e7b4f48ba63b82ced4b7001ccf3c8d5cb371044b47d32972f6db"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.hr-HR.json",
+      "sha256": "cb9fca8a478a59e017c0546764798da7647a4299ae1774aba760b99cc1ef8102"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.hu-HU.json",
+      "sha256": "5d5c6c2e841d41478a958628843045fa44d6bf82ff097f601d0ad2b1bc60b7dc"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.id-ID.json",
+      "sha256": "7d387570901a54898707fac35e54e4d72c35ae69de8513f2a722446a86d20673"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.it-IT.json",
+      "sha256": "b2cc22a435c70ff4d15930ffa97f061da0f641df0e9a4e2f6e302623ecd3b3d0"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.ja-JP.json",
+      "sha256": "48a71391f8fe5b9c79c3e9ff2f0e1dffa6ce1793ea15edab8bc25e401970e6c9"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.kk-KZ.json",
+      "sha256": "2d6c1c76a5258d8ce211bfde434e9091e0f68c7427f7e80f35a90ac806a69e79"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.ko-KR.json",
+      "sha256": "3aebd6709aa3ee272b876999db016f11dab431cb8511d0c8d4b649cfcd23e20d"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.lt-LT.json",
+      "sha256": "e577fefdb05796c2c6ff6b1c07dc045451686fe6cfdb67d4b2257e1285b83d93"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.lv-LV.json",
+      "sha256": "3cb997cd909c06cd0f634daaad82f059a93a096119396ff6de17e4e58945464d"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.ms-MY.json",
+      "sha256": "d31717c7dc742588a6965ac144bd394c7ea7c960e0d198184b4eed5548c1b865"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.nb-NO.json",
+      "sha256": "4c1162fedf20251adf481af45c075b613735cd6c8c648da7ea1510b618b8216f"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.nl-NL.json",
+      "sha256": "a8e9ea7d6b3eb3aae0f735a4b6834208a12959e705db281ce181d1881bf0ffac"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.pl-PL.json",
+      "sha256": "69b2e48bbaacc48c17cf857e4e2f8fe0431374bb33ea04d776d82c19717295b3"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.pt-BR.json",
+      "sha256": "80458badad7cef32ddf395181b7e31f14cb7c48c3ff00d19aa9be82c3f60695e"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.pt-PT.json",
+      "sha256": "4148cf0ef5ffa68bdd50edd7fd87369f2a24a80e4184bb314886e5e264492624"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.ro-RO.json",
+      "sha256": "8d0539c935e63d7690f6b99e2afa994a637126fd4bcaa093b2b98da8a8ef58be"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.ru-RU.json",
+      "sha256": "6f0c88d8cb78213751e55bb9924ae8d1f896cdbc9045954f9c9fa80a66acbeeb"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.sk-SK.json",
+      "sha256": "e69996932d1229273297016e492e5c6a37d760a104bbabe4a1682edfc5d497a9"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.sl-SI.json",
+      "sha256": "f4915f36d80d1a68b69b3be5108204817eab54772e7ba1cdc6ec6561af60ce3b"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.sr-Cyrl-RS.json",
+      "sha256": "a13f08f500f1a2e095ac31d81c7d5a262e3f48592a743ae1a3a81e309ced1151"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.sr-Latn-RS.json",
+      "sha256": "91800db6a9c1bdb09f25ffd9ebacd3285bde500b1d2ba0098787d365b8ce17a4"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.sv-SE.json",
+      "sha256": "45c43d4e1578f6fd02525b74c8a0c8bb7bd712f4a1776efbc41f52e4958b09cc"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.th-TH.json",
+      "sha256": "0dc97ddf2552427f67a96bdce73cfaf538ab9701801a1ea481b5d875516b5d0c"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.tr-TR.json",
+      "sha256": "1b97a387cd4e7db6f0ff16529b2673fba7b628582ddf63efce98bc45dca84cc1"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.uk-UA.json",
+      "sha256": "8a3f8febc6e813b3e333b2fd56ae9e7a6c01c8a4d4e82b02324281364bbe0f7e"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.vi-VN.json",
+      "sha256": "b9611f27276cca7da54860c0938d5704b6b2e59dc3134dbc58cd48a1c10d8ea2"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.zh-CN.json",
+      "sha256": "9ce71d70e650ae6d3a8f1aac3d45d973b23573febeee1cf7581e2b44fbeca7d5"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates/template.zh-TW.json",
+      "sha256": "1034736a85cfdfe54933b34e8152f76d6dbe550603bce569b8843f3b9d9f96a0"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/locale.js",
+      "sha256": "78eb0b6d9ee58917e44c4542a7512ca83e57ec386074b79e881d3bcadbaddaa8"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/templates.js",
+      "sha256": "c723fcb0a071e273de0c980d59b9624d84b6bacc1276c5b126f4f6a4aab6286f"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/localizationUtils.js",
+      "sha256": "425b9c73e17b67bd25588a18fd48398ff80782d432e0112a588eb97cc924bbf7"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/error.js",
+      "sha256": "edd096048c28c5fd8c3067522be816f2006b3ea67e7e347dedca7464a1f14c8a"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/lexer/error.js",
+      "sha256": "b80ee16bcbafa7bdae2931e59ca349df48b7a67563b62dd465b159fa3875d425"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/lexer/lexerSnapshot.js",
+      "sha256": "b58c331a9a70e3173ca19827cb8f9fece1ffbf3f48d359399ee421f9b2c4b0aa"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/lexer/lexer.js",
+      "sha256": "137cab6b1e941b2e8fa78589129d51771a84ba4d64f6c95af3032cf7af54cf1b"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/lexer/lexSettings.js",
+      "sha256": "7017902e40cd727d48aa8e595d80962fcd5e54c02bb721fefb3f80fa3fbaf03f"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/lexer/index.js",
+      "sha256": "5a6e826c63391695c0fccf44e46a343b5f2a0e3bf420d445be6c06c4bb0181c4"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/context/context.js",
+      "sha256": "0217c484c56ba7a3f275abc9f61c1157f75571bbd8c9105e7d1454e17cff1b29"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/nodeIdMap/ancestryUtils.js",
+      "sha256": "2f5577fc3b3d78f58d11e88e55fae6fcc87768fb4e6458b59580882a83d3379b"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/nodeIdMap/nodeIdMap.js",
+      "sha256": "645379319e6dc835e4a04dbb6778ad145a425f513c566ef0c21dbe97fa6e450a"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/nodeIdMap/nodeIdMapUtils/commonSelectors.js",
+      "sha256": "5a71a77de67bf3cf4de74cf22cc48e0b5de370895df96b3cb6a059594728448a"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/nodeIdMap/nodeIdMapUtils/childSelectors.js",
+      "sha256": "0fdbfc41b39c3d248b0a7969e99c58c267cdfd224fb409e4c3c9f9a8d7195ef4"
+    },
+    {
+      "scope": "node_modules",
+      "path": "performance-now/lib/performance-now.js",
+      "sha256": "70412bccfc9f62a3e769ce3d6d172d471316c3d96d1e507d8f4e648719346967"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/common/trace.js",
+      "sha256": "7620a1bfe9c7dde1d1726d0eb93b7161b9220b3c354df2935aa87db6b2cad850"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/nodeIdMap/nodeIdMapUtils/idUtils.js",
+      "sha256": "3eb3af2fbd1015a632ebf5ef37faf15b6d091d088ecc5c93f2cb757bcbd12f9e"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/nodeIdMap/nodeIdMapUtils/leafSelectors.js",
+      "sha256": "993c4850f78f31d3d6a31013b966332923f9bd98c856917eda89b6851ffb7124"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/nodeIdMap/xorNode.js",
+      "sha256": "004306a6ad69440d0815b5b0d9c63774ae36d7e188fe7bd24358270e677abbcd"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/nodeIdMap/nodeIdMapUtils/nodeIdMapUtils.js",
+      "sha256": "2bf7cfb1558c7208ac33f30ff57b688229d63de08010bf9939cd530da8911960"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/nodeIdMap/xorNodeUtils.js",
+      "sha256": "168cd12782a2cee372e57ff0a75d93ae522a6deee2f44d03173485ab24e45e4a"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/nodeIdMap/nodeIdMapUtils/parentSelectors.js",
+      "sha256": "9a16381ced5bdf2952cb9a779f5e7a0e3985c26bf2bf4f893e54e3c3b54aa759"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/nodeIdMap/nodeIdMapUtils/specializedSelectors.js",
+      "sha256": "d5fa689d51d7c68dadf09732e144df44dc45b9e2fb353518cfd43910a72d548b"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/nodeIdMap/nodeIdMapUtils/index.js",
+      "sha256": "6480b7e362da240a4e03f3718e7acb0a2096cebcf89b5049ac9f2ffef381434f"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/nodeIdMap/nodeIdMapIterator.js",
+      "sha256": "90427220441d6b7c504f1ef93f1eeb633df34a0f05e7320ef6e5d634ee089d4f"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/nodeIdMap/index.js",
+      "sha256": "40baf01c4257dbe71e13f0098b10a41d558e12ce53007e0fc1762826873647ce"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/context/contextUtils.js",
+      "sha256": "d31fd98c0b8eeccd3b47a7503fa1acbdd1272a3a6d2ce7136d4be051db1f81f0"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/context/index.js",
+      "sha256": "a0a85b4c04208c7e929c66ac34daa063cd6aa0d801ecec5664fdb56a5567ee5a"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/disambiguation/disambiguation.js",
+      "sha256": "9a4d09bf16b104499fa61835828e84d29d591a74aa48734b9c870b038025b70f"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/parseBehavior.js",
+      "sha256": "ca2f461f1204fb94a1e32dea28f548774e6360a9f3a9dd93d8ec146a8c0556ce"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/parseState/parseStateUtils.js",
+      "sha256": "de56644a51f2983e0fdf9798807c6eb114407306b65e25499bda18d6a0562218"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/parseState/parseState.js",
+      "sha256": "c01f3e793c8d6a66ab44e5069a54a506b50b04d8935b372ade676bfdd8d92f01"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/parseState/index.js",
+      "sha256": "1d86b6ee916b3f824ee7e183dfa04b5358d1c24af43a66d39c20cee8e60a5e7e"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/disambiguation/disambiguationUtils.js",
+      "sha256": "b020eacd1f1b39eed1b114f734534d80a50b03df64c168020118b974d67a348a"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/disambiguation/index.js",
+      "sha256": "303710941037bf113c7f1c3c727d909cfc3b1e43b0a207094e8d9613ca64d278"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/parser/parserUtils.js",
+      "sha256": "75831985248afd91a9b588a61222dd6bd70bc1ee57bd856d51c4919dbf4a365e"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/parser/parser.js",
+      "sha256": "99f511c9e92ab0636668661f78fe8844158e175fa587eaa4ea6bc050cba7b90f"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/parser/index.js",
+      "sha256": "d19ec8be62b4a07846ca1db7d451754d6478f08fda499fa68e1002b1040279bb"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/token.js",
+      "sha256": "97170ebe2fea549b3251d3f14175378d2448e26bc4ec84d9920c611237e47dc7"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/parsers/naiveParseSteps.js",
+      "sha256": "aeccb38d25703c9f803ca068cf96b3ce7493ba80cf060ed8f8f0d74aeec66146"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/parsers/combinatorialParserV2/commonTypes.js",
+      "sha256": "65ee1a98ae5d77816af00646c392c7067012641c3f402e4d302b29fa37f8ec2d"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/parsers/combinatorialParserV2/combineOperatorsAndOperands.js",
+      "sha256": "a854301d5eda17f69e7faa2d074e5ca27bcba76e04543b8a8b9131af4a6b14bd"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/parsers/combinatorialParserV2/readOperatorsAndOperands.js",
+      "sha256": "22c39ba71ce4aebd39634902c9563163a00ff1f614a9d85c832df3c8f02a2241"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/parsers/combinatorialParserV2/combinatorialParserV2.js",
+      "sha256": "17b06e8065f6c9ac4dec07f104237b19d043710cb23fb6770e9e8392d3e11493"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/parsers/combinatorialParserV2/index.js",
+      "sha256": "409bec9fec4378ed4c9c6ec1e2463d7720b4194e3b9345ddda544d534d3e4193"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/parsers/recursiveDescentParser.js",
+      "sha256": "e568b19c5083c780844bcbe55a604b8655674a7d8c81fe45a754d469a6f85390"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/parsers/index.js",
+      "sha256": "05e861cd9ade18e4dd090f4a3eae2bee45e54f0914f459e2ef9ebcb4b1306460"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/parseSettings.js",
+      "sha256": "09172837dc64d47c96822c22670cbcb17f6baa8d7f4d948232607c3f9bc7b208"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/parser/index.js",
+      "sha256": "5895b974c136ad8ac423a6d6f7a90ba407f0637845676ad1e9ff7c0eba9d3af3"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/localization.js",
+      "sha256": "69045358c5f2926d2377a8e36cee6915773cde3f3fd561c153f9783fbc71c8be"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/localization/index.js",
+      "sha256": "ef5a2b55a72f3018bd4fb7f99d3a8268090d2fae5401d9548ce7584d8deefcf8"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/common/error.js",
+      "sha256": "b8101c28033661443d1cd7e300669f9270d86ab664242a559d0d245baa75ec62"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/common/mapUtils.js",
+      "sha256": "b6ffacff99b8f4e90419fd9e4a2e61604e779c5aa1722870066f21700842a11b"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/common/setUtils.js",
+      "sha256": "38415125e1f974a54b94c57d59e217206cffef81b6be5aa2630756ed8debe9d5"
+    },
+    {
+      "scope": "node_modules",
+      "path": "grapheme-splitter/index.js",
+      "sha256": "0291e8ce0fb6d8fd8e0008826d4572d76a16359c4008a0e194a39d9d91caec95"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/common/stringUtils.js",
+      "sha256": "a04bef1eeac672ab932d003aed52ea9d25ba0c49c0e37728f210eea4e5699aea"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/common/result/result.js",
+      "sha256": "b4e13601e2cf83a232b3bc9b20797ac4a34e361de4c2b931baed1468b47af7a6"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/common/result/resultUtils.js",
+      "sha256": "1229254016463d4a508baad0bf90b2144c041f68233c56a3795a6c9881a8f2ad"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/common/result/index.js",
+      "sha256": "dfa70b70fb7dc6e94d4e63cfaf0515a9491e63425d78d3f96e8a4d379372bf0e"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/common/traversal.js",
+      "sha256": "a839735198b8c9955b8064e4ad99e00e8942c3c486c34ac9c0632c3b3301048e"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/common/typeScriptTypeUtils.js",
+      "sha256": "facccc02a600a80d11669cc804c5c7bd6ae59ecde9f73070b175ec9562ba7171"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/common/cancellationToken/cancellationToken.js",
+      "sha256": "06068c1f514af2d5e09b2affaea7cfcc1d2cb0e6047342000b1ab8458bbdae97"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/common/cancellationToken/ICancellationToken.js",
+      "sha256": "d3b4428299065fc932294804641f11d223a8ee30c0ccf3a6bdfe8b69a7294078"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/common/cancellationToken/index.js",
+      "sha256": "23e6a6963d10ee3b0a51fce3b669e79a16dd9f8ee2515b0f18b50f51ad1ac94d"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/common/commonSettings.js",
+      "sha256": "23317eb7caaa2828918575d53260e0047eed1af4402890746d41dd512ba87db1"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/common/immutableSet.js",
+      "sha256": "dac508e93bdac57fa936a900b09d24597bcc1799630aa27f4b938ecfbe2b3a3a"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/common/orderedMap.js",
+      "sha256": "2e99730fd14577a40f9d8576dc9f0b482a69058b11506fee6ce052850465d03b"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/common/partialResult/partialResult.js",
+      "sha256": "a97c8d351cf725e8410f6e44330abfafa2385a9574ad1bf288dae415967ac7bd"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/common/partialResult/partialResultUtils.js",
+      "sha256": "cde4ad70acdd8fb71cd1855f8f31c45d19cc1730d8a96bd32c5d3cad0cb7d9de"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/common/partialResult/index.js",
+      "sha256": "79b5a746aac72bf0db490aa9a808252f14586591438f6867007dc035c2856e24"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/common/index.js",
+      "sha256": "309ed4dcebcabc7794c16aa0e40442f04df519520517bd011bd63f1599133042"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/keyword/keyword.js",
+      "sha256": "96f6278b3e25d3f4e3bdfa2b49873796a19ccfb19b63765d00c891ee56ef19f8"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/identifierUtils.js",
+      "sha256": "f5a5e1ced0f5dff4072a88d121cd5a19be43e99a3987fec0667cbe8a3317302e"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/identifierExpressionUtils.js",
+      "sha256": "143adc0d3c51c95fc4a79fca2d866f63a08652ea996e4dd7249ba4f240326dd5"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/textUtils.js",
+      "sha256": "956a00d03d22497605a8b0ca361cda42f419d42c70abec24e898e249e3b8f938"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/comment.js",
+      "sha256": "fc5064ef85d2fed07b5a6a388080ea7f92fd1a5f0ea7cc0d4d728ecef0afd757"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/ast/ast.js",
+      "sha256": "b86a53c3050f8d736b61356cf7fd0308ea7944ceb7e1cdae687e0d720a7c3b4a"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/ast/astUtils/typeGuards.js",
+      "sha256": "fc2e73a0ffc0077792338919f72c914200fb2918dfd8dc1ff7b6c62ec4b89c36"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/ast/astUtils/assert.js",
+      "sha256": "b2a812fe2564731f125775d301533183ba05f7f8acd5c633851e285dd4ae6199"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/ast/astUtils/simplifiedType.js",
+      "sha256": "08d359507de1a0142cb60de0830d6f320656f52d21c6f78271a1b3091a433b30"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/constant/constant.js",
+      "sha256": "7c8118e986440fab24560ede6d8698405fcff9d40a14b8329f0a83799a6e6a9d"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/constant/constantUtils.js",
+      "sha256": "ce2d23152859b0a7e39741bd4613f0eb4428dcd313acdaee0457daa7f0863151"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/constant/index.js",
+      "sha256": "4d78447c58d8872294155ea193916969eb95ebbdac1272040c76256ab4e9a5bf"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/ast/astUtils/astUtils.js",
+      "sha256": "d0b2e591283423696ff6cf52f428815139788a114e6edf4c9288829e463d8f89"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/ast/astUtils/index.js",
+      "sha256": "6a963b0f28e55190df74acb63b5f6bab6ecc6ec78d27adfecc4b89e9b5125140"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/ast/index.js",
+      "sha256": "10c02f049b498d9a856f9dec2b564286ac4e6725625fa1c907c3556e81c9cfbe"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/keyword/keywordUtils.js",
+      "sha256": "7238522d9e133ded28ea10180aa823486d29422b78b59d479a331b2a8db703af"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/keyword/index.js",
+      "sha256": "878f70273dd595323866f7ce892f622eeda7f2003987372179cb52339a6d7841"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/type/type.js",
+      "sha256": "2684de83a371420c8b471e9c58f41ed374fb0411a051e635bcd26c0882b75e18"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/type/typeUtils/isType.js",
+      "sha256": "8432b152ec5f4d413f1a6d0c775423eed7a42e066d00af05e289d699eeb0c6d6"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/type/typeUtils/assert.js",
+      "sha256": "6f5b561ebbc9ccd3eda6eb33439082d1fc255fd0aead64a7c62e4fdcada521ff"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/type/typeUtils/inspectedParameter.js",
+      "sha256": "1ffb349887dc9e4936801bcd7d94b5fad59c6bb66ec165fa4839870fa2842485"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/type/typeUtils/typeTraceConstant.js",
+      "sha256": "60c3ed5ab93b74d9149aded3f71be0455e9c8e6f4afe9a00ede9202fbac1f9cd"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/type/typeUtils/isCompatible.js",
+      "sha256": "7189c75bc3a7659fcc04ff9cd52f685a9e73ed22273245c4feacb3a26b82188c"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/type/typeUtils/primitive.js",
+      "sha256": "462190d914122b169a6381e2ea913d388b3a83d75cd61c3880b7c7cd1bb238c5"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/type/typeUtils/simplify.js",
+      "sha256": "f86a0cc334f16b7699db41909ff44b9fec5e5b95ca668c7b88fe452287c2e82c"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/type/typeUtils/factories.js",
+      "sha256": "0e9b7edd559ee8200acf4d5a8d7a3de118781a251908c934ecd3933b8836ade9"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/type/typeUtils/typeUtils.js",
+      "sha256": "87cc02a59559e54bfd2ebc8cd7f9a4b05a96477c15c040276a9e4b4c799b7feb"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/type/typeUtils/isEqualType.js",
+      "sha256": "8c2d27f979700fc819e916e9ddd75e4b0d841ca662e6dae4a990a2f2b746d0ef"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/type/typeUtils/categorize.js",
+      "sha256": "0a66795565f33255a2721c1feda4a96146b131f7582ae1293a8c01683b20db4a"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/type/typeUtils/nameOf.js",
+      "sha256": "cf030a1c39d7689d22ffc56175c5ae6e4d5aa8a6f6155b5648d599f96682efcd"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/type/typeUtils/typeCheck.js",
+      "sha256": "a48c1ceed4280bb085a673f9e7c1a72d72858159205c7b0da650763fdc42327e"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/type/typeUtils/index.js",
+      "sha256": "d2b62cdc184d6f8eb2351a97b1d75953bddeb6cfab5f4e9a27043ad813eecab5"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/type/index.js",
+      "sha256": "c03ae90f109261780413e63408646f6b5b2837cc30e4949c56aa97f05a3c3b0f"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/language/index.js",
+      "sha256": "c13bafdd53aa31272cc9dba66982585313c95467650844c9597965e84b34858a"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/settings.js",
+      "sha256": "b02d59846fc8657add711d88ab49018d21bb98b9199dc0235781e273020311a0"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/task/task.js",
+      "sha256": "dc3276cb8518579f06da1ca48c4a7f946301a5f4dcd5eef6845c1019ebdbe3c9"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/task/taskUtils.js",
+      "sha256": "11526c8b0313190d2bd0fd7a052e6cb3fc043550efb9528731751ab1d65c528e"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/task/index.js",
+      "sha256": "d25997223c1ef48c66038f540602ac4ed50233d76799daddaf609cb9f67d0a71"
+    },
+    {
+      "scope": "node_modules",
+      "path": "@microsoft/powerquery-parser/lib/powerquery-parser/index.js",
+      "sha256": "1b6bfc7ec6ce3d82902308f3ee931c3d37c752b571fe6ef534278146543170e3"
+    },
+    {
+      "scope": "repository",
+      "path": "tools/powerquery-parser-entry.js",
+      "sha256": "288f35643d16a6e78024be0c6246efb515c324535aa2cf73082ed3aef5f17d9f"
+    }
+  ],
+  "output": {
+    "path": "web/js/vendor/powerquery-parser-5.0.0.js",
+    "bytes": 609916,
+    "sha256": "c3529d675c5b3a0f4938948a48d0a739978e4b6176ff709fd07e637bd55df8c0"
+  }
+}

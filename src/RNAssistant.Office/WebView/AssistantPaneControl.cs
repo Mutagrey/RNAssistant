@@ -34,6 +34,9 @@ namespace RNAssistant.Office.WebView
         private PluginWebViewHost _pluginHost;
         private LocalBrowserPageRuntime _externalBrowser;
         private LocalBrowserEnvironment _localBrowserEnvironment;
+        private PowerQueryWebViewAnalyzer _powerQueryAnalyzer;
+        private Task _powerQueryDrained = Task.CompletedTask;
+        private int _powerQueryGeneration;
         public TabularWebViewExecutor TabularExecutor { get; private set; }
         private Stopwatch _initialNavigationTimer;
         private DateTime _lastSlowPostReportUtc;
@@ -44,7 +47,13 @@ namespace RNAssistant.Office.WebView
         {
             get { return Task.WhenAll(_bridge.RequestsDrained, _resourceRequestsDrained.Task,
                 TabularExecutor == null ? Task.CompletedTask : TabularExecutor.Drained,
+                PowerQueryRequestsDrained,
                 _pluginHost == null ? Task.CompletedTask : _pluginHost.Drained, _plugins.Drained); }
+        }
+        private Task PowerQueryRequestsDrained
+        {
+            get { lock (_resourceRequestSync) return Task.WhenAll(_powerQueryDrained,
+                _powerQueryAnalyzer == null ? Task.CompletedTask : _powerQueryAnalyzer.Drained); }
         }
         private IntPtr _lastExternalFocusWindow;
         public Action<string, string, bool> MailboxNavigationRequested
@@ -92,7 +101,9 @@ namespace RNAssistant.Office.WebView
                     if (_resourceRequestsInFlight == 0)
                     {
                         _bridge.RebindController(controller);
+                        _controller.SetPowerQuerySyntaxAnalyzer(null);
                         _controller = controller;
+                        _controller.SetPowerQuerySyntaxAnalyzer(_powerQueryAnalyzer);
                         rebound = true;
                     }
                 }
@@ -232,6 +243,7 @@ namespace RNAssistant.Office.WebView
 
             var core = _webView.CoreWebView2;
             _localBrowserEnvironment = _localBrowserEnvironment ?? new LocalBrowserEnvironment(Handle);
+            ConfigurePowerQueryAnalyzer();
             var nativeBrowser = new LocalBrowserRenderer(this, _webView, _localBrowserEnvironment, _plugins, _webRoot,
                 (target, token) => _bridge.OpenBrowserContent(target, token), content => new BrowserResourceBinding(_controller, content), _bridge.PauseBrowserRunAsync);
             _externalBrowser = new LocalBrowserPageRuntime(request => _bridge.ResolveBrowserLocator(request),
@@ -690,6 +702,7 @@ namespace RNAssistant.Office.WebView
 
         private void DetachInitializedWebView()
         {
+            DetachPowerQueryAnalyzer();
             _bridge.Browser = null;
             _externalBrowser?.Dispose(); _externalBrowser = null;
             _bridge.WindowHost?.InvalidateChrome();
@@ -718,6 +731,68 @@ namespace RNAssistant.Office.WebView
                 _webViewController.AcceleratorKeyPressed -= OnAcceleratorKeyPressed;
                 _webViewController.LostFocus -= OnControllerLostFocus;
                 _webViewController = null;
+            }
+        }
+
+        private void ConfigurePowerQueryAnalyzer()
+        {
+            DetachPowerQueryAnalyzer();
+            var generation = _powerQueryGeneration;
+            var pending = _powerQueryDrained;
+            if (pending.IsCompleted)
+            {
+                AttachPowerQueryAnalyzer(generation, pending);
+                return;
+            }
+            pending.ContinueWith(done => {
+                var observed = done.Exception;
+                try
+                {
+                    if (!_resourcesDisposed && !IsDisposed && IsHandleCreated)
+                        BeginInvoke(new Action(() => AttachPowerQueryAnalyzer(generation, done)));
+                }
+                catch (InvalidOperationException) { }
+            }, TaskScheduler.Default);
+        }
+
+        private void AttachPowerQueryAnalyzer(int generation, Task previous)
+        {
+            if (_resourcesDisposed || IsDisposed || generation != _powerQueryGeneration ||
+                _localBrowserEnvironment == null || _webView == null || _webView.IsDisposed) return;
+            if (previous.IsFaulted)
+            {
+                RuntimeLog.Error("Power Query parser cleanup was not confirmed; analysis remains unavailable.", previous.Exception);
+                return;
+            }
+            if (previous.IsCanceled) return;
+            try
+            {
+                var analyzer = new PowerQueryWebViewAnalyzer(_localBrowserEnvironment, Handle, _webRoot);
+                lock (_resourceRequestSync)
+                {
+                    _powerQueryDrained = Task.CompletedTask;
+                    _powerQueryAnalyzer = analyzer;
+                }
+                _controller.SetPowerQuerySyntaxAnalyzer(analyzer);
+            }
+            catch (Exception error)
+            {
+                RuntimeLog.Error("Power Query parser initialization failed.", error);
+                _controller.SetPowerQuerySyntaxAnalyzer(null);
+            }
+        }
+
+        private void DetachPowerQueryAnalyzer()
+        {
+            _powerQueryGeneration++;
+            _controller.SetPowerQuerySyntaxAnalyzer(null);
+            var analyzer = _powerQueryAnalyzer;
+            if (analyzer == null) return;
+            analyzer.Dispose();
+            lock (_resourceRequestSync)
+            {
+                _powerQueryDrained = Task.WhenAll(_powerQueryDrained, analyzer.Drained);
+                _powerQueryAnalyzer = null;
             }
         }
 

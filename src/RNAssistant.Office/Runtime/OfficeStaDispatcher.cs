@@ -2,15 +2,20 @@ using System;
 using System.Collections.Concurrent;
 using System.Runtime.ExceptionServices;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace RNAssistant.Office
 {
-    public sealed class OfficeStaDispatcher : IOfficeStaDispatcher, IDisposable
+    public sealed class OfficeStaDispatcher : IOfficeStaDispatcher, IOfficeDispatcherLifetime, IDisposable
     {
         private readonly BlockingCollection<WorkItem> _queue;
         private readonly Thread _thread;
-        private int _disposed;
+        private volatile int _disposed;
         private int _threadId;
+        private readonly object _lifetimeGate = new object();
+        private int _documentOperations;
+        private bool _disposeRequested;
+        private TaskCompletionSource<bool> _documentOperationCompletion;
 
         public OfficeStaDispatcher()
         {
@@ -78,11 +83,18 @@ namespace RNAssistant.Office
 
         public void Dispose()
         {
-            if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            lock (_lifetimeGate)
             {
-                return;
+                if (_disposeRequested) return;
+                _disposeRequested = true;
+                if (_documentOperations != 0) return;
+                _disposed = 1;
             }
+            DisposeCore();
+        }
 
+        private void DisposeCore()
+        {
             _queue.CompleteAdding();
             if (Thread.CurrentThread.ManagedThreadId != _threadId)
             {
@@ -91,6 +103,55 @@ namespace RNAssistant.Office
                     _queue.Dispose();
                 }
                 return;
+            }
+        }
+
+        public Task DocumentOperationCompletion
+        {
+            get
+            {
+                lock (_lifetimeGate)
+                    return _documentOperations == 0 ? Task.FromResult(true) : _documentOperationCompletion.Task;
+            }
+        }
+
+        public IDisposable RetainForDocumentOperation()
+        {
+            lock (_lifetimeGate)
+            {
+                if (_disposeRequested || _disposed != 0)
+                    throw new ObjectDisposedException(GetType().FullName);
+                if (_documentOperations++ == 0)
+                    _documentOperationCompletion = new TaskCompletionSource<bool>(
+                        TaskCreationOptions.RunContinuationsAsynchronously);
+                return new DocumentOperationLifetime(this);
+            }
+        }
+
+        private void ReleaseDocumentOperation()
+        {
+            TaskCompletionSource<bool> completion = null;
+            var dispose = false;
+            lock (_lifetimeGate)
+            {
+                if (--_documentOperations == 0)
+                {
+                    completion = _documentOperationCompletion;
+                    if (_disposeRequested && _disposed == 0) { _disposed = 1; dispose = true; }
+                }
+            }
+            if (completion != null) completion.TrySetResult(true);
+            if (dispose) DisposeCore();
+        }
+
+        private sealed class DocumentOperationLifetime : IDisposable
+        {
+            private OfficeStaDispatcher _owner;
+            internal DocumentOperationLifetime(OfficeStaDispatcher owner) { _owner = owner; }
+            public void Dispose()
+            {
+                var owner = Interlocked.Exchange(ref _owner, null);
+                if (owner != null) owner.ReleaseDocumentOperation();
             }
         }
 

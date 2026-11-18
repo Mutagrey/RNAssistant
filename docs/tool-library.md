@@ -463,6 +463,89 @@ Search details use existing typed result blocks and activity summaries; Inspecto
 shows the saved request/result, not a second reconstructed log. Five VBA captions now
 use the active catalog constants and moduleName rather than retired tool IDs.
 
+### Excel Power Query — 2026-11-16
+
+Owner: `ExcelPowerQueryToolHandler` / source mutation owner in Office and the bound
+`ExcelPowerQueryInteropBackend` in OfficeHosts. Queries use the existing
+[Resource Fabric](resource-fabric.md#excel-power-query-resources--2026-11-16), shared
+tool runtime, mutation journal, CAS and source/data viewers.
+
+| Operation | Public route | Effect and evidence |
+|---|---|---|
+| Discover/read/search M | `core.find/read/search` with `Excel query: <name>` | Observation only; no hidden evaluation |
+| Edit existing M | `core.patch/write` | Guarded exact source write/read-back; no refresh |
+| Create definition | `excel.query.create(name, source, description?)` | Existing name conflicts; no connection/load/refresh |
+| Validate source | `excel.query.validate(target, kind=source)` | Official offline syntax parser on an exact captured source; bounded diagnostics and current-source comparison; other analysis remains `not_checked` |
+| Validate loaded data | `excel.query.validate(target, kind=loadedData, table?, requiredColumns?, nonEmptyColumns?, keyColumns?, expectedRows?)` | Reads existing worksheet data; requested checks and native cell errors, each with explicit coverage |
+| Refresh existing load | `excel.query.refresh(target, table?)` | Pins query/source/load bindings and invokes exact worksheet QueryTable refresh |
+| Create worksheet load | `excel.query.load(target, sheet, address, table, createSheet?)` | New named table at an exact cell; new or entirely empty sheet, followed by observed refresh |
+
+The source handler is private implementation of the common write/patch route,
+not a published alias. Public tools have typed prepared contracts; model arguments
+never carry internal revisions, native IDs or refresh generations. Source changes
+and creates are confirmed only by exact M read-back. Read-back disagreement or
+unavailable after-state remains Unknown with an inspectable source target.
+
+Source syntax uses the fixed `@microsoft/powerquery-parser@5.0.0` bundle in an
+isolated local WebView2 Worker. It parses workbook expressions, not section
+documents, and stops at the first lexical/parse error. Diagnostic offsets are
+zero-based UTF-16; line/column are one-based UTF-16 positions derived from that
+captured text. Source analysis is bounded to 262144 UTF-16 characters, independently
+of the larger source read/edit bound. Capture and final live comparison hold the
+document gate briefly; parsing does not hold it. Missing host/assets, timeout,
+analyzer cancellation without caller cancellation, exceeded bounds, mismatched
+transport or internal parser failure produce `not_checked`, never fabricated
+syntax success/failure. Caller cancellation propagates through the normal tool
+cancellation path. Actual M execution, name
+resolution, dependency analysis and source access remain outside this check.
+Pinned npm provenance, licenses, byte-identical rebuild and scope are in
+[vendor notes](../web/licenses/powerquery-parser-5.0.0/README.md). Node/esbuild are
+development-only bundle tools; no new product runtime is required. The published
+upstream Node requirement is not presented as an official browser-support promise.
+
+Refresh is synchronous `QueryTable.Refresh(false)` on the bound owner STA inside
+a retained HostRuntime mutation operation. The 30-second caller wait is separate
+from native lifetime: timeout or caller cancellation leaves native ownership held
+until observed completion. Another document mutation cannot slip in while the
+native operation is still running. `core.read` with `representation=status` reads
+the session observer without joining the blocked COM dispatcher. It reports that
+native cancellation/probing is unavailable while the synchronous call owns that
+dispatcher; user Stop never claims native cancellation.
+
+Late completion is a new observation of the exact session/operation generation.
+It does not rewrite the earlier Unknown result. A typed operation observation
+resolves only that operation's replay guard; it does not infer that loaded data
+passed requested checks. Neither argument randomization nor global unknown-guard
+clearing is a recovery path. Session restart never automatically replays a refresh.
+
+New load creation rejects an occupied destination, table-name collision, protected
+or read-only destination and ambiguous native binding. The entirely empty-sheet
+rule reserves unknown expansion space. It never deletes a sheet/table to make
+room. On partial creation or refresh failure it reports the created objects and
+observed state without blanket rollback. Existing loads retain their location.
+Connections also participating in the Data Model are outside this worksheet-only
+execution contract and fail explicitly.
+
+Loaded-data validation captures at most 100000 cells and reports full loaded-table
+or metadata-only coverage. It checks exact required headings, requested data row
+count (excluding header/totals), null/empty/whitespace values and case-sensitive
+composite key uniqueness. The native error checker obtains bounded exact `ISERROR`
+masks from the loaded worksheet range; failures or unsupported masks return an
+unknown count, never zero. This is a worksheet check, not a Power Query preview:
+it evaluates no M, proves no external-source freshness and cannot expose latent
+errors in nested/unloaded M values. A large table is not silently sampled for a
+whole-table uniqueness/error claim. Numeric totals reuse `excel.columns.summarize`.
+An observed running refresh rejects data validation. Positive criteria require
+known idle native state plus unchanged query/binding identity and loaded-table
+shape before and after capture; unknown or changed state downgrades them to
+`not_checked`. This remains a sequential observation, not an atomic workbook snapshot.
+
+This delivery does not publish native cancel, computed preview, full
+dependency analysis, Data Model loading, or global query rename/delete. Credentials,
+privacy levels, native SQL approvals and source configuration remain under Excel.
+Native Windows/Office execution qualification remains open separately from
+host-neutral tests.
+
 ### Excel row and column deletion
 
 Owner: `ExcelDeleteRowsColumnsService` in Office; the bound Excel backend owns COM.

@@ -1321,6 +1321,83 @@ document access owners retain their responsibilities. No upload grants execution
 or publication authority. Bounds and verified-prefix/draft rules are owned by
 [Tool Library](tool-library.md#library-mutation-uploads).
 
+## Excel Power Query resources — 2026-11-16
+
+Owner: the existing `ExcelResourceProvider` and shared mutation gateway in Office;
+`IExcelPowerQueryBackend` is an optional bound host capability. The COM implementation
+belongs to OfficeHosts, and both dispatched and UI-thread adapters preserve that
+optional backend. Core owns only the common resource/evidence protocol.
+
+`core.find` in document scope discovers compact `excel-query` metadata without
+capturing every M definition. Copy the exact `Excel query: <name>` target. Query
+names retain their spelling; the runtime creates document-scoped identities and
+revisions. An M definition, its connection/load configuration, an execution
+generation and an output table remain different facts and resources.
+
+Source reads set `rawContentIncluded=true` for the delivered M body while keeping
+their exact whole/partial coverage and completion flag. The shared model context
+owner can therefore carry that observed text into the next accepted patch/write;
+metadata views and source validation do not gain M-body observation authority.
+
+| View | Observed content | Execution |
+|---|---|---|
+| `source` (default) | Exact M text with common revision-bound paging, source selectors and CAS retention | None |
+| `metadata` | Name, description, source length and actual host capabilities; return type remains unknown | None |
+| `bindings` | Exact connection matches, worksheet table targets, observed dimensions and completeness/ambiguity | None |
+| `dependencies` | Name/dependency/source-access analysis remains `not_checked`; this read does not invoke the optional syntax analyzer | None |
+| `status` | Session-owned native operation state, native observation time and exact completion evidence | Observer read; no COM probe or refresh |
+| Loaded `Excel table: ...` | Existing table/range resource and bounded values | None |
+
+The source identity is `rna://excel/<document-authority>/query/<exact-name>`;
+status has its own `/status` child identity. These addresses are runtime-only.
+The status read has a deliberate fast path before live COM target resolution and
+the document gate: a synchronous native refresh can hold the STA. A recent status
+serialization is not presented as a new native probe. Source/metadata/binding/data
+reads retain the normal exact-session gate.
+Resolving the status child inspects only cached session metadata and does not
+confirm that the native query still exists. The common data plane reads its
+current observer snapshot without COM; an exact historical status revision uses
+the shared retained view only and never falls back to a current observation.
+
+`excel.query.validate(kind=source)` captures an exact source revision through this
+same reader/CAS path, then analyzes it outside the document gate with the optional
+fixed offline parser. Bounded diagnostics refer to that snapshot, not implicitly to
+later M. `sourceMatchesCurrent=false/null` exposes changed/unavailable live source.
+The returned source refs preserve provenance; the validation tool does not deliver
+the M body or grant a whole-source overwrite observation. A syntax pass does not
+prove name resolution, dependency coverage, source access or evaluation. Mere
+source/metadata/dependencies reads do not invoke the parser.
+
+Existing M is edited through `core.patch/write` and the private
+`excel.query.source.write` owner. It captures source/native identity during
+preparation, pins the binding version used for known affected table identities,
+rechecks them at dispatch and reads back exact `Formula` after the
+setter, including a safe read-back after a setter exception. No-op still checks
+native identity. The shared journal/CAS owns preparation, terminal facts and
+source revisions; no query-specific durable store is introduced. A source change
+invalidates known dependent output observations without refreshing them.
+The guards are not an atomic compare-and-set against a human or another add-in.
+
+Catalog capture is bounded to 1000 queries; an M capture is bounded to one million
+UTF-16 characters. Discovery preserves incomplete coverage. Exact source reads use
+the existing model/context budget and common excerpts; a partial read does not
+authorize a whole overwrite. Native binding metadata omits credentials, connection
+strings and COM identities. Exact requested M is document source and can itself
+contain sensitive literals; metadata discovery does not hydrate it.
+The current semantic/URI route accepts names up to 255 characters, preserves
+Unicode, internal spaces and case, and explicitly rejects boundary whitespace,
+control characters, slash/backslash and dot-only path names. Unsupported names
+are not silently trimmed or redirected to another query. Catalog discovery keeps
+supported entries, counts omitted unsupported names, and exposes incomplete
+coverage with the name-rule reason. Direct supported query targets stay readable.
+
+`excel.query.create/refresh/load/validate` are described in
+[Tool Library](tool-library.md#excel-power-query--2026-11-16). Native load targets
+are resolved from actual objects and the exact Mashup `Location`, never from a
+`Query - ...` label. Dynamic dependencies are not fully known, and status does not
+prove current external data or business correctness. Windows Excel/STA behavior
+remains a separate qualification gate.
+
 ## Excel range reads
 
 `excel.read_range` is removed from catalog, native bindings and the Excel core pack.

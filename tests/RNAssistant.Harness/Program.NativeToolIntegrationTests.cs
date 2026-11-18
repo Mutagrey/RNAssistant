@@ -35,8 +35,17 @@ namespace RNAssistant.Harness
         { WithNativeToolFixture("Excel", ".xlsx", test); }
 
         private static void WithNativeToolFixture(string host, string extension, Action<NativeToolFixture> test)
+        { WithNativeToolFixture(host, extension, test, null); }
+
+        private static void WithNativeToolFixture(Action<NativeToolFixture> test,
+            Action<FakeOfficeAdapter> configureAdapter)
+        { WithNativeToolFixture("Excel", ".xlsx", test, configureAdapter); }
+
+        private static void WithNativeToolFixture(string host, string extension, Action<NativeToolFixture> test,
+            Action<FakeOfficeAdapter> configureAdapter)
         {
             WithOfficeJournalScope(host, extension, (paths, adapter, identities, router, sessions) => {
+                configureAdapter?.Invoke(adapter);
                 var settings = new AppSettings { Model = "native-tool-integration", StreamResponses = false,
                     SmartChatTitles = false, AutoCompressContext = false, AutoConfirmToolActions = true,
                     AgentResponseMode = AgentResponseModes.JsonSchema, ContextWindowOverrideTokens = 65536,

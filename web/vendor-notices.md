@@ -27,6 +27,13 @@ manifest or those URLs.
 | JSZip | 3.10.2 | MIT OR GPL-3.0-or-later | [`licenses/jszip-3.10.2/LICENSE.markdown`](licenses/jszip-3.10.2/LICENSE.markdown) |
 | Viewer.js | 1.12.0 | MIT | [`licenses/viewerjs-1.12.0/LICENSE`](licenses/viewerjs-1.12.0/LICENSE) |
 | sax | 1.6.1 | BlueOak-1.0.0 | [`data-templates/vendor/sax-LICENSE.md`](data-templates/vendor/sax-LICENSE.md) |
+| Microsoft Power Query parser + grapheme-splitter / performance-now | 5.0.0 + 1.0.4 / 2.1.0 | MIT | [`licenses/powerquery-parser-5.0.0`](licenses/powerquery-parser-5.0.0/) |
+
+The Power Query parser is an `internalOnly` fixed worker asset. It is excluded from
+the authored HTML/plugin vendor catalog and Shell startup. Its browser bundle,
+exact build-input hashes, npm archive integrity and dependency notices are pinned;
+the npm release has no `gitHead`, so no source-build commit identity is invented.
+See its [rebuild and scope notes](licenses/powerquery-parser-5.0.0/README.md).
 
 KaTeX ships only the 20 WOFF2 files used by current WebView2. Its local CSS is a
 documented derivative of the exact 0.16.11 distribution: unused `.woff`/`.ttf`

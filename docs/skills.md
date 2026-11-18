@@ -74,7 +74,7 @@ and no cumulative quota. Repeated identical timeouts do not enter the generic
 unchanged-result counter; they remain bounded by run budgets and exact guards in the
 [conversation contract](conversation-protocol.md#межагентное-общение--2026-11-03).
 
-There are 17 unique built-in skill IDs across Office and Workspace; host catalogs
+There are 18 unique built-in skill IDs across Office and Workspace; host catalogs
 overlap and custom packages are counted separately. The current Workspace files ID
 is `skills.workspace.files`. The accidental `skills.skills.workspace.files` name
 is not an alias: stale selections must explicitly load the current package;
@@ -98,6 +98,23 @@ archive installation are deferred. The core front matter contains `id`,
 both the real adapter and fake host use it. The host-neutral report evaluation
 therefore exercises the complete shipped instructions and package dependencies.
 Its scripted and live cases are documented in the [Harness guide](../tests/RNAssistant.Harness/README.md).
+
+`skills.excel.powerquery`, also owned by `ExcelBuiltInSkillProvider`, supplies the
+Power Query workflow through the existing skill catalog/load path. It declares the
+common source reads/write/patch and actual `excel.query.create/validate/refresh/load`
+dependencies plus numeric column summaries. It separates saved M, native refresh
+completion and requested data checks, uses exact semantic query/table targets, and
+teaches the status observation/reconciliation path after timeout. It does not ask
+the model to create runtime identities, start a second job system, repeat an unknown
+mutation, or alter Excel credentials/privacy controls. Offline source syntax uses
+the fixed Microsoft parser when the optional host is available; the skill separates
+snapshot diagnostics/currentness from name/dependency/source-access and execution
+claims. It records the analysis bound, first-error coverage and `not_checked`
+failure paths. A proven stop with an unresolved native outcome permits only a new
+explicitly intended invocation after exact status observation, not replay or an
+earlier success claim. Unsupported preview, cancel, Data Model and rename/delete
+capabilities remain explicit. The package uses
+the shared source/diff/data presentation; it creates no separate Power Query chat.
 
 The visible catalog is built-in first, then custom, filtered to `Common` plus the
 current host (`Workspace` for the independent CLI). A custom package cannot shadow a built-in id. Tool and skill

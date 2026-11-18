@@ -28,6 +28,7 @@
     <DefineConstants>$(DefineConstants);RNA_DPAPI_SECRETS</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="System.Runtime.Serialization" />
     <Reference Include="Newtonsoft.Json">
       <HintPath>..\..\packages\Newtonsoft.Json.13.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
       <Private>True</Private>
@@ -114,6 +115,8 @@
     <Reference Include="System.Xml.Linq" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Models\ToolOperationObservation.cs" />
+    <Compile Include="Models\PowerQuerySyntaxAnalysis.cs" />
     <Compile Include="Models\ConversationInput.cs" />
     <Compile Include="Models\AgentCommunication.cs" />
     <Compile Include="Models\AgentAssignment.cs" />
@@ -135,6 +138,7 @@
     <Compile Include="Services\ResourcePdfPageSelectorContract.cs" />
     <Compile Include="Services\ResourceModelFindSchema.cs" />
     <Compile Include="Services\ResourceModelReadSchema.cs" />
+    <Compile Include="Services\IPowerQuerySyntaxAnalyzer.cs" />
     <Compile Include="Services\ResourceJsonTreeSelector.cs" />
     <Compile Include="Services\ResourceTreePointer.cs" />
     <Compile Include="Services\ResourceYamlTreeSelector.cs" />

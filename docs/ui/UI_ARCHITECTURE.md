@@ -62,6 +62,40 @@ UI показывает только принятый typed result, внешни
 восстановления не переключается: выбранный restored data root применяется отдельным
 запуском. Контракт — [CAS maintenance](../cas-maintenance.md#full-application-backup-and-clean-restore--in-review-2026-11-16).
 
+## Power Query в общих результатах — In Review, 2026-11-16
+
+Power Query использует существующую ленту Office conversation, карточки вызовов и
+сохранённые результаты. `ToolResultPresentationService` проецирует `core.read` в
+общие typed blocks; `app-tool-result-preview.js` выбирает renderer по `block.kind`.
+M из `source` показывается как точный текст, а `metadata`, `bindings`, `dependencies`
+и `status` — как сохранённый текст JSON с подписью соответствующего view. Чтение
+`Excel table: <name>` использует уже существующий table block с границами захвата.
+`core.patch/write` получает diff из общего mutation journal через `RunChanges` и
+`text_changes`; native refresh не создаёт сравнение M по эвристике.
+
+Полный результат native `excel.query.*`, включая уровни проверки и observed native
+state, доступен в существующей JSON-вкладке карточки. `core.read` status читает
+session-owned observer через общий gateway; сохранённый status содержит время
+наблюдения и доступность native probe. Browser refresh карточки перечитывает
+сохранённый результат вызова, а новое состояние Excel требует нового чтения агента.
+Скрытие/закрытие presentation прекращает её UI observer; принятой native operation
+продолжает владеть document session до подтверждённого окончания.
+
+Отдельного Power Query Dock view, дерева запросов, редактора M или кнопок выполнения
+в этом срезе нет. Общая source/diff/table presentation достаточна для agent workflow.
+В существующем source viewer M остаётся plain text. Для `bindings`, `dependencies`
+и `status` используются общие русские подписи. В `17.4.0-dev` отдельный
+`excel.query.validate(kind=source)` добавляет bounded parser diagnostics в существующий
+JSON-результат; редактор M и inline markers не добавляются. Невидимый
+`PowerQueryWebViewAnalyzer` использует isolated local environment и отдельный Worker
+для фиксированного offline bundle. Shell CSP и общая лента не получают новых прав.
+Скрытый parser host не является экраном или пунктом навигации.
+Pane владеет injection, reset/close и drain parser host; source snapshot/result
+и проверка актуальности принадлежат Office service/Core contracts. Контракты:
+[Resource fabric](../resource-fabric.md#excel-power-query-resources--2026-11-16),
+[Tool library](../tool-library.md#excel-power-query--2026-11-16).
+Windows/Office/WebView2 qualification и visual acceptance остаются открытыми.
+
 ## Restore после смены хранилища — In Review, 2026-11-16
 
 Boot создаёт initialize promise до синхронного Dock restore. Browser ждёт готовности

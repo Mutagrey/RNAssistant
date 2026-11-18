@@ -16,7 +16,7 @@ namespace RNAssistant.Core.Storage
     // canonical index. It owns no facts and delegates every operation to the
     // existing per-scope ConversationJournal.
     internal sealed class ConversationJournalRouter : IConversationStore, IEventStore, IConversationContextStore,
-        IConversationInputReadStore
+        IConversationInputReadStore, IToolOperationResolutionStore
     {
         private readonly AppDataPaths _paths;
         private readonly StorageProtector _protector;
@@ -288,6 +288,9 @@ namespace RNAssistant.Core.Storage
 
         public ToolExecutionProgress ReadReplayGuard(ConversationMetadata session, ToolCall call)
         { return Events(ForAddress(session)).ReadReplayGuard(session, call); }
+
+        public ResourceEvidence ReadOperationResolution(ConversationMetadata session, ToolOperationReference operation)
+        { return ((IToolOperationResolutionStore)ForAddress(session)).ReadOperationResolution(session, operation); }
 
         public AgentChatAddress FindAgent(ConversationMetadata source, string agentId)
         { return Events(ForAddress(source)).FindAgent(source, agentId); }

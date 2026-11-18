@@ -2780,6 +2780,17 @@ Owner: Conversation/model context; совместные границы — Core 
   Новое чтение не подтверждает изменение или результат прежней операции;
   проекция восстанавливает то же решение из terminal facts после перезапуска.
   Старый pending continuation без typed progress явно отвергается; история не удаляется.
+- Power Query использует exact child resource `status` и runtime-created
+  `ToolOperationReference`. Whole-status read снимает только matching inspection;
+  чтение M или таблицы не подменяет статус. Повторное исполнение становится
+  допустимым лишь после отдельного accepted read с точным native completion proof
+  той же session/generation/run/call и временем после Unknown. Он не переписывает
+  исходный outcome и не доказывает корректность данных. Kernel проверяет durable
+  resolution через существующий journal reader и при ограниченном восстановлении
+  контекста. Тайм-аут и Stop прекращают ожидание, но не отменяют Excel refresh;
+  общий gate и dispatcher lease живут до подтверждённой остановки. Синтаксис M,
+  native completion, актуальность source/binding и проверки loaded data — отдельные
+  утверждения; недоступная проверка остаётся `not_checked`.
 - Workspace `files.copy/move/patch/replace/delete` возвращают отсутствие полного
   чтения как `source_observation_required` с typed `RefreshRequired`:
   `RejectedNoEffect`, exact runtime file identity, view `text` и semantic target.

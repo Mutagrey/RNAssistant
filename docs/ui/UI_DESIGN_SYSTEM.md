@@ -58,6 +58,34 @@ Backup controls используют существующие `model-compatibili
 Dialog владеет focus/escape/progress/error; JS не создаёт параллельный modal.
 Длинные paths wrap без нового размера/цвета; narrow/125% visual acceptance открыта.
 
+## Power Query: source, diff и status — In Review, 2026-11-16
+
+Использованы существующие `tool-result-preview`, `tool-source-caption`, текстовый
+`pre`, JSON viewer, table block и `RNAssistantRunChanges`/text diff. M, имена
+запросов и строки результата поступают как текст; содержимое M не интерпретируется
+как HTML/Markdown. Caption использует общие подписи «исходник», «привязки»,
+«зависимости», «состояние». Отдельной геометрии, цветовой шкалы успешности или
+подсветки синтаксиса M в этом срезе нет.
+
+Общие preview bounds сохраняются: до 12 000 символов текста, 200 строк и 12 колонок
+табличной проекции; список/table дорисовывается порциями по 20. Превышение бюджета
+показывается существующей отметкой неполноты. Сохранённый JSON и captured read
+имеют собственные bounds; preview не обещает полный результат сверх них.
+`not_checked`, Unknown и метки наблюдения остаются содержимым результата,
+а подтверждение эффекта и diff поставляет runtime. Компоненты не выводят успех
+проверки или завершение refresh из наличия строк.
+
+В `17.4.0-dev` parser diagnostics отдельного `excel.query.validate(kind=source)`
+выводятся в существующем JSON viewer: код, сообщение, zero-based UTF-16 offsets
+и one-based line/column. Source viewer сохраняет M как plain text.
+Текст ошибки остаётся данными; он не интерпретируется как HTML и не добавляет
+особую цветовую шкалу или editor overlay. Проверенный snapshot и изменившийся/
+недоступный текущий M различаются
+полем `sourceMatchesCurrent`; синтаксический успех не окрашивает refresh как успешный.
+
+Общий responsive layout и lifecycle observer не изменены. Windows/WebView2,
+узкая панель и 125% zoom требуют visual acceptance на реальных результатах.
+
 ## Прежние данные — In Review, 2026-11-16
 
 Архив и explicit import занимают существующую Health surface: общий panel/header, `button`,

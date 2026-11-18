@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 
 namespace RNAssistant.Office
 {
@@ -6,6 +7,21 @@ namespace RNAssistant.Office
     {
         bool CheckAccess { get; }
         T Invoke<T>(Func<T> action);
+    }
+
+    // Optional native-operation lifetime. A panel may request dispatcher disposal
+    // while a retained document operation still needs its owner STA.
+    public interface IOfficeDispatcherLifetime
+    {
+        IDisposable RetainForDocumentOperation();
+        Task DocumentOperationCompletion { get; }
+    }
+
+    // Optional owner-STA observation. Null is unavailable evidence; false is a
+    // positively observed open document. A generic COM error is never closure.
+    public interface IOfficeDocumentClosureProbe
+    {
+        bool? ProbeDocumentClosed();
     }
 
     // Implementations represent one live document object, not a snapshot of its name/path.

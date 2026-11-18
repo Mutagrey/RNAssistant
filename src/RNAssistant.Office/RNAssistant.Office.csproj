@@ -27,6 +27,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Data" />
     <Reference Include="System.Net.Http" />
     <Reference Include="Microsoft.Web.WebView2.Core">
       <HintPath>..\..\packages\Microsoft.Web.WebView2.1.0.2903.40\lib\net462\Microsoft.Web.WebView2.Core.dll</HintPath>
@@ -61,6 +62,16 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Domains\Excel\ExcelPowerQueryConnection.cs" />
+    <Compile Include="Domains\Excel\ExcelPowerQueryContracts.cs" />
+    <Compile Include="Domains\Excel\ExcelPowerQueryErrorMask.cs" />
+    <Compile Include="Services\ExcelPowerQueryExecutionService.Status.cs" />
+    <Compile Include="Services\ExcelPowerQueryExecutionService.cs" />
+    <Compile Include="Services\ExcelResourceProvider.PowerQuery.cs" />
+    <Compile Include="Services\ExcelResourceProvider.PowerQueryValidation.cs" />
+    <Compile Include="Tools\ExcelPowerQuerySourceToolHandler.cs" />
+    <Compile Include="Tools\ExcelPowerQueryToolCatalog.cs" />
+    <Compile Include="Tools\ExcelPowerQueryToolHandler.cs" />
     <Compile Include="Services\ConversationKernelAdapter.Input.cs" />
     <Compile Include="Controller\AssistantController.Inbox.cs" />
     <Compile Include="Contracts\BridgeDtos.Inbox.cs" />
@@ -402,6 +413,8 @@
     <Compile Include="Tools\ExternalBrowserToolHandler.Open.cs" />
     <Compile Include="Tools\ExternalBrowserToolHandler.Input.cs" />
     <Compile Include="WebView\TabularWebViewExecutor.cs" />
+    <Compile Include="WebView\PowerQueryWebViewAnalyzer.cs" />
+    <Compile Include="Services\ExcelPowerQuerySyntaxService.cs" />
     <Compile Include="WebView\AssistantWebBridge.cs" />
     <Compile Include="WebView\AssistantWebBridge.Plugins.cs" />
     <Compile Include="WebView\LocalBrowserEnvironment.cs" />

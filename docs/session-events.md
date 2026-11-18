@@ -1,5 +1,42 @@
 # Session event stream
 
+## Exact native operation resolution — 2026-11-16
+
+An operation that can outlive the caller carries a runtime-created
+`ToolOperationReference`: exact document session, generation, run, call, normalized
+call signature, status resource and status view. It is retained in typed progress;
+model arguments, source text and arbitrary JSON do not supply this authority.
+Power Query is the first consumer. Its timeout publishes one Unknown terminal;
+native completion never rewrites that fact or calls its terminal publisher again.
+
+A subsequent accepted `core.read` can carry a typed `ToolOperationObservation`.
+A complete, fresh, mutable whole-status observation satisfies only the matching
+inspection requirement. Releasing the replay guard additionally requires the
+exact operation reference, confirmed terminal/stopped state, safe-to-invoke flag
+and an observation later than the original terminal and no earlier than native
+completion. Running, unrelated, partial, stale, immutable or source-view reads
+cannot release it. This permits a new invocation under the normal guards; it does
+not replay the old call, prove its data correct or rewrite its historical outcome.
+
+`StoppedUnverified` is a distinct lifecycle observation: native work is positively
+known to have stopped, but its business result remains unverified (for example,
+the worksheet overflow check was unavailable after synchronous refresh returned).
+It requires positive stop evidence and can release only the exact guard through
+the subsequent independent accepted status read. The original Unknown and native
+result uncertainty stay unchanged. Plain `Unresolved` cannot acquire stopped/safe
+flags. Confirmed session closure ends ownership but never becomes
+`StoppedUnverified` or authorizes replay of an effect before closure.
+
+The accepted read remains an ordinary canonical terminal fact. Disposable index
+schema v29 adds exact call/resolution locators to `context_required`; index rebuild
+reconstructs them from canonical facts. `IToolOperationResolutionStore` /
+`IRunOperationResolutionReader` allow bounded kernel restoration to verify the
+exact resolution even when its read is outside the replay window. A missing,
+foreign, newer-generation or unverifiable locator cannot clear Unknown. Frozen
+fork projection preserves provenance. No second durable store or history reset is
+introduced. A host restart without a persisted matching observation leaves the
+operation unresolved; the runtime never automatically resumes its native effect.
+
 ## Full application backup v3 — 2026-11-16
 
 The current application envelope is `rnassistant-application-backup-v3`, owned by
@@ -105,7 +142,7 @@ The receipt is keyed by exact chat/source/revision. Repeated import returns the
 prior receipt without overwriting later edits. `getLegacyChatImport` is read-only;
 after an unknown acknowledgement UI reconciles through it without replay. Receipts
 remain available after subsequent messages or deletion; `targetDeleted` prevents
-reopening a deleted chat. Current indexes are disposable (schema v28), while the
+reopening a deleted chat. Current indexes are disposable (schema v29), while the
 journal and CAS remain authoritative. Legacy journals are not rewritten or deleted,
 and normal reads do not silently fall back to them. Migration is explicit rather
 than automatic on startup. Real Windows/Office/DPAPI qualification remains open.

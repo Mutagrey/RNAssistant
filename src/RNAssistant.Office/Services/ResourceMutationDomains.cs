@@ -23,7 +23,7 @@ namespace RNAssistant.Office.Services
             new VbaResourceMutationDomain(), new CatalogResourceMutationDomain(),
             new LocalHtmlAssetMutationDomain(),
             new ResourceDefinitionMutationDomain(),
-            new ConversationResourceMutationDomain(), new OfficeResourceMutationDomain() };
+            new ConversationResourceMutationDomain(), new ExcelPowerQueryMutationDomain(), new OfficeResourceMutationDomain() };
 
         internal static bool IsDocumentArtifactOperation(string operation)
         { return PlanDocumentToolCatalog.Owns(operation) || HtmlWorkspacePublication.Owns(operation) ||
@@ -56,6 +56,53 @@ namespace RNAssistant.Office.Services
         {
             ResourceAddress address;
             return ResourceUri.TryParse(identity.Uri, out address) ? address.Provider : string.Empty;
+        }
+    }
+
+    internal sealed class ExcelPowerQueryMutationDomain : IResourceMutationDomain
+    {
+        internal static bool OwnsOperation(string operation)
+        { return operation == ExcelPowerQuerySourceToolHandler.Operation ||
+            operation == ExcelPowerQueryToolCatalog.Create || operation == ExcelPowerQueryToolCatalog.Refresh ||
+            operation == ExcelPowerQueryToolCatalog.Load; }
+
+        public bool Owns(string operation) { return OwnsOperation(operation); }
+
+        public IEnumerable<ResourceImpact> Impacts(ResourceAuthorityScopeId scope, string operation,
+            IDictionary<string, object> arguments, ResourceAuthoritySnapshot snapshot)
+        {
+            var query = ResourceMutationDomains.Argument(arguments, "queryName");
+            if (string.IsNullOrWhiteSpace(query)) throw new InvalidOperationException("Prepared Power Query identity is required.");
+            var source = ExcelResourceProvider.QueryIdentity(scope.Id, query);
+            var status = ExcelResourceProvider.QueryStatusIdentity(scope.Id, query);
+            var execution = operation == ExcelPowerQueryToolCatalog.Refresh || operation == ExcelPowerQueryToolCatalog.Load;
+            yield return new ResourceImpact(execution ? status : source, ResourceImpactRelation.Exact);
+            if (!execution)
+            {
+                yield return new ResourceImpact(status, ResourceImpactRelation.Exact);
+                object tables;
+                if (arguments.TryGetValue("affectedTables", out tables))
+                    foreach (var name in (tables as IEnumerable<string>) ?? new string[0])
+                        yield return new ResourceImpact(new ResourceIdentity(ResourceUri.Create("excel", scope.Id, "table", name)),
+                            ResourceImpactRelation.DependsOn);
+                yield break;
+            }
+            var table = ResourceMutationDomains.Argument(arguments, "table");
+            var sheet = ResourceMutationDomains.Argument(arguments, "sheet");
+            if (string.IsNullOrWhiteSpace(table) || string.IsNullOrWhiteSpace(sheet))
+                throw new InvalidOperationException("Prepared worksheet load identity is required.");
+            yield return new ResourceImpact(new ResourceIdentity(ResourceUri.Create("excel", scope.Id, "table", table)),
+                ResourceImpactRelation.Exact);
+            // A load may grow. Invalidate already-known ranges on its destination
+            // sheet, never unrelated queries/sheets or the whole document root.
+            foreach (var head in snapshot.Heads.Values)
+            {
+                ResourceAddress address;
+                if (!ResourceUri.TryParse(head.Identity.Uri, out address) || address.Provider != "excel" ||
+                    address.Segments.Count < 3 || address.Segments[0] != scope.Id) continue;
+                if ((address.Segments[1] == "sheet" || address.Segments[1] == "range") && address.Segments[2] == sheet)
+                    yield return new ResourceImpact(head.Identity, ResourceImpactRelation.Intersects);
+            }
         }
     }
 
