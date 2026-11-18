@@ -46,7 +46,7 @@ namespace RNAssistant.Office.Services
                     return Failure("The search snapshot exceeds the capture bound.", "RESOURCE_SNAPSHOT_TOO_LARGE");
                 var snapshot = JsonConvert.DeserializeObject<WordSearchSnapshot>(json);
                 var outcome = WordService.Find(snapshot, request,
-                    ToolArgumentReader.Int32(arguments, "maxResults", 50),
+                    ToolArgumentReader.Int32(arguments, "limit", 50),
                     ToolArgumentReader.Int32(arguments, "contextChars", 80), cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
                 if (outcome.Status != DomainOutcomeStatus.Ok)

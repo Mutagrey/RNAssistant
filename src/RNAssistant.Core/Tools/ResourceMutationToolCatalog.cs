@@ -11,7 +11,7 @@ namespace RNAssistant.Core.Tools
         public const string Write = "core.write", Patch = "core.patch", Replace = "core.replace";
         public const string Move = "resources.move", Copy = "resources.copy", Delete = "resources.delete", Restore = "resources.restore";
         public static bool Owns(string id) { return id == Write || id == Patch || id == Replace || id == Move || id == Copy || id == Delete || id == Restore; }
-        public static ToolBinding BindingFor(string id) { return Owns(id) ? new ToolBinding(id + (id == Patch ? ".resource.v6" : ".resource.v2")) : null; }
+        public static ToolBinding BindingFor(string id) { return Owns(id) ? new ToolBinding(id + (id == Patch ? ".resource.v6" : id == Replace ? ".resource.v3" : ".resource.v2")) : null; }
 
         public static IEnumerable<ToolCatalogEntry> GetTools(int maximumPatchTargets = ResourcePatch.MaximumTargets)
         {
@@ -57,13 +57,13 @@ namespace RNAssistant.Core.Tools
                 }
                 else if (id == Replace)
                 {
-                    properties["query"] = String("The identical query from a completed core.search on this target.");
+                    properties["query"] = String("Literal or line-oriented regex to replace in one exact target.");
                     properties["replacement"] = String("Literal text, or .NET replacement groups in regex mode.", false);
-                    properties["mode"] = new JObject { ["description"] = "Identical matching mode used for core.search.", ["type"] = "string", ["enum"] = new JArray("literal", "regex"), ["default"] = "literal" };
-                    properties["matchCase"] = new JObject { ["description"] = "Identical case sensitivity used for core.search; default false.", ["type"] = "boolean" };
-                    properties["expectedMatches"] = new JObject { ["description"] = "Exact completed search count, checked again before dispatch.", ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 10000 };
-                    required.Add("query"); required.Add("replacement"); required.Add("expectedMatches");
-                    description = "Replace all literal or line-oriented .NET regex matches in one resource, using the exact completed core.search snapshot and parameters. Wait for that search result before returning core.replace in the next response. " + ResourceTextMatcher.LineSearchGuidance + " A changed source/count fails before writing. Zero-length replacement matches are rejected; use core.patch for insertion. This is text replacement, including matching comments/strings, not semantic rename.";
+                    properties["mode"] = new JObject { ["description"] = "Matching mode, literal or line-oriented regex.", ["type"] = "string", ["enum"] = new JArray("literal", "regex"), ["default"] = "literal" };
+                    properties["matchCase"] = new JObject { ["description"] = "Case sensitivity; default false.", ["type"] = "boolean" };
+                    properties["expectedMatches"] = new JObject { ["description"] = "Optional exact count from a completed core.search. With this field the search receipt must match; omitting it enables guarded in-runtime preflight limited to 100 matches.", ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 10000 };
+                    required.Add("query"); required.Add("replacement");
+                    description = "Replace in one exact resource. With expectedMatches, require a separate completed matching core.search and its exact count. Without expectedMatches, runtime performs a complete exact-source preflight (1–100 matches) within this call; no preliminary model search needed. Both modes require confirmation, unchanged-source guards, and owner read-back. Zero matches, >100 implicit matches, ambiguous targets, changed source or incomplete source fail before writing. Never retry an unknown effect. " + ResourceTextMatcher.LineSearchGuidance + " Text replacement may affect comments/strings and is not semantic rename.";
                 }
                 else if (id == Move || id == Copy)
                 {
@@ -81,7 +81,7 @@ namespace RNAssistant.Core.Tools
                     ArgumentSchemaJson = Object(properties, required).ToString(Formatting.None),
                     BuiltIn = true, Enabled = true, AgentCanRun = true, MutatesLocalState = true,
                     Policy = new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, true, false, (id == Write || id == Patch ? new[] { "agent", "plan" } : new[] { "agent" }), 1),
-                    RequiresConfirmation = true, RiskLevel = 1, Binding = BindingFor(id), ContractVersion = id == Patch ? "3" : "1" };
+                    RequiresConfirmation = true, RiskLevel = 1, Binding = BindingFor(id), ContractVersion = id == Patch ? "3" : id == Replace ? "2" : "1" };
             }
         }
 

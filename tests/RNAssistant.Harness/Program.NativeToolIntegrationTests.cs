@@ -213,6 +213,20 @@ namespace RNAssistant.Harness
                 AssertEqual(1, result.RunViewState.VerifiedWrites, "verified VBA replacement survives native storage");
                 AssertNativeToolReceipt(fixture, "core.replace");
             });
+            // The new implicit-count route uses one model tool call, exact preflight,
+            // confirmation and the existing verified owner without a search tool call.
+            WithNativeToolFixture(fixture => {
+                fixture.Adapter.SetVbaModule("NativeInline", "Sub Main()\nDebug.Print \"before\"\nEnd Sub", "StdModule");
+                var target = "VBA module: NativeInline";
+                var result = RunNativeToolScript(fixture, new[] {
+                    NativeCall("core.replace", new JObject { ["target"] = target, ["query"] = "before", ["replacement"] = "after",
+                        ["mode"] = "literal", ["matchCase"] = true })
+                }, () => ScriptedVerifiedFinish(fixture.Session, "Source replaced from exact prepared snapshot.", "Source replaced.",
+                    "Replace in the exact target without a separate search.", "core.replace"));
+                AssertContains(fixture.Adapter.GetVbaModuleCode("NativeInline"), "after", "inline replace writes one exact source");
+                AssertEqual(1, fixture.Adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "one inline replacement dispatch");
+                AssertEqual(1, result.RunViewState.VerifiedWrites, "inline replacement retains verified write receipt");
+            });
         }
 
         private static void NativeToolsSinglePatch()
@@ -360,7 +374,7 @@ namespace RNAssistant.Harness
                     Text = "alpha beta alpha" }, () => { });
                 var result = RunNativeToolScript(fixture, new[] {
                     LoadToolSchemaResponse(WordToolIds.ReplaceText),
-                    NativeCall(WordToolIds.ReplaceText, new JObject { ["find"] = "alpha", ["replace"] = "omega",
+                    NativeCall(WordToolIds.ReplaceText, new JObject { ["query"] = "alpha", ["replacement"] = "omega",
                         ["scope"] = "main", ["mode"] = "literal", ["replaceAll"] = true, ["maxReplacements"] = 10 })
                 }, () => NativeUnverifiedFinish(fixture, WordToolIds.ReplaceText, true));
                 AssertEqual("omega beta omega", fixture.Adapter.WordText, "Word owner replaces the bounded live scope");
@@ -389,7 +403,7 @@ namespace RNAssistant.Harness
             WithNativeToolFixture("PowerPoint", ".pptx", fixture => {
                 var result = RunNativeToolScript(fixture, new[] {
                     LoadToolSchemaResponse(PowerPointToolIds.ReplaceText),
-                    NativeCall(PowerPointToolIds.ReplaceText, new JObject { ["find"] = "Revenue", ["replace"] = "Sales",
+                    NativeCall(PowerPointToolIds.ReplaceText, new JObject { ["query"] = "Revenue", ["replacement"] = "Sales",
                         ["scope"] = "deck", ["mode"] = "literal", ["replaceAll"] = true, ["maxReplacements"] = 10 })
                 }, () => NativeUnverifiedFinish(fixture, PowerPointToolIds.ReplaceText, true));
                 var text = fixture.Adapter.ReadTextTargets(new RNAssistant.Office.Domains.PowerPoint.PowerPointTextScopeRequest {

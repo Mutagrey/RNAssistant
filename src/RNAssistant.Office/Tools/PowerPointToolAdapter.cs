@@ -63,7 +63,7 @@ namespace RNAssistant.Office.Tools
                 }, markDispatchPossible, cancellationToken);
             if (string.Equals(
                 toolId, PowerPointToolIds.ReplaceText, StringComparison.Ordinal))
-                return _service.Replace(ReplaceRequest(arguments, "find"),
+                return _service.Replace(ReplaceRequest(arguments),
                     markDispatchPossible, cancellationToken);
             if (string.Equals(
                 toolId, PowerPointToolIds.AddObject, StringComparison.Ordinal))
@@ -98,14 +98,14 @@ namespace RNAssistant.Office.Tools
         }
 
         private static PowerPointReplaceRequest ReplaceRequest(
-            IDictionary<string, object> arguments, string findName)
+            IDictionary<string, object> arguments)
         {
             return new PowerPointReplaceRequest
             {
                 Find = ToolArgumentReader.String(
-                    arguments, findName, string.Empty),
+                    arguments, "query", string.Empty),
                 Replacement = ToolArgumentReader.String(
-                    arguments, "replace", string.Empty),
+                    arguments, "replacement", string.Empty),
                 Scope = ToolArgumentReader.String(arguments, "scope", "deck"),
                 SlideIndex = ToolArgumentReader.Int32(
                     arguments, "slideIndex", 0),

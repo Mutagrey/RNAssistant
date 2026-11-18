@@ -102,6 +102,22 @@ namespace RNAssistant.Office.Tools
         {
             var schema = JObject.Parse(tool.ArgumentSchemaJson);
             AddCommonBounds(schema);
+            // Only semantic intent is model-facing. Search uses query/limit and
+            // text replacement uses query/replacement across Office hosts.
+            // No dual aliases: older frozen tool packs must be re-admitted.
+            if (tool.Id == "excel.cells.find" || tool.Id == "word.text.find" ||
+                tool.Id == "powerpoint.text.search" || tool.Id == "outlook.mail.search")
+            {
+                RenameContractField(schema, "maxResults", "limit");
+                tool.ContractVersion = "2";
+            }
+            if (tool.Id == "excel.cells.replace" || tool.Id == "word.text.replace" ||
+                tool.Id == "powerpoint.text.replace")
+            {
+                RenameContractField(schema, "find", "query");
+                RenameContractField(schema, "replace", "replacement");
+                tool.ContractVersion = "2";
+            }
             switch (tool.Id)
             {
                 case "excel.inspect":
@@ -120,7 +136,7 @@ namespace RNAssistant.Office.Tools
                     tool.Description += " Use mode=literal for ordinary text, including headings: Excel Find scans the scope without placing a whole-sheet snapshot in context. Native literal queries up to 255 characters return at most 32000 characters of matches. Regex and longer literal queries require a bounded exact snapshot (100000 cells, 1000000 characters); narrow those searches with explicit ranges if needed.";
                     break;
                 case "excel.cells.replace":
-                    SetStringLimit(schema, "find", 2048);
+                    SetStringLimit(schema, "query", 2048);
                     Property(schema, "maxReplacements")["maximum"] = 10000;
                     Property(schema, "sheet")["description"] = "Optional worksheet for sheet/range scope; omit to use the active worksheet.";
                     Property(schema, "scope").Remove("default");
@@ -223,6 +239,20 @@ namespace RNAssistant.Office.Tools
             return tool;
         }
 
+        private static void RenameContractField(JObject schema, string from, string to)
+        {
+            var properties = (JObject)schema["properties"];
+            if (properties?[from] == null || properties[to] != null)
+                throw new InvalidOperationException("Invalid Office tool schema field rename: " + from + " -> " + to);
+            var field = properties[from].DeepClone();
+            properties.Remove(from);
+            properties[to] = field;
+            var required = schema["required"] as JArray;
+            if (required != null)
+                for (var i = 0; i < required.Count; i++)
+                    if (string.Equals((string)required[i], from, StringComparison.Ordinal)) required[i] = to;
+        }
+
         private static void AddCommonBounds(JObject schema)
         {
             var properties = schema["properties"] as JObject;
@@ -313,9 +343,9 @@ namespace RNAssistant.Office.Tools
         private static void SetDeckScopeVariants(JObject schema, bool replacement)
         {
             var common = replacement
-                ? new[] { "find", "replace", "scope", "includeNotes", "mode", "matchCase", "wholeWord", "replaceAll", "maxReplacements" }
-                : new[] { "query", "scope", "includeNotes", "mode", "matchCase", "wholeWord", "maxResults", "contextChars" };
-            var required = replacement ? new[] { "find" } : new[] { "query" };
+                ? new[] { "query", "replacement", "scope", "includeNotes", "mode", "matchCase", "wholeWord", "replaceAll", "maxReplacements" }
+                : new[] { "query", "scope", "includeNotes", "mode", "matchCase", "wholeWord", "limit", "contextChars" };
+            var required = new[] { "query" };
             var deck = ObjectVariant(schema, common, required);
             Property(deck, "scope")["enum"] = new JArray("deck");
             var slide = ObjectVariant(schema, common.Concat(new[] { "slideIndex" }).ToArray(), required.Concat(new[] { "scope", "slideIndex" }).ToArray());

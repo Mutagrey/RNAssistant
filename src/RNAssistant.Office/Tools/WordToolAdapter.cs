@@ -47,7 +47,7 @@ namespace RNAssistant.Office.Tools
                         arguments, "location", "selection")
                 }, markDispatchPossible, cancellationToken);
             if (string.Equals(toolId, WordToolIds.ReplaceText, StringComparison.Ordinal))
-                return _service.Replace(ReplaceRequest(arguments, "find"),
+                return _service.Replace(ReplaceRequest(arguments),
                     markDispatchPossible, cancellationToken);
             if (string.Equals(toolId, WordToolIds.FormatText, StringComparison.Ordinal))
                 return _service.Format(new WordFormatRequest
@@ -91,14 +91,14 @@ namespace RNAssistant.Office.Tools
         }
 
         private static WordReplaceRequest ReplaceRequest(
-            IDictionary<string, object> arguments, string findName)
+            IDictionary<string, object> arguments)
         {
             return new WordReplaceRequest
             {
                 Find = ToolArgumentReader.String(
-                    arguments, findName, string.Empty),
+                    arguments, "query", string.Empty),
                 Replacement = ToolArgumentReader.String(
-                    arguments, "replace", string.Empty),
+                    arguments, "replacement", string.Empty),
                 Scope = ToolArgumentReader.String(arguments, "scope", "main"),
                 Mode = ToolArgumentReader.String(arguments, "mode", "literal"),
                 ReplaceAll = ToolArgumentReader.Boolean(

@@ -50,7 +50,7 @@ namespace RNAssistant.Office.Services
                 if (json.Length > PowerPointService.MaximumTextCharacters)
                     return Failure("Choose a smaller PowerPoint search scope.", "RESOURCE_SNAPSHOT_TOO_LARGE");
                 var outcome = PowerPointService.Search(JsonConvert.DeserializeObject<PowerPointSearchSnapshot>(json), request,
-                    ToolArgumentReader.Int32(arguments, "maxResults", 50),
+                    ToolArgumentReader.Int32(arguments, "limit", 50),
                     ToolArgumentReader.Int32(arguments, "contextChars", 80), cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
                 if (outcome.Status != DomainOutcomeStatus.Ok)

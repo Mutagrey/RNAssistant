@@ -45,26 +45,21 @@ namespace RNAssistant.Core.Storage
             using (var stream = OpenRetainedStream(snapshot.Evidence.Payload, long.MaxValue, token, null, true))
                 return CommitTextEdits(workspace, path, expected, stream, PlanByteEdits(stream, patch, token), onDispatch, token, effectOperation);
         }
+        public int PreviewReplacementMatches(WorkspaceDescriptor workspace, string path, ResourceRef expected,
+            string query, string replacement, string mode, bool matchCase, int? count, CancellationToken token)
+        {
+            var snapshot = AcceptedStreamedTextSource(workspace, path, expected);
+            using (var stream = OpenRetainedStream(snapshot.Evidence.Payload, long.MaxValue, token, null, true))
+                return PlanReplacement(stream, query, replacement, mode, matchCase, count, token).Edits.Count;
+        }
         public WorkspaceFileObservation ReplaceMatches(WorkspaceDescriptor workspace, string path, ResourceRef expected,
-            string query, string replacement, string mode, bool matchCase, int count,
+            string query, string replacement, string mode, bool matchCase, int? count,
             Action onDispatch, CancellationToken token, bool validateOnly = false, string effectOperation = null)
         {
             var snapshot = AcceptedStreamedTextSource(workspace, path, expected);
             using (var stream = OpenRetainedStream(snapshot.Evidence.Payload, long.MaxValue, token, null, true))
             {
-                var text = new StringBuilder(); var buffer = new char[81920];
-                using (var reader = new StreamReader(stream, StrictUtf8, false, 81920, true))
-                {
-                    int read;
-                    while ((read = reader.Read(buffer, 0, buffer.Length)) > 0)
-                    {
-                        token.ThrowIfCancellationRequested();
-                        if (text.Length + read > ResourceTextSearch.MaximumScanCharacters)
-                            throw new TextPatternException("replacement_limit_exceeded", "Source exceeds the complete search budget; use bounded core.patch edits.");
-                        text.Append(buffer, 0, read);
-                    }
-                }
-                var source = text.ToString();
+                var source = ReadReplacementSource(stream, token);
                 var plan = TextEditPlan.Replace(source, query, replacement, mode, matchCase, count, token);
                 if (validateOnly) return null;
                 var edits = new List<ByteEdit>(); long offset = 0; var position = 0;
@@ -77,6 +72,26 @@ namespace RNAssistant.Core.Storage
                 }
                 return CommitTextEdits(workspace, path, expected, stream, edits, onDispatch, token, effectOperation);
             }
+        }
+        private static TextEditPlan PlanReplacement(Stream stream, string query, string replacement,
+            string mode, bool matchCase, int? count, CancellationToken token)
+        { return TextEditPlan.Replace(ReadReplacementSource(stream, token), query, replacement, mode, matchCase, count, token); }
+        private static string ReadReplacementSource(Stream stream, CancellationToken token)
+        {
+            stream.Position = 0;
+            var text = new StringBuilder(); var buffer = new char[81920];
+            using (var reader = new StreamReader(stream, StrictUtf8, false, 81920, true))
+            {
+                int read;
+                while ((read = reader.Read(buffer, 0, buffer.Length)) > 0)
+                {
+                    token.ThrowIfCancellationRequested();
+                    if (text.Length + read > ResourceTextSearch.MaximumScanCharacters)
+                        throw new TextPatternException("replacement_limit_exceeded", "Source exceeds the complete search budget; use bounded core.patch edits.");
+                    text.Append(buffer, 0, read);
+                }
+            }
+            return text.ToString();
         }
         private WorkspaceFileObservation CommitTextEdits(WorkspaceDescriptor workspace, string path,
             ResourceRef expected, Stream source, IReadOnlyList<ByteEdit> edits, Action onDispatch, CancellationToken token, string effectOperation)

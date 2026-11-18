@@ -44,11 +44,11 @@ namespace RNAssistant.Core.Tools
         }
 
         public static TextEditPlan Replace(string source, string query, string replacement,
-            string mode, bool matchCase, int expectedMatches,
+            string mode, bool matchCase, int? expectedMatches,
             CancellationToken cancellation = default(CancellationToken))
         {
             if (source == null) throw new ArgumentNullException(nameof(source));
-            if (expectedMatches < 1 || expectedMatches > 10000)
+            if (expectedMatches.HasValue && (expectedMatches.Value < 1 || expectedMatches.Value > 10000))
                 throw Error("replacement_count_invalid", "expectedMatches must be between 1 and 10000.");
             var edits = new List<ResolvedTextEdit>();
             var matcher = new ResourceTextMatcher(query, mode ?? "literal", matchCase);
@@ -67,8 +67,10 @@ namespace RNAssistant.Core.Tools
                 }
             }
             else AddReplacements(source, 0, source, replacement, matcher, edits);
-            if (edits.Count != expectedMatches)
-                throw Error("replacement_count_conflict", "Expected " + expectedMatches + " matches but found " + edits.Count + ". Nothing was written.");
+            if (!expectedMatches.HasValue && (edits.Count == 0 || edits.Count > 100))
+                throw Error("replacement_count_invalid", "Inline replacement requires 1–100 matches in this exact source. Narrow the target or search and supply expectedMatches; nothing was written.");
+            if (expectedMatches.HasValue && edits.Count != expectedMatches.Value)
+                throw Error("replacement_count_conflict", "Expected " + expectedMatches.Value + " matches but found " + edits.Count + ". Nothing was written.");
             return Apply(source, edits, cancellation);
         }
 

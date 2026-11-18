@@ -463,6 +463,28 @@ Search details use existing typed result blocks and activity summaries; Inspecto
 shows the saved request/result, not a second reconstructed log. Five VBA captions now
 use the active catalog constants and moduleName rather than retired tool IDs.
 
+### Cross-host search and replacement arguments — 2026-11-18
+
+Office text search now uses `query` and `limit` for `excel.cells.find`,
+`word.text.find`, `powerpoint.text.search` and `outlook.mail.search`. Excel, Word and
+PowerPoint text replacement use `query` and `replacement`; `maxReplacements` remains
+the write safety cap, Outlook keeps `maxItems` for its inspected-window bound, and
+`contextChars` remains a host preview size. The old `maxResults`, `find` and `replace`
+arguments are intentionally absent with no aliases or runtime coercion. The affected
+descriptors have contract version `2`, so old frozen tool packs must be re-admitted.
+The domain DTO fields and non-search uses such as `word.inspect.maxResults` remain
+internal implementation details.
+
+`core.replace` has two guarded modes on one exact target. With explicit
+`expectedMatches`, it keeps the existing completed-`core.search` receipt requirement.
+Without it, preparation reads the complete exact source in runtime, plans 1–100
+replacements and records the exact prepared count for confirmation; zero matches,
+more than 100 matches, an incomplete source, changed source or count fail before
+write. Execution rechecks the source/count, uses the existing owner writer and
+read-back, and never retries an unknown effect. The optional field is absent from
+the required schema and `matchesSeen` is never accepted as an exact replacement
+count. `docs/text-mutations.md` owns the detailed mutation contract.
+
 ### Search context, runtime paging and compact results — 2026-11-18
 
 Owner: `ResourceTextSearch`; Workspace and Office use the same matcher while their
@@ -491,9 +513,10 @@ separate scan/source/match flags. Only a complete scan with complete sources, ex
 totals, no gaps and no continuation is complete. Otherwise `totalMatches` is projected
 as `matchesSeen`, an observed lower bound, and `next=true` is present when continuation
 is available. UI presentation accepts this projection and historical canonical flags.
-The existing `core.replace` guard still requires a completed search of one exact target;
-`matchesSeen` never counts as an exact replacement total. Real Windows/Office/WebView2
-behavior remains open evidence.
+`core.replace` keeps the exact single-target guard: explicit `expectedMatches` uses a
+completed search receipt, while the inline mode performs its own complete-source
+1–100 preflight. `matchesSeen` never counts as an exact replacement total. Real
+Windows/Office/WebView2 behavior remains open evidence.
 
 ### Excel Power Query — 2026-11-16
 

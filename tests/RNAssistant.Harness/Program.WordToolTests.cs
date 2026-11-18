@@ -191,7 +191,7 @@ namespace RNAssistant.Harness
                 AssertEqual(3, discovered.Items.Count(item => item.Type == "Word search scope"), "search scopes are metadata-only resources");
                 AssertEqual(0, adapter.WordStoryMaterializationCount, "discovery does not read stories");
                 var args = new JObject { ["query"] = "n(e{2})dle", ["mode"] = "regex", ["scope"] = "selection",
-                    ["wholeWord"] = true, ["maxResults"] = 1, ["contextChars"] = 10 };
+                    ["wholeWord"] = true, ["limit"] = 1, ["contextChars"] = 10 };
                 var found = ExecuteHtmlNative(runtime, WordToolIds.FindText, args);
                 AssertEqual(ToolExecutionOutcome.Ok, found.Outcome, "regex search uses exact capture");
                 var data = JObject.Parse(found.Result.DataJson);
@@ -367,7 +367,7 @@ namespace RNAssistant.Harness
 
                     var replaceCall = new ToolCall(
                         "word-replace", WordToolIds.ReplaceText,
-                        "{\"find\":\"revenue\",\"replace\":\"sales\",\"scope\":\"main\"}");
+                        "{\"query\":\"revenue\",\"replacement\":\"sales\",\"scope\":\"main\"}");
                     var replaced = ExecuteNativeConfirmed(
                         runtime, replaceCall, runtime.Describe(replaceCall));
                     AssertEqual(ToolExecutionOutcome.Ok, replaced.Outcome,
@@ -577,7 +577,7 @@ namespace RNAssistant.Harness
             if (toolId == WordToolIds.WriteText)
                 return "{\"mode\":\"insert\",\"text\":\"x\"}";
             if (toolId == WordToolIds.ReplaceText)
-                return "{\"find\":\"revenue\"}";
+                return "{\"query\":\"revenue\"}";
             if (toolId == WordToolIds.FormatText)
                 return "{\"kind\":\"font\",\"bold\":true}";
             if (toolId == WordToolIds.AddComment)

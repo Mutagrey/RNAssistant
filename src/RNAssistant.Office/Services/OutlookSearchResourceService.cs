@@ -31,7 +31,7 @@ namespace RNAssistant.Office.Services
                     WholeWord = ToolArgumentReader.Boolean(arguments, "wholeWord", false),
                     Fields = ToolArgumentReader.String(arguments, "fields", "subject,sender,body"),
                     MaxItems = Math.Max(1, Math.Min(OutlookService.MaxItems, ToolArgumentReader.Int32(arguments, "maxItems", 100))),
-                    MaxResults = ToolArgumentReader.Int32(arguments, "maxResults", 50),
+                    MaxResults = ToolArgumentReader.Int32(arguments, "limit", 50),
                     ContextChars = ToolArgumentReader.Int32(arguments, "contextChars", 80) };
                 if (string.IsNullOrWhiteSpace(request.Query)) return Failure("query is required.", "invalid_arguments");
                 HashSet<string> fields;

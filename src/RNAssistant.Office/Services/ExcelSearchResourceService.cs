@@ -32,7 +32,7 @@ namespace RNAssistant.Office.Services
                     LookIn = ExcelFindReplaceService.NormalizeFindLookIn(ToolArgumentReader.String(arguments, "lookIn", "values")),
                     MatchCase = ToolArgumentReader.Boolean(arguments, "matchCase", false),
                     WholeWord = ToolArgumentReader.Boolean(arguments, "wholeWord", false),
-                    MaxResults = ToolArgumentReader.Int32(arguments, "maxResults", 50),
+                    MaxResults = ToolArgumentReader.Int32(arguments, "limit", 50),
                     ContextChars = ToolArgumentReader.Int32(arguments, "contextChars", 80) };
                 request.Scope = ExcelFindReplaceService.NormalizeScope(request.Scope, request.Sheet, request.Address, "workbook");
                 if (request.Scope == null)

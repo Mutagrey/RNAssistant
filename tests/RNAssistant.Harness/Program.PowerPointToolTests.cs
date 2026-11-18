@@ -152,7 +152,7 @@ namespace RNAssistant.Harness
                 var runtime = executor.CreateNativeRuntime(session, OfficeToolCatalog.ForHost("PowerPoint").Concat(executor.GetControllerTools()).ToList(),
                     new AppSettings(), "agent", false);
                 var args = new JObject { ["query"] = "n(e{2})dle", ["mode"] = "regex", ["wholeWord"] = true,
-                    ["scope"] = "slide", ["slideIndex"] = 2, ["includeNotes"] = true, ["maxResults"] = 1 };
+                    ["scope"] = "slide", ["slideIndex"] = 2, ["includeNotes"] = true, ["limit"] = 1 };
                 var found = ExecuteHtmlNative(runtime, PowerPointToolIds.SearchText, args);
                 AssertEqual(ToolExecutionOutcome.Ok, found.Outcome, "regex search succeeds over exact slide capture");
                 var data = JObject.Parse(found.Result.DataJson);
@@ -409,7 +409,7 @@ namespace RNAssistant.Harness
 
                     var replaceCall = new ToolCall(
                         "powerpoint-replace", PowerPointToolIds.ReplaceText,
-                        "{\"find\":\"Revenue\",\"replace\":\"Sales\",\"scope\":\"deck\"}");
+                        "{\"query\":\"Revenue\",\"replacement\":\"Sales\",\"scope\":\"deck\"}");
                     var replaced = ExecuteNativeConfirmed(
                         runtime, replaceCall, runtime.Describe(replaceCall));
                     AssertEqual(ToolEffectEvidence.VerifiedChange,
@@ -606,7 +606,7 @@ namespace RNAssistant.Harness
             if (toolId == PowerPointToolIds.SetText)
                 return "{\"target\":\"notes\",\"text\":\"x\"}";
             if (toolId == PowerPointToolIds.ReplaceText)
-                return "{\"find\":\"Revenue\"}";
+                return "{\"query\":\"Revenue\"}";
             if (toolId == PowerPointToolIds.AddObject)
                 return "{\"kind\":\"textBox\",\"text\":\"x\"}";
             if (toolId == PowerPointToolIds.DuplicateSlide)

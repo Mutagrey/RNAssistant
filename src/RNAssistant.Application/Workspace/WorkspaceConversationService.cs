@@ -2227,6 +2227,7 @@ namespace RNAssistant.Runtime
             public string ToolId { get; set; }
             public string ArgumentsHash { get; set; }
             public string Path { get; set; }
+            public int? ReplacementCount { get; set; }
             public ResourceEvidence Source { get; set; }
             public ResourceRef RestoreSource { get; set; }
         }
@@ -2272,9 +2273,13 @@ namespace RNAssistant.Runtime
                         {
                             if (_operation == ResourceMutationToolCatalog.Replace)
                             {
-                                var exact = _search.Require(path, Value(context, "query"), Mode(context), Flag(context, "matchCase"), Count(context), context.Execution.RunId + ":" + context.Execution.StepId);
-                                if (exact.Uri != current.Reference.Uri || exact.Revision != current.Reference.Revision)
-                                    throw new WorkspaceFileException("target_conflict", "Source changed after search.");
+                                var requested = Count(context);
+                                if (requested.HasValue)
+                                {
+                                    var exact = _search.Require(path, Value(context, "query"), Mode(context), Flag(context, "matchCase"), requested.Value, context.Execution.RunId + ":" + context.Execution.StepId);
+                                    if (exact.Uri != current.Reference.Uri || exact.Revision != current.Reference.Revision)
+                                        throw new WorkspaceFileException("target_conflict", "Source changed after search.");
+                                }
                                 source = current.Evidence;
                             }
                             else
@@ -2294,12 +2299,16 @@ namespace RNAssistant.Runtime
                     List<PatchPreview> patchPreview = null;
                     if (_operation == ResourceMutationToolCatalog.Patch)
                         patchPreview = _files.ValidateTextEdits(_workspace, path, source.Resource, TextPatch.FromArguments(context.Arguments), token, source);
+                    int? replacementCount = null;
                     if (_operation == ResourceMutationToolCatalog.Replace)
-                        _files.ReplaceMatches(_workspace, path, source.Resource, Value(context, "query"), Value(context, "replacement"),
-                            Mode(context), Flag(context, "matchCase"), Count(context), null, token, true);
-                    return Task.FromResult(new ToolPreparationResult(ToolResult.Ok("Resource source pinned."),
+                        replacementCount = _files.PreviewReplacementMatches(_workspace, path, source.Resource,
+                            Value(context, "query"), Value(context, "replacement"), Mode(context), Flag(context, "matchCase"), Count(context), token);
+                    return Task.FromResult(new ToolPreparationResult(ToolResult.Ok(replacementCount.HasValue
+                            ? "Prepared " + replacementCount.Value + " exact replacements for confirmation."
+                            : "Resource source pinned."),
                         JsonConvert.SerializeObject(new PreparedFileState { Version = 2, ToolId = _operation,
                             ArgumentsHash = TextPatternEngine.Sha256(context.Execution.Call.ArgumentsJson), Path = path, Source = source,
+                            ReplacementCount = replacementCount,
                             RestoreSource = _operation == ResourceMutationToolCatalog.Restore ? _files.CaptureDeletedTextVersion(_workspace, path) : null }),
                         patchTarget: patchPreview == null ? null : new PatchTargetPlan { Source = source.Resource, SourceHash = source.ContentSha256, Preview = patchPreview }));
                 }
@@ -2360,7 +2369,9 @@ namespace RNAssistant.Runtime
                         changed = _operation == ResourceMutationToolCatalog.Patch
                             ? _files.ApplyTextEdits(_workspace, path, expected, TextPatch.FromArguments(context.Arguments).WithCoverage(TextPatch.Coverage(new[] { state.Source })), context.MarkDispatchPossible, token, effectOperation: _operation)
                             : _files.ReplaceMatches(_workspace, path, expected, Value(context, "query"), Value(context, "replacement"),
-                                Mode(context), Flag(context, "matchCase"), Count(context), context.MarkDispatchPossible, token, effectOperation: _operation);
+                                Mode(context), Flag(context, "matchCase"), Count(context) ?? state.ReplacementCount ??
+                                    throw new WorkspaceFileException("preparation_invalid", "Replacement count was not prepared."),
+                                context.MarkDispatchPossible, token, effectOperation: _operation);
                     path = changed.RelativePath;
                     var didChange = expected == null || expected.Uri != changed.Reference.Uri || expected.Revision != changed.Reference.Revision;
                     return Return(ToolResult.Ok(didChange ? "Resource change verified by read-back." : "Source already matched; no change.",
@@ -2380,7 +2391,8 @@ namespace RNAssistant.Runtime
             { object value; return context.Arguments.TryGetValue(name, out value) ? Convert.ToString(value) : ""; }
             private static string Mode(ToolHandlerContext context) { var value = Value(context, "mode"); return value.Length == 0 ? "literal" : value; }
             private static bool Flag(ToolHandlerContext context, string name) { object value; return context.Arguments.TryGetValue(name, out value) && value != null && Convert.ToBoolean(value); }
-            private static int Count(ToolHandlerContext context) { return Convert.ToInt32(context.Arguments["expectedMatches"]); }
+            private static int? Count(ToolHandlerContext context)
+            { object value; return context.Arguments.TryGetValue("expectedMatches", out value) && value != null ? (int?)Convert.ToInt32(value) : null; }
             private ToolRecoveryContract Recovery(ToolHandlerContext context, Exception error)
             {
                 var code = error is WorkspaceFileException file ? file.Code : error is ResourceRequestException resource ? resource.ErrorCode :

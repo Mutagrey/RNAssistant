@@ -11,6 +11,19 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.5.0-dev
+
+- Office text search и replacement используют единый model-facing словарь:
+  `query`/`limit` для поиска и `query`/`replacement` для Excel, Word и PowerPoint.
+  Старые `maxResults`, `find` и `replace` не принимаются как скрытые aliases; меняются
+  exact contract revisions, поэтому сохранённые frozen admissions требуют fresh
+  re-admission. `maxItems` Outlook, `maxReplacements` и preview-поля сохранены.
+- `core.replace` теперь может выполнить подтверждаемую inline-замену одного точного
+  target без отдельного `core.search`: runtime сам читает полный source, строит
+  exact plan и разрешает 1–100 совпадений. При явном `expectedMatches` остаётся
+  строгий путь через завершённый поиск и его точный count. Оба режима сохраняют
+  confirmation, source guard, owner read-back и правило не повторять Unknown.
+
 ### 17.4.5-dev
 
 - JavaScript-инструменты теперь выполняются в отдельном скрытом WebView2

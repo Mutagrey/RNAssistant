@@ -1,5 +1,29 @@
 # Stabilization progress
 
+## Cross-host tool argument cutover and guarded inline replace — In Review, 2026-11-18
+
+Implemented host-neutral / In Review, `17.5.0-dev`. Office content search and text
+replacement now expose the same model-facing argument vocabulary across Excel, Word,
+PowerPoint and Outlook: `query`/`limit`, and `query`/`replacement` for replacement.
+The old `maxResults`, `find` and `replace` fields are rejected without aliases; host
+contract versions and frozen admissions change atomically. Outlook's `maxItems`,
+the `maxReplacements` safety cap and host preview settings remain separate.
+
+`core.replace` now supports a guarded inline mode without `expectedMatches`: it reads
+the complete exact source during preparation, plans 1–100 matches, records the count
+in prepared state, requires confirmation, rechecks source/count and uses the existing
+owner read-back. Explicit `expectedMatches` retains the completed `core.search` receipt
+path. Zero/over-limit matches, stale source, incomplete source and unknown effects fail
+closed without automatic retry. The bundled search skill and text-mutation contract were
+updated, and the inline fixture now passes with the verified after-state retained.
+
+Harness build succeeds with the two existing PDF platform warnings. Focused checks pass:
+`excel find replace:` 4/4, `native tools:` 18/18, `universal mutations:` 12/12,
+`text search:` 6/6 and the relevant Word/PowerPoint/Outlook search and family filters.
+The two `resource search:` failures reproduce on the current baseline and remain
+separate open evidence. Windows x64 / Office x64 / WebView2 and live-model A/B remain
+open.
+
 ## JavaScript executor on WebView2 — In Review, 2026-11-18
 
 `js.run` and authored `executor=js` tools now share one hidden WebView2 controller

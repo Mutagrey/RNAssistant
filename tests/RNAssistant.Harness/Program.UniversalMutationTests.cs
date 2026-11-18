@@ -977,6 +977,14 @@ namespace RNAssistant.Harness
                 RuntimeThrows<ResourceRequestException>(() => search.Require("a.txt", "repeat", "literal", true, 1, "same-step"));
                 observed["a.txt"] = apply("core.replace", new JObject { ["target"] = "a.txt", ["query"] = "repeat", ["replacement"] = "replaced", ["matchCase"] = true, ["expectedMatches"] = 1 }).ResourceEvidence.Single();
                 AssertTrue(prepare("core.replace", new JObject { ["target"] = "a.txt", ["query"] = "repeat", ["replacement"] = "bad", ["matchCase"] = true, ["expectedMatches"] = 1 }).Outcome == ToolExecutionOutcome.Error, "old search receipt cannot authorize changed source");
+                var inlineReplace = prepare("core.replace", new JObject { ["target"] = "a.txt", ["query"] = "replaced", ["replacement"] = "inline", ["matchCase"] = true });
+                AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, inlineReplace.Outcome, "inline preflight still requires approval");
+                var inlineReplaced = confirm(inlineReplace);
+                AssertEqual(ToolExecutionOutcome.Ok, inlineReplaced.Outcome, "inline replacement keeps guarded write and read-back");
+                AssertContains(File.ReadAllText(Path.Combine(workspace.RootPath, "a.txt")), "inline", "replacement completed without an extra search turn");
+                observed["a.txt"] = inlineReplaced.ResourceEvidence.Single();
+                AssertEqual(ToolExecutionOutcome.Error, prepare("core.replace", new JObject { ["target"] = "a.txt", ["query"] = "not-present", ["replacement"] = "x" }).Outcome,
+                    "inline zero-match search fails without dispatch");
                 var uncertain = prepare("core.patch", PatchArguments("a.txt", EditSet(Edit("first", "written"))));
                 files.FaultPoint = point => { if (point == "after-dispatch") throw new IOException("read-back fault"); };
                 var unknown = confirm(uncertain);

@@ -25,6 +25,7 @@ namespace RNAssistant.Office.Tools
         public string Target { get; set; }
         public ResourceRef Source { get; set; }
         public string SourceHash { get; set; }
+        public int? ReplacementCount { get; set; }
         public string OwnerSourceHash { get; set; }
         public ResourceHeadState HtmlSourceHead { get; set; }
         public Dictionary<string, object> RoutingArguments { get; set; }
@@ -92,13 +93,23 @@ namespace RNAssistant.Office.Tools
                     prepared.Source = filePatch ? selected.Reference : source?.Resource.Reference;
                     prepared.SourceHash = source == null ? null : TextPatternEngine.Sha256(source.Text);
                     prepared.OwnerSourceHash = source == null ? null : VbaTextCanonicalizer.LiveCodeSha256(source.Text);
+                    if (_id == ResourceMutationToolCatalog.Replace && source == null)
+                        throw new ResourceRequestException("Replacement requires one existing exact source.", "resource_not_found", false);
                     if (source != null)
                     {
                         if (_id == ResourceMutationToolCatalog.Replace)
                         {
-                            var pin = _search.Require(target, Value(context.Arguments, "query"), Mode(context), Flag(context, "matchCase"), Count(context), context.Execution.RunId + ":" + context.Execution.StepId);
-                            if (pin.Uri != prepared.Source.Uri || pin.Revision != prepared.Source.Revision)
-                                throw new ResourceRequestException("Source changed after search; repeat core.search.", "target_conflict", false);
+                            if (source.SourceComplete == false)
+                                throw new InvalidDataException("The exact editable source is incomplete; narrow the target before replacing.");
+                            var requested = Count(context);
+                            if (requested.HasValue)
+                            {
+                                var pin = _search.Require(target, Value(context.Arguments, "query"), Mode(context), Flag(context, "matchCase"), requested.Value, context.Execution.RunId + ":" + context.Execution.StepId);
+                                if (pin.Uri != prepared.Source.Uri || pin.Revision != prepared.Source.Revision)
+                                    throw new ResourceRequestException("Source changed after search; repeat core.search.", "target_conflict", false);
+                            }
+                            prepared.ReplacementCount = TextEditPlan.Replace(source.Text, Value(context.Arguments, "query"),
+                                Value(context.Arguments, "replacement"), Mode(context), Flag(context, "matchCase"), requested, token).Edits.Count;
                         }
                         else if (_id != ResourceMutationToolCatalog.Restore) RequireObservation(context, source, _id == ResourceMutationToolCatalog.Write);
                     }
@@ -134,7 +145,9 @@ namespace RNAssistant.Office.Tools
                             prepared.SourceHash = filePlan.SourceHash;
                         }
                     }
-                    return new ToolPreparationResult(Result.Ok("Resource operation prepared."), JsonConvert.SerializeObject(prepared),
+                    return new ToolPreparationResult(Result.Ok(prepared.ReplacementCount.HasValue
+                        ? "Prepared " + prepared.ReplacementCount.Value + " exact replacements for confirmation."
+                        : "Resource operation prepared."), JsonConvert.SerializeObject(prepared),
                         patchTarget: filePlan ?? (_id == ResourceMutationToolCatalog.Patch ? new PatchTargetPlan {
                             Source = prepared.Source, SourceHash = prepared.SourceHash, SourceGuard = prepared.HtmlSourceHead,
                             EffectIdentity = PatchEffectIdentity(selected, prepared.Source),
@@ -529,7 +542,8 @@ namespace RNAssistant.Office.Tools
             else if (_id == ResourceMutationToolCatalog.Patch)
                 plan = SourcePatch(before, prepared.Source, context, token);
             else if (_id == ResourceMutationToolCatalog.Replace)
-                plan = TextEditPlan.Replace(before, Value(context.Arguments, "query"), Value(context.Arguments, "replacement"), Mode(context), Flag(context, "matchCase"), Count(context), token);
+                plan = TextEditPlan.Replace(before, Value(context.Arguments, "query"), Value(context.Arguments, "replacement"), Mode(context), Flag(context, "matchCase"),
+                    Count(context) ?? prepared.ReplacementCount ?? throw new InvalidDataException("Replacement has no prepared match count."), token);
             if (plan != null) { content = plan.Text; if (!PromptToolCatalog.Owns(prepared.Operation) && !SkillAuthoringCatalog.Owns(prepared.Operation)) args["resolvedTextEdits"] = plan.Edits; }
             if (content != null)
             {
@@ -577,7 +591,8 @@ namespace RNAssistant.Office.Tools
         private static string Value(IDictionary<string, object> args, string key) { object value; return args.TryGetValue(key, out value) ? Convert.ToString(value) : ""; }
         private static string Mode(ToolHandlerContext context) { var mode = Value(context.Arguments, "mode"); return mode.Length == 0 ? "literal" : mode; }
         private static bool Flag(ToolHandlerContext context, string key) { object value; return context.Arguments.TryGetValue(key, out value) && value != null && Convert.ToBoolean(value); }
-        private static int Count(ToolHandlerContext context) { return Convert.ToInt32(context.Arguments["expectedMatches"]); }
+        private static int? Count(ToolHandlerContext context)
+        { object value; return context.Arguments.TryGetValue("expectedMatches", out value) && value != null ? (int?)Convert.ToInt32(value) : null; }
         private ToolRecoveryContract Recovery(ToolHandlerContext context, Exception error)
         {
             var code = (error as ResourceRequestException)?.ErrorCode;

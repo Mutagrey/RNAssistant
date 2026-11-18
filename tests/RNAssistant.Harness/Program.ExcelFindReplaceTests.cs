@@ -19,6 +19,28 @@ namespace RNAssistant.Harness
     {
         private static void ExcelSearchRetainsExactSnapshots()
         {
+            var searches = new[] {
+                Tuple.Create("Excel", "excel.cells.find"), Tuple.Create("Word", "word.text.find"),
+                Tuple.Create("PowerPoint", "powerpoint.text.search"), Tuple.Create("Outlook", "outlook.mail.search") };
+            foreach (var item in searches)
+            {
+                var tool = OfficeToolCatalog.ForHost(item.Item1).Single(x => x.Id == item.Item2);
+                var schema = JObject.Parse(tool.ArgumentSchemaJson);
+                AssertTrue(schema["properties"]["limit"] != null && schema["properties"]["maxResults"] == null,
+                    "all host text searches expose query/limit: " + item.Item2);
+                string error;
+                AssertTrue(!ToolSchemaSupport.ValidateArguments(new JObject { ["query"] = "needle", ["maxResults"] = 1 }, schema, false, out error),
+                    "obsolete maxResults is rejected at model boundary: " + item.Item2);
+            }
+            foreach (var item in new[] { Tuple.Create("Excel", "excel.cells.replace"),
+                Tuple.Create("Word", "word.text.replace"), Tuple.Create("PowerPoint", "powerpoint.text.replace") })
+            {
+                var tool = OfficeToolCatalog.ForHost(item.Item1).Single(x => x.Id == item.Item2);
+                var schema = JObject.Parse(tool.ArgumentSchemaJson);
+                AssertTrue(schema["properties"]["query"] != null && schema["properties"]["replacement"] != null &&
+                    schema["properties"]["find"] == null && schema["properties"]["replace"] == null,
+                    "text replacement uses one public query/replacement contract: " + item.Item2);
+            }
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
             {
                 var text = new string('x', 17000) + " needle NEEDLE " + new string('y', 13000);
@@ -51,7 +73,7 @@ namespace RNAssistant.Harness
                 }
                 AssertEqual(0, adapter.ExcelSearchCellCaptureCount, "metadata reads do not capture cells");
                 var args = new JObject { ["sheet"] = "Data", ["address"] = "D1", ["query"] = "n(e{2})dle",
-                    ["mode"] = "regex", ["wholeWord"] = true, ["maxResults"] = 1 };
+                    ["mode"] = "regex", ["wholeWord"] = true, ["limit"] = 1 };
                 var found = ExecuteHtmlNative(runtime, ExcelFindReplaceToolIds.FindCells, args);
                 AssertEqual(ToolExecutionOutcome.Ok, found.Outcome, "exact search succeeds: " + found.Result.DataJson);
                 var data = JObject.Parse(found.Result.DataJson);
@@ -109,7 +131,7 @@ namespace RNAssistant.Harness
                     new AppSettings(), "agent", false);
                 var found = ExecuteHtmlNative(runtime, ExcelFindReplaceToolIds.FindCells,
                     new JObject { ["query"] = "needle", ["scope"] = "sheet", ["sheet"] = "Data",
-                        ["mode"] = "literal", ["maxResults"] = 10 });
+                        ["mode"] = "literal", ["limit"] = 10 });
                 AssertEqual(ToolExecutionOutcome.Ok, found.Outcome, "native search handles a sheet above the full-snapshot bound");
                 var data = JObject.Parse(found.Result.DataJson);
                 AssertEqual(1, (int)data["matchCount"], "native search finds the distant cell");
@@ -135,7 +157,7 @@ namespace RNAssistant.Harness
                         new string('x', 500) + "needle" + new string('y', 500));
                 var bounded = ExecuteHtmlNative(runtime, ExcelFindReplaceToolIds.FindCells,
                     new JObject { ["query"] = "needle", ["scope"] = "sheet", ["sheet"] = "Data",
-                        ["maxResults"] = 500, ["contextChars"] = 1000 });
+                        ["limit"] = 500, ["contextChars"] = 1000 });
                 var boundedData = JObject.Parse(bounded.Result.DataJson);
                 AssertTrue((bool)boundedData["complete"] && (bool)boundedData["truncated"] &&
                     (int)boundedData["matchCount"] == 61 && bounded.Result.DataJson.Length <= 32000,
@@ -248,7 +270,7 @@ namespace RNAssistant.Harness
                     var replaceCall = new ToolCall(
                         "replace-native",
                         ExcelFindReplaceToolIds.ReplaceCells,
-                        "{\"sheet\":\"Data\",\"address\":\"A2\",\"find\":\"Jan\",\"replace\":\"January\"}");
+                        "{\"sheet\":\"Data\",\"address\":\"A2\",\"query\":\"Jan\",\"replacement\":\"January\"}");
                     var replacePolicy = runtime.Describe(replaceCall);
                     AssertTrue(replacePolicy != null && replacePolicy.MayHaveSideEffects &&
                         replacePolicy.Policy.Verification == ToolVerification.Tool,
@@ -275,7 +297,7 @@ namespace RNAssistant.Harness
                     var dryRun = executor.ExecuteManual(Command(
                         ExcelFindReplaceToolIds.ReplaceCells,
                         "sheet", "Data", "address", "A3",
-                        "find", "Feb", "replace", "February"),
+                        "query", "Feb", "replacement", "February"),
                         tools, new AppSettings(), true, true, session);
                     AssertTrue(dryRun.Success &&
                         adapter.CellValue("Data", "A3") == "Feb",
@@ -330,7 +352,7 @@ namespace RNAssistant.Harness
                     var regexReplace = new ToolCall(
                         "replace-regex",
                         ExcelFindReplaceToolIds.ReplaceCells,
-                        "{\"sheet\":\"Data\",\"address\":\"D1\",\"find\":\"code-(\\\\d+)\",\"replace\":\"item-$1\",\"mode\":\"regex\",\"matchCase\":false}");
+                        "{\"sheet\":\"Data\",\"address\":\"D1\",\"query\":\"code-(\\\\d+)\",\"replacement\":\"item-$1\",\"mode\":\"regex\",\"matchCase\":false}");
                     var replaced = ExecuteNativeConfirmed(
                         runtime, regexReplace, runtime.Describe(regexReplace));
                     AssertEqual("item-12 item-345",
@@ -343,7 +365,7 @@ namespace RNAssistant.Harness
                     var conflictingReplace = new ToolCall(
                         "replace-conflicting-scope",
                         ExcelFindReplaceToolIds.ReplaceCells,
-                        "{\"scope\":\"sheet\",\"sheet\":\"Data\",\"address\":\"D1\",\"find\":\"item\",\"replace\":\"wrong\"}");
+                        "{\"scope\":\"sheet\",\"sheet\":\"Data\",\"address\":\"D1\",\"query\":\"item\",\"replacement\":\"wrong\"}");
                     var rejectedReplace = ExecuteNativeConfirmed(runtime,
                         conflictingReplace, runtime.Describe(conflictingReplace));
                     AssertEqual(ToolExecutionOutcome.Error, rejectedReplace.Outcome,
@@ -357,7 +379,7 @@ namespace RNAssistant.Harness
                     var formulaReplace = new ToolCall(
                         "replace-formula",
                         ExcelFindReplaceToolIds.ReplaceCells,
-                        "{\"sheet\":\"Data\",\"address\":\"D2\",\"find\":\"SUM\",\"replace\":\"AVERAGE\",\"lookIn\":\"formulas\"}");
+                        "{\"sheet\":\"Data\",\"address\":\"D2\",\"query\":\"SUM\",\"replacement\":\"AVERAGE\",\"lookIn\":\"formulas\"}");
                     var formulaChanged = ExecuteNativeConfirmed(
                         runtime, formulaReplace, runtime.Describe(formulaReplace));
                     AssertEqual(ToolEffectEvidence.VerifiedChange,
@@ -378,7 +400,7 @@ namespace RNAssistant.Harness
                     var firstOnly = new ToolCall(
                         "replace-first-only",
                         ExcelFindReplaceToolIds.ReplaceCells,
-                        "{\"sheet\":\"Data\",\"address\":\"I1:I2\",\"find\":\"hit\",\"replace\":\"done\",\"replaceAll\":false}");
+                        "{\"sheet\":\"Data\",\"address\":\"I1:I2\",\"query\":\"hit\",\"replacement\":\"done\",\"replaceAll\":false}");
                     ExecuteNativeConfirmed(runtime, firstOnly, runtime.Describe(firstOnly));
                     AssertEqual("done", adapter.CellValue("Data", "I1"),
                         "replaceAll=false changes the first matching cell");
@@ -389,7 +411,7 @@ namespace RNAssistant.Harness
                     var noChangeCall = new ToolCall(
                         "replace-no-change",
                         ExcelFindReplaceToolIds.ReplaceCells,
-                        "{\"sheet\":\"Data\",\"address\":\"E1\",\"find\":\"same\",\"replace\":\"same\"}");
+                        "{\"sheet\":\"Data\",\"address\":\"E1\",\"query\":\"same\",\"replacement\":\"same\"}");
                     var applies = adapter.ExcelBackendCalls.Count(operation =>
                         operation == FakeOfficeAdapter.ExcelReplaceApplyOperation);
                     var noChange = ExecuteNativeConfirmed(
@@ -408,7 +430,7 @@ namespace RNAssistant.Harness
                     var limitedCall = new ToolCall(
                         "replace-limited",
                         ExcelFindReplaceToolIds.ReplaceCells,
-                        "{\"sheet\":\"Data\",\"address\":\"F1\",\"find\":\"x\",\"replace\":\"y\",\"maxReplacements\":1}");
+                        "{\"sheet\":\"Data\",\"address\":\"F1\",\"query\":\"x\",\"replacement\":\"y\",\"maxReplacements\":1}");
                     var limited = ExecuteNativeConfirmed(
                         runtime, limitedCall, runtime.Describe(limitedCall));
                     AssertEqual(ToolExecutionOutcome.Error, limited.Outcome,
@@ -525,7 +547,7 @@ namespace RNAssistant.Harness
                     var result = executor.ExecuteManual(Command(
                         ExcelFindReplaceToolIds.ReplaceCells,
                         "sheet", "Data", "address", "H1",
-                        "find", "before", "replace", "after"),
+                        "query", "before", "replacement", "after"),
                         tools, new AppSettings(), false, true, chat);
                     AssertTrue(result.Success && ownerSta,
                         "replacement stays on the bound document owner STA");
@@ -540,7 +562,7 @@ namespace RNAssistant.Harness
                     var closed = executor.ExecuteManual(Command(
                         ExcelFindReplaceToolIds.ReplaceCells,
                         "sheet", "Data", "address", "H1",
-                        "find", "after", "replace", "blocked"),
+                        "query", "after", "replacement", "blocked"),
                         tools, new AppSettings(), false, true, chat);
                     AssertEqual("active_document_changed", closed.ErrorCode,
                         "closed bound workbook is rejected before replacement");
@@ -570,8 +592,8 @@ namespace RNAssistant.Harness
                 {
                     ["sheet"] = "Data",
                     ["address"] = address,
-                    ["find"] = find,
-                    ["replace"] = replacement
+                    ["query"] = find,
+                    ["replacement"] = replacement
                 }.ToString(Newtonsoft.Json.Formatting.None));
         }
 

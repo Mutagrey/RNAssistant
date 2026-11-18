@@ -68,7 +68,8 @@ namespace RNAssistant.Office.Services
                 else if (before != null || terminal.ToolName == ResourceMutationToolCatalog.Write)
                 {
                     var intended = terminal.ToolName == ResourceMutationToolCatalog.Write ? args.Content :
-                        terminal.ToolName == ResourceMutationToolCatalog.Replace ? TextEditPlan.Replace(item.Before, args.Query, args.Replacement, args.Mode, args.MatchCase, args.ExpectedMatches).Text :
+                        terminal.ToolName == ResourceMutationToolCatalog.Replace ? TextEditPlan.Replace(item.Before, args.Query, args.Replacement, args.Mode, args.MatchCase,
+                            args.ExpectedMatches > 0 ? (int?)args.ExpectedMatches : null).Text :
                         terminal.ToolName == ResourceMutationToolCatalog.Delete ? "" : null;
                     if (intended?.Length <= RunChangesService.MaximumSourceCharacters)
                     { item.IntendedAfter = intended; item.IntendedAfterExists = terminal.ToolName != ResourceMutationToolCatalog.Delete; }

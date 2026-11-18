@@ -171,7 +171,7 @@ namespace RNAssistant.Harness
                 var runtime = executor.CreateNativeRuntime(session, OfficeToolCatalog.ForHost("Outlook").Concat(executor.GetControllerTools()).ToList(),
                     new AppSettings(), "agent", false);
                 var args = new JObject { ["query"] = "n(e{2})dle", ["mode"] = "regex", ["wholeWord"] = true,
-                    ["fields"] = "body", ["maxResults"] = 1 };
+                    ["fields"] = "body", ["limit"] = 1 };
                 var found = ExecuteHtmlNative(runtime, OutlookToolIds.SearchMail, args);
                 AssertEqual(ToolExecutionOutcome.Ok, found.Outcome, "exact Outlook search: " + found.Result.DataJson);
                 var data = JObject.Parse(found.Result.DataJson);

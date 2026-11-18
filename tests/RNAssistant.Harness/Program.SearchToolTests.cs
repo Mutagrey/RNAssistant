@@ -11,6 +11,15 @@ namespace RNAssistant.Harness
     {
         private static void TextPatternEngineSupportsRegexpAndGroups()
         {
+            var inline = TextEditPlan.Replace("before before", "before", "after", "literal", true, null);
+            AssertEqual(2, inline.Edits.Count, "inline replacement derives exact count from captured source");
+            AssertEqual("after after", inline.Text, "inline replacement applies against one original source");
+            AssertEqual(100, TextEditPlan.Replace(new string('x', 100), "x", "y", "literal", true, null).Edits.Count,
+                "inline replacement accepts the 100-match boundary");
+            RuntimeThrows<TextPatternException>(() => TextEditPlan.Replace("none", "before", "after", "literal", true, null));
+            RuntimeThrows<TextPatternException>(() => TextEditPlan.Replace(new string('x', 101), "x", "y", "literal", true, null));
+            AssertEqual(101, TextEditPlan.Replace(new string('x', 101), "x", "y", "literal", true, 101).Edits.Count,
+                "explicit exact count keeps the existing larger guarded path");
             var options = new TextPatternOptions { Mode = "regex", MatchCase = false, WholeWord = true };
             var found = TextPatternEngine.Find("Code-12 code-345 decoder-7", "code-(\\d+)", options, 10, 5);
             var replaced = TextPatternEngine.Replace("Code-12 code-345 decoder-7", "code-(\\d+)", "item-$1", options, true, 10);
