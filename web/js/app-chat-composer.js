@@ -153,10 +153,10 @@
       bound = true;
       function submit() { if (!nodes.send.disabled) dispatch("submit"); }
       listen(nodes.form, "submit", function (event) { event.preventDefault(); submit(); });
-      listen(nodes.input, "input", function () {
+      listen(nodes.input, "input", function (event) {
         var value = edit(context().target);
         if (value) value.text = nodes.input.value;
-        dispatch("input");
+        dispatch("input", event.inputType === "insertLineBreak" || /\r|\n/.test(event.data || ""));
       });
       listen(nodes.input, "keydown", function (event) {
         if (event.key === "Escape" && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
@@ -318,11 +318,11 @@ function renderComposerPresentation(view, node) {
   $("clearInputButton").disabled = !!view.preparing || !!view.editBusy;
 }
 
-function renderComposerInputState(hasContent, node) {
+function renderComposerInputState(hasContent, node, options) {
   var $ = node || window.$;
   $("chatForm").classList.toggle("has-input", !!hasContent);
   $("clearInputButton").hidden = !$("chatInput").value.trim();
-  resizeComposerInput($("chatInput"));
+  scheduleComposerInputResize($("chatInput"), !!(options && options.immediateResize));
 }
 
 function renderSendControls() {
@@ -358,6 +358,57 @@ function resizeComposerInput(input) {
 
   input.style.height = Math.min(contentHeight, maxHeight) + "px";
   input.style.overflowY = contentHeight > maxHeight ? "auto" : "hidden";
+}
+
+var composerInputResizeStates = new WeakMap();
+var composerInputResizeQuietMs = 160;
+var composerInputResizeCharacterStep = 8;
+
+function cancelComposerInputResize(input) {
+  if (!input) return;
+  var state = composerInputResizeStates.get(input);
+  if (!state) return;
+  if (state.frame) window.cancelAnimationFrame(state.frame);
+  if (state.timer) window.clearTimeout(state.timer);
+  composerInputResizeStates.delete(input);
+}
+
+// Composer autosize normally belongs to the next paint. A synchronous
+// scrollHeight read from every keystroke forces the entire Dockview chat to
+// reflow. Keep the final value, but coalesce continuous typing to a bounded
+// cadence; explicit state renders, layout events and line breaks stay immediate.
+function scheduleComposerInputResize(input, immediate) {
+  if (!input) return;
+  var state = composerInputResizeStates.get(input);
+  if (!state) {
+    state = { frame: 0, timer: 0, measuredLength: 0, measuredLineBreaks: 0 };
+    composerInputResizeStates.set(input, state);
+  }
+  function run() {
+    var value = String(input.value || "");
+    state.frame = 0; state.timer = 0; state.measuredLength = value.length;
+    state.measuredLineBreaks = (value.match(/\r|\n/g) || []).length;
+    if (input.isConnected === false) { composerInputResizeStates.delete(input); return; }
+    resizeComposerInput(input);
+  }
+  if (immediate) {
+    if (state.frame) window.cancelAnimationFrame(state.frame);
+    if (state.timer) window.clearTimeout(state.timer);
+    state.frame = 0; state.timer = 0;
+    run();
+    return;
+  }
+  var value = String(input.value || "");
+  var length = value.length, lineBreaks = (value.match(/\r|\n/g) || []).length;
+  var urgent = Math.abs(length - state.measuredLength) >= composerInputResizeCharacterStep || lineBreaks !== state.measuredLineBreaks;
+  if (state.frame) return;
+  if (urgent) {
+    if (state.timer) window.clearTimeout(state.timer);
+    state.timer = 0;
+    state.frame = window.requestAnimationFrame(run);
+  } else if (!state.timer) {
+    state.timer = window.setTimeout(run, composerInputResizeQuietMs);
+  }
 }
 
 function setChatInputText(text, shouldFocus, saveDraft) {

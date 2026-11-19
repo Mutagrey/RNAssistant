@@ -82,13 +82,20 @@
         if (window.RNAssistantChatInspector) { RNAssistantChatInspector.mount(address.source === "office" ? "office" : "project"); RNAssistantChatInspector.render(); }
       },
       activate: function () { view.setVisible(true, render); render(); if (adapter.activate) adapter.activate(); },
-      deactivate: function () { view.setVisible(false, render); stopHeaderTimer(); RNAssistantActionMenu.closeWithin(root); },
-      layout: function () { if (!disposed) resizeComposerInput(node("chatInput")); },
+      deactivate: function () {
+        view.setVisible(false, render); stopHeaderTimer(); cancelComposerInputResize(node("chatInput"));
+        RNAssistantActionMenu.closeWithin(root);
+      },
+      layout: function () {
+        if (disposed) return;
+        cancelComposerInputResize(node("chatInput"));
+        resizeComposerInput(node("chatInput"));
+      },
       dispose: function (options) {
         if (disposed) return;
         if (!options || options.captureDraft !== false) adapter.captureDraft(false);
         disposed = true;
-        stopHeaderTimer(); RNAssistantActionMenu.closeWithin(root);
+        stopHeaderTimer(); cancelComposerInputResize(node("chatInput")); RNAssistantActionMenu.closeWithin(root);
         if (communication) communication.dispose();
         if (selected === component) selected = null;
         if (window.RNAssistantChatInspector) RNAssistantChatInspector.render();
@@ -101,7 +108,10 @@
     function edit() { return composer.edit(address); }
     var common = {
       target: function () { return address; },
-      input: function () { if (!edit()) adapter.captureDraft(true); renderControls(); },
+      input: function (immediateResize) {
+        if (!edit()) adapter.captureDraft(true);
+        renderControls({ inputOnly: true, immediateResize: !!immediateResize });
+      },
       clear: function () { node("chatInput").value = ""; common.input(); node("chatInput").focus(); },
       cancelEdit: function () { composer.cancelEdit(address, { focus: true }); render(); },
       escape: function (event) { if (edit()) { event.preventDefault(); common.cancelEdit(); } },
@@ -185,7 +195,7 @@
     on(node("clearContextButton"), "click", function () { composer.dispatch("clearContext"); });
     on(node("chatLoadRetry"), "click", function () { component.refresh(); });
     on(window, "resize", component.layout);
-    function renderControls() {
+    function renderControls(options) {
       if (disposed) return;
       if (!view.canRender()) return;
       var presentation = adapter.presentation(), editing = edit();
@@ -196,7 +206,8 @@
         preparing: preparing, inputReadOnly: disabled || presentation.readOnly || !!(editing && editing.busy) }), node);
       var content = !!node("chatInput").value.trim() || adapter.hasAttachments();
       node("sendButton").disabled = disabled || preparing || presentation.readOnly || presentation.sendBlocked || !content || !!(editing && editing.busy) || !!(adapter.draft() && adapter.draft().pendingVisualAnnotation);
-      renderComposerInputState(content, node);
+      renderComposerInputState(content, node, { immediateResize: !(options && options.inputOnly) || !!(options && options.immediateResize) });
+      if (options && options.inputOnly) return;
       setComposerPickerDisabled(node("composerAddPicker"), disabled || preparing || !!editing);
       var preferences = composer.preferences(), plan = node("chatPlanButton");
       plan.classList.toggle("is-selected", preferences.mode === "plan"); plan.disabled = preferences.disabled;

@@ -1,11 +1,13 @@
 "use strict";
 const assert = require("node:assert/strict"), fs = require("node:fs"), vm = require("node:vm");
-let clockNow = 0, nextTimer = 0;
+let clockNow = 0, nextTimer = 0, nextAnimationFrame = 0;
 const timers = new Map();
+const animationFrames = new Map();
 const context = vm.createContext({ state: { chatDrafts: {} }, Promise,
   Date: { now: () => clockNow },
   window: {
-    cancelAnimationFrame() {}, requestAnimationFrame() { return 1; },
+    cancelAnimationFrame(id) { animationFrames.delete(id); },
+    requestAnimationFrame(fn) { animationFrames.set(++nextAnimationFrame, fn); return nextAnimationFrame; },
     setTimeout(fn, delay) { timers.set(++nextTimer, { fn: fn, at: clockNow + delay }); return nextTimer; },
     clearTimeout(id) { timers.delete(id); }
   } });
@@ -93,6 +95,35 @@ view.controller.restoreDraft(b, { text: "Late snapshot" });
 assert.equal(view.input.value, ""); assert.equal(sibling.input.value, "Independent input");
 sibling.controller.dispose();
 console.log("PASS shared draft binding: versioned ACK, edit preservation, background file link, source isolation and stable input");
+
+clockNow = 100000;
+const resized = [], inputNode = { value: "draft", isConnected: true };
+const fakeNodes = { chatForm: { classList: { toggle() {} } }, clearInputButton: { hidden: false }, chatInput: inputNode };
+const previousDollar = context.$, previousResize = context.resizeComposerInput;
+context.$ = id => fakeNodes[id];
+context.resizeComposerInput = input => resized.push(input.value);
+for (let i = 0; i < 20; i++) {
+  inputNode.value = "draft " + "x".repeat(i * 8);
+  context.renderComposerInputState(true, context.$);
+}
+assert.equal(resized.length, 0, "continuous input does not force transcript layout synchronously");
+assert.equal(animationFrames.size, 1, "continuous input shares one deferred autosize frame");
+let frameEntry = animationFrames.entries().next().value;
+animationFrames.delete(frameEntry[0]); frameEntry[1]();
+assert.deepEqual(resized, ["draft " + "x".repeat(19 * 8)], "deferred autosize commits only the latest text");
+inputNode.value = "line one\nline two";
+context.renderComposerInputState(true, context.$, { immediateResize: true });
+assert.equal(resized.at(-1), "line one\nline two", "explicit line breaks resize without waiting");
+inputNode.value = "a\nb\nc";
+context.renderComposerInputState(true, context.$);
+assert.equal(animationFrames.size, 1, "short multiline paste still schedules the next paint");
+frameEntry = animationFrames.entries().next().value;
+animationFrames.delete(frameEntry[0]); frameEntry[1]();
+assert.equal(resized.at(-1), "a\nb\nc");
+context.cancelComposerInputResize(inputNode);
+context.$ = previousDollar; context.resizeComposerInput = previousResize;
+clockNow = 0;
+console.log("PASS composer autosize: typing coalesces to one layout while explicit breaks stay immediate");
 
 (async () => {
   await context.hydrateChatDrafts();
