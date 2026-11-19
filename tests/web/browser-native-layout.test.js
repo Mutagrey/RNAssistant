@@ -9,6 +9,8 @@ const { withPreviewPage } = require('./preview-session');
     const original = send; window.nativeLayout = {calls:[], value:null};
     send = (type, p, ...rest) => {
       if (type === 'readBrowserSource') return Promise.resolve({files:['index.html'],path:'index.html',text:'<button>Локальная страница</button>',offset:0,totalCharacters:33,requestGeneration:p.requestGeneration});
+      if (type === 'queryNavigationSuggestions') return Promise.resolve({requestGeneration:p.requestGeneration,
+        items:[{title:'Локальная страница',displayLocator:'/projects/project/source/index.html',kind:'WorkspaceHtmlProject',sourceLabel:'project',disabledReason:'None'}]});
       if (type !== 'browserCommand') return original(type,p,...rest);
       nativeLayout.calls.push(structuredClone(p));
       let value = nativeLayout.value;
@@ -49,6 +51,9 @@ const { withPreviewPage } = require('./preview-session');
   await root.locator('.preview-surface-address').focus();
   assert.equal(await root.locator('.preview-surface-actions').isVisible(),false,'address focus hides the lower action strip');
   assert.equal(await root.getByRole('button',{name:'Копировать адрес',exact:true}).count(),0,'address copy action is removed');
+  assert.equal(await page.evaluate(()=>nativeLayout.calls.filter(c=>c.action==='Layout').at(-1)?.bounds.visible),true,'address focus keeps the native page visible while history loads');
+  await root.locator('.preview-surface-address').fill('page');
+  await root.locator('.preview-surface-completion').getByRole('option').filter({hasText:'Локальная страница'}).waitFor();
   await page.waitForFunction(() => nativeLayout.calls.filter(c=>c.action==='Layout').at(-1)?.bounds.visible === false);
   await root.locator('.preview-surface-address').blur();
   await page.waitForFunction(() => nativeLayout.calls.filter(c=>c.action==='Layout').at(-1)?.bounds.visible === true);

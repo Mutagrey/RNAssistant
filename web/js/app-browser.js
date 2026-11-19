@@ -64,6 +64,7 @@
     var fileNavigation = createBrowserFileNavigation();
     shell.setNavigation({ element: fileNavigation.element, available: browserFilesAvailable });
     var operationId = target.operationId || id(), definitionDialog = null, targetInvalidated = false, sourceInvalidated = false, authorityRevision = -1, sourceRefreshEpoch = 0;
+    var homeSuggestionCache = [], homeSuggestionScope = "";
     var discussionBusy = false, createdDiscussion = null, handoverPending = false, handoverRequested = false;
     function discussionContext() {
       var page = current, owner = page && page.target && page.target.ownerScope;
@@ -198,9 +199,9 @@
         first.right > second.left && first.top < second.bottom && first.bottom > second.top;
     }
     function nativeOverlayOpen(rect) {
-      // Focusing the address means the Shell dropdown owns this area. The native
-      // child HWND must yield before suggestions are painted, as in the old surface.
-      if (root.querySelector('.preview-surface-toolbar.is-address-focused, .preview-surface-completion:not([hidden]), .visual-annotation-editor')) return true;
+      // Keep the page visible while the address query runs. Only an actual Shell
+      // overlay may hide the native child HWND.
+      if (root.querySelector('.preview-surface-completion:not([hidden]), .visual-annotation-editor')) return true;
       var selector = 'dialog[open], [aria-modal="true"], .rna-action-menu-popup';
       return Array.prototype.some.call(document.querySelectorAll(selector), function (node) {
         return overlaps(node.getBoundingClientRect(), rect);
@@ -406,9 +407,17 @@
       if (definitionDialog) definitionDialog.close(false);
       pending.forEach(function (task) { if (task.requestId) cancelBridgeRequest(task.requestId).catch(function () {}); }); pending.clear();
     }
+    function scopeKey(scope) { return scope ? [scope.kind, scope.scopeId, scope.chatId || ""].join("\n") : ""; }
     function localSuggestions(prefix) {
-      var scope = current && current.ownerScope || target.ownerScope;
-      return RNAssistantDockWorkspace.recentNavigation(scope, prefix, 8);
+      var scope = current && current.ownerScope || target.ownerScope, key = scopeKey(scope), seen = new Set();
+      var needle = String(prefix || "").toLocaleLowerCase();
+      if (homeSuggestionScope !== key) { homeSuggestionCache = []; homeSuggestionScope = key; }
+      var cached = homeSuggestionCache.filter(function (entry) {
+        return (entry.displayLocator || "").toLocaleLowerCase().includes(needle) || (entry.title || "").toLocaleLowerCase().includes(needle);
+      });
+      return RNAssistantDockWorkspace.recentNavigation(scope, prefix, 8).concat(cached).filter(function (entry) {
+        if (!entry || seen.has(entry.displayLocator)) return false; seen.add(entry.displayLocator); return true;
+      }).slice(0, 20);
     }
     async function suggestions(prefix, epoch) {
       var scope = current && current.ownerScope || target.ownerScope;
@@ -437,6 +446,7 @@
           var result = await request("queryNavigationSuggestions", { ownerScope: current.ownerScope, prefix: query, requestGeneration: serial, limit: 12 });
           if (dead || !shown || serial !== epoch || result.requestGeneration !== serial) return;
           entries = (result.items || []).filter(function (entry) { return !!RNAssistantBrowserTarget.preferenceLocator(entry.displayLocator); }).slice(0, 12);
+          if (!query) { homeSuggestionCache = entries.slice(); homeSuggestionScope = scopeKey(current.ownerScope); }
         } catch (failure) { if (!dead && shown && serial === epoch) error = failure.detail || failure.message; }
         finally { if (!dead && shown && serial === epoch) { loading = false; view.update(model()); } }
       }

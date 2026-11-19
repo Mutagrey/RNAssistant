@@ -13,11 +13,11 @@ namespace RNAssistant.Office.WebView
         private void ReportBrowserVersionChanged(BrowserVersionStateChanged value)
         { if (!_disposed) _postMessageJson(Newtonsoft.Json.JsonConvert.SerializeObject(value)); }
 
-        internal IReadOnlyList<BrowserTargetDescriptor> BrowserTargets(BrowserOwnerScope owner, string suggestionsPrefix = null)
+        internal IReadOnlyList<BrowserTargetDescriptor> BrowserTargets(BrowserOwnerScope owner, string suggestionsPrefix = null, int? suggestionsLimit = null)
         {
-            if (owner?.Kind == BrowserOwnerKind.Document) return _controller.BrowserTargets(owner, suggestionsPrefix);
+            if (owner?.Kind == BrowserOwnerKind.Document) return _controller.BrowserTargets(owner, suggestionsPrefix, suggestionsLimit);
             if (Plugins == null) return new BrowserTargetDescriptor[0];
-            return Plugins.BrowserTargets(owner, suggestionsPrefix);
+            return Plugins.BrowserTargets(owner, suggestionsPrefix, suggestionsLimit);
         }
 
         internal BrowserResolveResult ResolveBrowserLocator(BrowserResolveRequest request)
@@ -41,7 +41,8 @@ namespace RNAssistant.Office.WebView
         private BrowserSuggestionPage BrowserSuggestions(BrowserSuggestionRequest request)
         {
             BrowserTargetResolver.QueryNavigationSuggestions(request?.OwnerScope, request, new BrowserTargetDescriptor[0]);
-            return BrowserTargetResolver.QueryNavigationSuggestions(request.OwnerScope, request, BrowserTargets(request.OwnerScope, request.Prefix ?? ""));
+            return BrowserTargetResolver.QueryNavigationSuggestions(request.OwnerScope, request,
+                BrowserTargets(request.OwnerScope, request.Prefix ?? "", request.Limit));
         }
 
         private SourceComparisonDto BrowserComparison(BrowserSourceComparisonRequest request)

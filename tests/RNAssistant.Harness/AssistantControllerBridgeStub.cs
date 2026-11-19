@@ -714,7 +714,7 @@ namespace RNAssistant.Office
         }
         public ResourceDataOpenResponse OpenResourceData(ResourceDataOpenRequest request, CancellationToken cancellationToken = default(CancellationToken)) { return new ResourceDataOpenResponse(); }
         public ResourceDataCloseResponse CloseResourceData(ResourceDataCloseRequest request) { return new ResourceDataCloseResponse { Closed = true }; }
-        internal IReadOnlyList<BrowserTargetDescriptor> BrowserTargets(BrowserOwnerScope owner, string suggestionsPrefix = null)
+        internal IReadOnlyList<BrowserTargetDescriptor> BrowserTargets(BrowserOwnerScope owner, string suggestionsPrefix = null, int? suggestionsLimit = null)
         { return new BrowserTargetDescriptor[0]; }
         public HtmlWorkspaceResponse GetHtmlWorkspace(string chatId = null) { return new HtmlWorkspaceResponse { ActiveChatId = chatId ?? string.Empty, Workspace = HtmlWorkspaceDto.From(null) }; }
         public Task<HtmlWorkspaceSourceResponse> ReadHtmlWorkspaceSourceAsync(HtmlWorkspaceSourceRequest request, CancellationToken token) { token.ThrowIfCancellationRequested(); LastChatId = request.ChatId; return Task.FromResult(new HtmlWorkspaceSourceResponse { ChatId = request.ChatId, Resource = request.Resource }); }

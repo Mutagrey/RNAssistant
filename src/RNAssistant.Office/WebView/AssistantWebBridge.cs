@@ -671,7 +671,7 @@ namespace RNAssistant.Office.WebView
                         responsePayload = ResolveBrowserLocator(Payload<BrowserResolveRequest>(payload));
                         break;
                     case BridgeOperationId.QueryNavigationSuggestions:
-                        responsePayload = BrowserSuggestions(Payload<BrowserSuggestionRequest>(payload));
+                        responsePayload = await RunBridgeWorkAsync(() => BrowserSuggestions(Payload<BrowserSuggestionRequest>(payload)), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.GetBrowserVersionState:
                         responsePayload = await RunBridgeWorkAsync(() => ReadBrowserVersionState(Payload<BrowserVersionRequest>(payload), cancellationToken), cancellationToken).ConfigureAwait(false);

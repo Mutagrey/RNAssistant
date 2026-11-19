@@ -60,7 +60,7 @@ const {withPreviewPage} = require('./preview-session');
     const address=root.getByRole('combobox',{name:'Адрес материала'});
     await address.focus();
     assert.equal(await root.locator('.preview-surface-actions').isVisible(),false,'address focus yields the row to history and suggestions');
-    await root.locator('.preview-surface-completion').waitFor({state:'visible'});
+    assert.equal(await page.evaluate(()=>localProbe.calls.filter(c=>c.type==='queryNavigationSuggestions').length),0,'address focus never starts a catalog scan');
     assert.equal(await root.getByRole('button',{name:'Копировать адрес',exact:true}).count(),0,'exact address copy control is removed');
     await address.blur();
     await address.fill('old');await address.fill('new');

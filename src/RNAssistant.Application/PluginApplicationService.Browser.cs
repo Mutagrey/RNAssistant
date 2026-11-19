@@ -129,7 +129,7 @@ namespace RNAssistant.Application
                 BeforeId = request.BeforeId, AfterId = request.AfterId, Path = request.Path });
         }
 
-        public IReadOnlyList<BrowserTargetDescriptor> BrowserTargets(BrowserOwnerScope caller, string suggestionsPrefix = null)
+        public IReadOnlyList<BrowserTargetDescriptor> BrowserTargets(BrowserOwnerScope caller, string suggestionsPrefix = null, int? suggestionsLimit = null)
         {
             using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)
             {
@@ -178,6 +178,8 @@ namespace RNAssistant.Application
                         PluginId = plugin?.PluginId, EntryPath = entryPath, RelativePath = entryPath, Title = title,
                         DisplayLocator = plugin == null ? BrowserLocalLocator.ForProject(workspaceId, entryPath) : BrowserLocalLocator.ForPlugin(plugin.PluginId, entryPath),
                         Capabilities = new BrowserTargetCapabilities { Source = true, Versions = true, PreviewReason = BrowserRefusalCode.NativeUnavailable } });
+                    // Home only renders the bounded prefix; do not enumerate every connected workspace.
+                    if (suggestionsLimit.HasValue && suggestionsPrefix != null && suggestionsPrefix.Length == 0 && targets.Count >= suggestionsLimit.Value) break;
                 }
                 return targets;
             }

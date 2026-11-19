@@ -114,7 +114,7 @@ namespace RNAssistant.Office
             return BrowserSourceReader.Read(target, request, new[] { "index.html" }, path => text);
         }
 
-        internal IReadOnlyList<BrowserTargetDescriptor> BrowserTargets(BrowserOwnerScope owner, string suggestionsPrefix = null)
+        internal IReadOnlyList<BrowserTargetDescriptor> BrowserTargets(BrowserOwnerScope owner, string suggestionsPrefix = null, int? suggestionsLimit = null)
         {
             var metadata = BrowserOwner(owner);
             var result = new List<BrowserTargetDescriptor>(); var savedFamilies = 0;
@@ -135,6 +135,8 @@ namespace RNAssistant.Office
                     }
                 }
                 result.Add(target);
+                // Home only renders the bounded prefix; do not enumerate the full catalog.
+                if (suggestionsLimit.HasValue && suggestionsPrefix != null && suggestionsPrefix.Length == 0 && result.Count >= suggestionsLimit.Value) break;
             }
             return result;
         }

@@ -45,6 +45,9 @@
       if (!owner || !owner.suggest) return;
       var local = typeof owner.localSuggest === "function" ? owner.localSuggest(prefix) : [];
       if (local && local.length) showCompletion(local, epoch, owner);
+      // Focus is a history affordance. Show known pages immediately; a catalog
+      // query starts only after the user actually types.
+      if (immediate) return;
       function query() {
         suggestTimer = 0;
         owner.suggest(prefix, epoch).then(function (result) {
@@ -52,7 +55,7 @@
           showCompletion(result.items || [], epoch, owner);
         }, function () {});
       }
-      if (immediate) query(); else suggestTimer = setTimeout(query, 120);
+      suggestTimer = setTimeout(query, 120);
     }
     address.oninput = function () {
       requestSuggestions(address.value, false);
