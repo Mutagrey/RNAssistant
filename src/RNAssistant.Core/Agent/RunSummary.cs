@@ -93,7 +93,9 @@ namespace RNAssistant.Core.Agent
 
         internal PendingConfirmation(ToolExecutionRecord record)
             : this(record.PendingId, record.Context.Call, record.Context.Policy, record.Context.StepId,
-                record.ToolStepsConsumed, record.PreparedStateJson, record.Context.Call.Name == RNAssistant.Core.Tools.ResourceMutationToolCatalog.Patch && record.ConfirmationDataJson != null
+                record.ToolStepsConsumed, record.PreparedStateJson,
+                (record.Context.Call.Name == RNAssistant.Core.Tools.ResourceMutationToolCatalog.Patch ||
+                    record.Context.Call.Name == RNAssistant.Core.Tools.ResourceMutationToolCatalog.Replace) && record.ConfirmationDataJson != null
                     ? JsonConvert.DeserializeObject<RNAssistant.Core.Tools.PatchBatchResult>(record.ConfirmationDataJson) : null)
         {
         }

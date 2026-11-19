@@ -45,12 +45,12 @@ namespace RNAssistant.Core.Storage
             using (var stream = OpenRetainedStream(snapshot.Evidence.Payload, long.MaxValue, token, null, true))
                 return CommitTextEdits(workspace, path, expected, stream, PlanByteEdits(stream, patch, token), onDispatch, token, effectOperation);
         }
-        public int PreviewReplacementMatches(WorkspaceDescriptor workspace, string path, ResourceRef expected,
+        public TextEditPlan PlanReplacement(WorkspaceDescriptor workspace, string path, ResourceRef expected,
             string query, string replacement, string mode, bool matchCase, int? count, CancellationToken token)
         {
             var snapshot = AcceptedStreamedTextSource(workspace, path, expected);
             using (var stream = OpenRetainedStream(snapshot.Evidence.Payload, long.MaxValue, token, null, true))
-                return PlanReplacement(stream, query, replacement, mode, matchCase, count, token).Edits.Count;
+                return PlanReplacement(stream, query, replacement, mode, matchCase, count, token);
         }
         public WorkspaceFileObservation ReplaceMatches(WorkspaceDescriptor workspace, string path, ResourceRef expected,
             string query, string replacement, string mode, bool matchCase, int? count,

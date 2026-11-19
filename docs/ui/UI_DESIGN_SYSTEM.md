@@ -1,5 +1,14 @@
 # Дизайн-система и компоненты RNAssistant
 
+## Prepared replacement diff — In Review, 2026-11-19
+
+`RunChanges.renderPrepared` повторно использует `inline-change` и общий text-diff.
+Для confirmation с `affectedCount` disclosure раскрыт заранее, count показан рядом
+с target, а bounded fragments остаются внутри существующей ширины панели. Отметка
+«Предпросмотр усечён» выводится общим caption до фрагментов и отличает сокращённый
+фрагмент от не показанного совпадения. Новые tokens, popup, отдельная геометрия или
+копия text-diff не добавлены.
+
 ## Browser header geometry — In Review, 2026-11-18
 
 `workspace-topbar`, `material-surface-header` and the Browser preview toolbar use

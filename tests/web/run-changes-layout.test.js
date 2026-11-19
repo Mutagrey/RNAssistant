@@ -167,15 +167,17 @@ const read = file => fs.readFileSync(path.join(__dirname, '../../web', file), 'u
     await page.evaluate(() => {
       const output = document.getElementById('output'); output.textContent = '';
       RNAssistantRunChanges.renderPrepared(output, {targets:[
-        {target:'a.js',preview:[{before:'old',after:'new'}]},
-        {target:'<img src=x>.bas',preview:[{before:'',after:'planned',truncated:true}]}
+        {target:'a.js',affectedCount:1,preview:[{before:'old',after:'new'}]},
+        {target:'<img src=x>.bas',affectedCount:20,preview:[{before:'',after:'planned',truncated:true}]}
       ]});
     });
     assert.equal(await page.locator('details.inline-change').count(), 2);
+    assert.equal(await page.locator('details.inline-change').nth(1).evaluate(node => node.open), true,
+      'replacement preview and truncation warning are visible before confirmation');
     assert.equal(await page.locator('#output img').count(), 0);
     await page.locator('details.inline-change').nth(1).locator('summary').click();
-    assert.match(await page.locator('#output').textContent(), /Предложенные изменения/);
-    assert.match(await page.locator('#output').textContent(), /часть подготовленного изменения/);
+    assert.match(await page.locator('#output').textContent(), /Затронуто мест: 20/);
+    assert.match(await page.locator('#output').textContent(), /Предпросмотр усечён: показано 1 из 20 мест/);
     for (const width of [320, 740]) {
       await page.setViewportSize({width, height:844});
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));

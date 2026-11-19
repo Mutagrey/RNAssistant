@@ -309,9 +309,24 @@ namespace RNAssistant.Harness
                     ["expectedMatches"] = 1 }, "replace");
                 AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, replacePending.Outcome,
                     "VBA replacement uses its completed search: " + replacePending.Result?.Message);
+                var replacePreview = Newtonsoft.Json.JsonConvert.DeserializeObject<PatchBatchResult>(replacePending.ConfirmationDataJson);
+                var replaceTarget = replacePreview.Targets.Single();
+                AssertEqual(1, replaceTarget.AffectedCount, "replacement confirmation carries its exact affected count");
+                AssertTrue(replaceTarget.Preview.Single().Before == "Debug.Print 2" && replaceTarget.Preview.Single().After == "Debug.Print 3",
+                    "replacement confirmation carries bounded before/after fragments");
                 var replaced = ConfirmVbaNative(new VbaPendingExecution { Runtime = replacementRuntime, Record = replacePending });
                 AssertEqual(ToolExecutionOutcome.Ok, replaced.Outcome, "VBA replacement uses the guarded whole writer");
                 AssertContains(adapter.GetVbaModuleCode("Universal"), "Debug.Print 3", "replacement verifies full module read-back");
+                var inlineOffice = replaceStep("core.replace", new JObject { ["target"] = "VBA module: Universal",
+                    ["query"] = "Debug.Print 3", ["replacement"] = "Debug.Print 4", ["matchCase"] = true }, "inline");
+                AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, inlineOffice.Outcome,
+                    "VBA inline replacement prepares without a search receipt");
+                var inlineOfficePreview = Newtonsoft.Json.JsonConvert.DeserializeObject<PatchBatchResult>(inlineOffice.ConfirmationDataJson).Targets.Single();
+                AssertEqual(1, inlineOfficePreview.AffectedCount, "Office inline replacement exposes the exact count before confirmation");
+                AssertTrue(inlineOfficePreview.Preview.Single().Before == "Debug.Print 3" &&
+                    inlineOfficePreview.Preview.Single().After == "Debug.Print 4", "Office inline replacement exposes before/after");
+                AssertEqual(ToolExecutionOutcome.Ok, ConfirmVbaNative(new VbaPendingExecution { Runtime = replacementRuntime, Record = inlineOffice }).Outcome,
+                    "Office inline replacement keeps the guarded confirmation path");
                 var rewrite = executor.ExecuteManual(Command("core.write", "target", "VBA module: Universal", "content", "Sub Run()\nEnd Sub"), catalog, settings, false, true, session);
                 AssertTrue(rewrite.Success, "same write updates an existing module: " + rewrite.Message);
                 var htmlTarget = "HTML file: index.html in " + CreateHtmlToolWorkspace(executor, session);
@@ -979,10 +994,23 @@ namespace RNAssistant.Harness
                 AssertTrue(prepare("core.replace", new JObject { ["target"] = "a.txt", ["query"] = "repeat", ["replacement"] = "bad", ["matchCase"] = true, ["expectedMatches"] = 1 }).Outcome == ToolExecutionOutcome.Error, "old search receipt cannot authorize changed source");
                 var inlineReplace = prepare("core.replace", new JObject { ["target"] = "a.txt", ["query"] = "replaced", ["replacement"] = "inline", ["matchCase"] = true });
                 AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, inlineReplace.Outcome, "inline preflight still requires approval");
+                var inlinePreview = Newtonsoft.Json.JsonConvert.DeserializeObject<PatchBatchResult>(inlineReplace.ConfirmationDataJson).Targets.Single();
+                AssertEqual(1, inlinePreview.AffectedCount, "inline replacement confirmation records the exact affected count");
+                AssertTrue(inlinePreview.Preview.Single().Before == "replaced" && inlinePreview.Preview.Single().After == "inline",
+                    "inline replacement confirmation shows before/after before dispatch");
+                AssertEqual(1, new PendingConfirmation(inlineReplace).PatchPreview.Targets.Single().AffectedCount,
+                    "pending approval retains the replacement preview for the shared UI");
                 var inlineReplaced = confirm(inlineReplace);
                 AssertEqual(ToolExecutionOutcome.Ok, inlineReplaced.Outcome, "inline replacement keeps guarded write and read-back");
                 AssertContains(File.ReadAllText(Path.Combine(workspace.RootPath, "a.txt")), "inline", "replacement completed without an extra search turn");
                 observed["a.txt"] = inlineReplaced.ResourceEvidence.Single();
+                apply("core.write", new JObject { ["target"] = "many.txt", ["content"] = string.Join("\n", Enumerable.Repeat("repeat", 20)) });
+                var manyReplace = prepare("core.replace", new JObject { ["target"] = "many.txt", ["query"] = "repeat", ["replacement"] = "done" });
+                var manyPreview = Newtonsoft.Json.JsonConvert.DeserializeObject<PatchBatchResult>(manyReplace.ConfirmationDataJson).Targets.Single();
+                AssertEqual(20, manyPreview.AffectedCount, "large replacement keeps the exact count independent of preview truncation");
+                AssertTrue(manyPreview.Preview.Count < 20 && manyPreview.Preview.Last().Truncated,
+                    "large replacement confirmation marks the bounded preview as truncated");
+                AssertEqual(ToolExecutionOutcome.Ok, confirm(manyReplace).Outcome, "bounded preview does not change exact replacement execution");
                 AssertEqual(ToolExecutionOutcome.Error, prepare("core.replace", new JObject { ["target"] = "a.txt", ["query"] = "not-present", ["replacement"] = "x" }).Outcome,
                     "inline zero-match search fails without dispatch");
                 var uncertain = prepare("core.patch", PatchArguments("a.txt", EditSet(Edit("first", "written"))));

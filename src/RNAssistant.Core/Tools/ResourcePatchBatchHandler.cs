@@ -139,6 +139,7 @@ namespace RNAssistant.Core.Tools
         public ResourceTargetStatus Status { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string CurrentTarget { get; set; }
         public bool WriteStarted { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public int? AffectedCount { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public PatchDiagnostic Diagnostic { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public List<PatchPreview> Preview { get; set; }
     }
@@ -159,6 +160,26 @@ namespace RNAssistant.Core.Tools
         public bool Partial { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public PatchDiagnostic Diagnostic { get; set; }
         public List<PatchTargetResult> Targets { get; set; } = new List<PatchTargetResult>();
+
+        public static PatchBatchResult PreparedReplacement(string target, IReadOnlyList<ResolvedTextEdit> edits)
+        {
+            if (string.IsNullOrWhiteSpace(target)) throw new ArgumentException("A prepared replacement requires its exact target.", nameof(target));
+            if (edits == null || edits.Count == 0) throw new ArgumentException("A prepared replacement requires at least one exact edit.", nameof(edits));
+            return new PatchBatchResult
+            {
+                Phase = "preparation",
+                Targets = new List<PatchTargetResult>
+                {
+                    new PatchTargetResult
+                    {
+                        Target = target,
+                        Status = ResourceTargetStatus.Prepared,
+                        AffectedCount = edits.Count,
+                        Preview = PatchPreview.From(edits)
+                    }
+                }
+            };
+        }
     }
     [JsonObject(MemberSerialization.OptIn)]
     public sealed class ResourcePatchSection

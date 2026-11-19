@@ -478,11 +478,13 @@ internal implementation details.
 `core.replace` has two guarded modes on one exact target. With explicit
 `expectedMatches`, it keeps the existing completed-`core.search` receipt requirement.
 Without it, preparation reads the complete exact source in runtime, plans 1–100
-replacements and records the exact prepared count for confirmation; zero matches,
-more than 100 matches, an incomplete source, changed source or count fail before
-write. Execution rechecks the source/count, uses the existing owner writer and
-read-back, and never retries an unknown effect. The optional field is absent from
-the required schema and `matchesSeen` is never accepted as an exact replacement
+replacements and records the exact prepared count for confirmation. Confirmation
+also carries a bounded `before → after` preview and an explicit truncation state;
+the exact affected count stays separate from the number of shown fragments. Zero
+matches, more than 100 matches, an incomplete source, changed source or count fail
+before write. Execution rechecks the source/count, uses the existing owner writer
+and read-back, and never retries an unknown effect. The optional field is absent
+from the required schema and `matchesSeen` is never accepted as an exact replacement
 count. `docs/text-mutations.md` owns the detailed mutation contract.
 
 ### Search context, runtime paging and compact results — 2026-11-18

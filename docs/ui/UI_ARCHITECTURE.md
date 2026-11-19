@@ -1,5 +1,17 @@
 # Архитектура UI RNAssistant
 
+## core.replace confirmation preview — In Review, 2026-11-19
+
+Office `OfficeResourceMutationHandler` и Workspace `FileHandler` строят exact
+`TextEditPlan` во время preparation. Общий `PatchBatchResult.PreparedReplacement`
+передаёт в pending approval semantic target, `affectedCount` и bounded
+`before/after` fragments. `PendingConfirmation` сохраняет этот preview для
+`core.replace` так же, как для `core.patch`; общий `AgentApproval` и существующий
+`RunChanges`/text-diff выполняют presentation. Точное число совпадений не выводится
+из числа показанных фрагментов. Нового LLM-вызова, store, approval renderer или
+mutation authority нет; запись по-прежнему начинается только после confirmation и
+повторного owner guard.
+
 ## Browser one-line header and overlay stability — In Review, 2026-11-18
 
 `MaterialSurface` and the Shell topbar remain single-row flex layouts at every width.

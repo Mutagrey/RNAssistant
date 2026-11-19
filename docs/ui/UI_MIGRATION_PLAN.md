@@ -1,5 +1,14 @@
 # План модернизации production UI
 
+## core.replace confirmation preview — In Review, 2026-11-19
+
+Scope: existing Office/Workspace preparation и общий pending approval. Runtime
+добавляет к confirmation exact `affectedCount` и bounded fragments; presentation
+раскрывает diff и предупреждение об усечении. Shell, Dockview placement, bridge,
+storage, tool schemas и model call count не меняются. Rollback — scoped diff этих
+владельцев и renderer без миграции данных. Host-neutral fixture проверяет payload и
+renderer; Windows/Office/WebView2 visual acceptance остаётся открытой.
+
 ## Workspace/plugin live activity — In Review, 2026-11-18
 
 Scope: existing `WorkspaceConversationService`, `AssistantWebBridge.Plugins`,

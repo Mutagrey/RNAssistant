@@ -163,11 +163,30 @@
   }
   function renderPrepared(parent, preview) {
     (preview.targets || []).forEach(function (target) {
+      var count = typeof target.affectedCount === "number" ? target.affectedCount : null;
+      var parts = target.preview || [];
+      var shown = 0, fragmentTruncated = false, legacyTruncated = false;
+      parts.forEach(function (part) {
+        if (typeof part.before === "string" || typeof part.after === "string") shown++;
+        if (part.truncated) {
+          legacyTruncated = true;
+          if (typeof part.before === "string" || typeof part.after === "string") fragmentTruncated = true;
+        }
+      });
       var details = element("details", "inline-change");
-      details.appendChild(element("summary", "run-change-title", target.target + " · Предложенные изменения"));
-      (target.preview || []).forEach(function (part) {
+      details.open = count != null;
+      details.appendChild(element("summary", "run-change-title", (target.target || "Исходник") +
+        (count != null ? " · Затронуто мест: " + count : " · Предложенные изменения")));
+      var omitted = count != null && shown < count;
+      if (omitted || fragmentTruncated || legacyTruncated) {
+        var message = omitted
+          ? "Предпросмотр усечён: показано " + shown + " из " + count + " мест"
+          : fragmentTruncated ? "Предпросмотр усечён: длинные фрагменты сокращены" : "Показана часть подготовленного изменения";
+        details.appendChild(element("p", "run-changes-caption run-change-preview-notice", message + "."));
+      }
+      parts.forEach(function (part) {
+        if (typeof part.before !== "string" && typeof part.after !== "string") return;
         window.RNAssistantTextDiff.renderInline(details, window.RNAssistantTextDiff.format(part.before || "", part.after || ""));
-        if (part.truncated) details.appendChild(element("p", "run-changes-caption", "Показана часть подготовленного изменения."));
       });
       parent.appendChild(details);
     });

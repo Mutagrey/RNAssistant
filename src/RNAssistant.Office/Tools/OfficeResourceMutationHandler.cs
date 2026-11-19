@@ -90,6 +90,7 @@ namespace RNAssistant.Office.Tools
                     RequireHtmlTarget(selected);
                     var filePatch = _id == ResourceMutationToolCatalog.Patch && selected?.Descriptor.Kind == ChatArtifactKinds.File;
                     var source = selected == null || filePatch ? null : Read(selected.Reference, token);
+                    TextEditPlan replacementPlan = null;
                     prepared.Source = filePatch ? selected.Reference : source?.Resource.Reference;
                     prepared.SourceHash = source == null ? null : TextPatternEngine.Sha256(source.Text);
                     prepared.OwnerSourceHash = source == null ? null : VbaTextCanonicalizer.LiveCodeSha256(source.Text);
@@ -108,8 +109,9 @@ namespace RNAssistant.Office.Tools
                                 if (pin.Uri != prepared.Source.Uri || pin.Revision != prepared.Source.Revision)
                                     throw new ResourceRequestException("Source changed after search; repeat core.search.", "target_conflict", false);
                             }
-                            prepared.ReplacementCount = TextEditPlan.Replace(source.Text, Value(context.Arguments, "query"),
-                                Value(context.Arguments, "replacement"), Mode(context), Flag(context, "matchCase"), requested, token).Edits.Count;
+                            replacementPlan = TextEditPlan.Replace(source.Text, Value(context.Arguments, "query"),
+                                Value(context.Arguments, "replacement"), Mode(context), Flag(context, "matchCase"), requested, token);
+                            prepared.ReplacementCount = replacementPlan.Edits.Count;
                         }
                         else if (_id != ResourceMutationToolCatalog.Restore) RequireObservation(context, source, _id == ResourceMutationToolCatalog.Write);
                     }
@@ -145,9 +147,11 @@ namespace RNAssistant.Office.Tools
                             prepared.SourceHash = filePlan.SourceHash;
                         }
                     }
+                    var replacementPreview = replacementPlan == null ? null :
+                        JsonConvert.SerializeObject(PatchBatchResult.PreparedReplacement(prepared.Target, replacementPlan.Edits));
                     return new ToolPreparationResult(Result.Ok(prepared.ReplacementCount.HasValue
                         ? "Prepared " + prepared.ReplacementCount.Value + " exact replacements for confirmation."
-                        : "Resource operation prepared."), JsonConvert.SerializeObject(prepared),
+                        : "Resource operation prepared.", replacementPreview), JsonConvert.SerializeObject(prepared),
                         patchTarget: filePlan ?? (_id == ResourceMutationToolCatalog.Patch ? new PatchTargetPlan {
                             Source = prepared.Source, SourceHash = prepared.SourceHash, SourceGuard = prepared.HtmlSourceHead,
                             EffectIdentity = PatchEffectIdentity(selected, prepared.Source),

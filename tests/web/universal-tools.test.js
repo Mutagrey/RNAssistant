@@ -44,6 +44,19 @@ assert.match(diagnosticText, /Исправить правку/);
 assert.equal(texts(diagnostics).filter(t => t.startsWith('Возможное место')).length, 5);
 assert(!diagnosticText.includes('x'.repeat(200)));
 assert(diagnosticText.includes('<img src=x onerror=alert(1)>'), 'diagnostic is inert text');
+const prepared = new Element('div');
+context.window.RNAssistantRunChanges.renderPrepared(prepared, { targets: [
+  { target: 'many.txt', affectedCount: 20, preview: [
+    { before: 'repeat', after: 'done' },
+    { before: null, after: null, truncated: true }
+  ] }
+] });
+const preparedText = texts(prepared).join('\n');
+assert.equal(prepared.children[0].open, true, 'replacement preview is visible before confirmation');
+assert.match(preparedText, /Затронуто мест: 20/);
+assert.match(preparedText, /Предпросмотр усечён: показано 1 из 20 мест/);
+assert.match(preparedText, /repeat/);
+assert.match(preparedText, /done/);
 const groups = context.window.RNAssistantLibraryGroups;
 const tree = groups.tree(['html.data.read', 'html.assets.import', 'core.write', 'excel.range.write'].map(Id => ({ value: { Id } })), 'tools', row => ({ kind: 'leaf', title: row.value.Id }), () => true);
 assert.equal(tree[0].title, 'Core');

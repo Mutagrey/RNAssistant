@@ -2300,13 +2300,19 @@ namespace RNAssistant.Runtime
                     List<PatchPreview> patchPreview = null;
                     if (_operation == ResourceMutationToolCatalog.Patch)
                         patchPreview = _files.ValidateTextEdits(_workspace, path, source.Resource, TextPatch.FromArguments(context.Arguments), token, source);
+                    TextEditPlan replacementPlan = null;
                     int? replacementCount = null;
                     if (_operation == ResourceMutationToolCatalog.Replace)
-                        replacementCount = _files.PreviewReplacementMatches(_workspace, path, source.Resource,
+                    {
+                        replacementPlan = _files.PlanReplacement(_workspace, path, source.Resource,
                             Value(context, "query"), Value(context, "replacement"), Mode(context), Flag(context, "matchCase"), Count(context), token);
+                        replacementCount = replacementPlan.Edits.Count;
+                    }
+                    var confirmationData = replacementPlan == null ? null :
+                        JsonConvert.SerializeObject(PatchBatchResult.PreparedReplacement(path, replacementPlan.Edits));
                     return Task.FromResult(new ToolPreparationResult(ToolResult.Ok(replacementCount.HasValue
                             ? "Prepared " + replacementCount.Value + " exact replacements for confirmation."
-                            : "Resource source pinned."),
+                            : "Resource source pinned.", confirmationData),
                         JsonConvert.SerializeObject(new PreparedFileState { Version = 2, ToolId = _operation,
                             ArgumentsHash = TextPatternEngine.Sha256(context.Execution.Call.ArgumentsJson), Path = path, Source = source,
                             ReplacementCount = replacementCount,
