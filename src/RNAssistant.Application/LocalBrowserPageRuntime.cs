@@ -18,6 +18,8 @@ namespace RNAssistant.Application
             public List<Visit> History = new List<Visit>();
             public int Position = -1;
             public BrowserBoundsDto Bounds;
+            public BrowserContentSession TransientContent;
+            public CancellationTokenSource Lifetime;
         }
         private readonly SemaphoreSlim _commands = new SemaphoreSlim(1, 1);
         private readonly object _sync = new object();
@@ -28,10 +30,13 @@ namespace RNAssistant.Application
         private readonly Action<BrowserPageStateDto> _publish;
         private bool _disposed;
         private readonly IBrowserRenderer _renderer;
+        private readonly TimeSpan _inlineLifetime;
         private const string NativeUnavailable = "Native Browser недоступен в этом host. Исходники и версии доступны.";
         public LocalBrowserPageRuntime(Func<BrowserResolveRequest, BrowserResolveResult> resolve, Action<BrowserPageStateDto> publish,
-            Func<BrowserOwnerScope, IReadOnlyList<BrowserTargetDescriptor>> sourceCatalog = null, Action<BrowserDockOpenRequest> requestDockOpen = null, IBrowserRenderer renderer = null)
-        { _resolve = resolve ?? throw new ArgumentNullException(nameof(resolve)); _publish = publish; _sourceCatalog = sourceCatalog; _requestDockOpen = requestDockOpen; _renderer = renderer; if (_renderer != null) _renderer.Changed += NativeChanged; }
+            Func<BrowserOwnerScope, IReadOnlyList<BrowserTargetDescriptor>> sourceCatalog = null, Action<BrowserDockOpenRequest> requestDockOpen = null,
+            IBrowserRenderer renderer = null, TimeSpan? inlineLifetime = null)
+        { _resolve = resolve ?? throw new ArgumentNullException(nameof(resolve)); _publish = publish; _sourceCatalog = sourceCatalog; _requestDockOpen = requestDockOpen; _renderer = renderer;
+            _inlineLifetime = inlineLifetime ?? TimeSpan.FromSeconds(30); if (_renderer != null) _renderer.Changed += NativeChanged; }
 
         public async Task<BrowserPageStateDto> ExecuteAsync(BrowserCommandPayload request, CancellationToken token)
         {
@@ -44,6 +49,11 @@ namespace RNAssistant.Application
             if (request != null) { request.NativeHistoryEntryId = null; request.NativeLocator = null; }
             var result = await ExecuteCoreAsync(request, token).ConfigureAwait(false);
             if (_renderer != null) {
+                lock (_sync) {
+                    Page page;
+                    if (_pages.TryGetValue(request.BrowserTabId, out page) && page.TransientContent != null)
+                        request.TransientContent = page.TransientContent;
+                }
                 try { result = await _renderer.UpdateAsync(request, result, token).ConfigureAwait(false); }
                 catch (OperationCanceledException) { throw; }
                 catch (Exception error) when (request.Action != BrowserCommandKind.ResumeAgent && request.Action != BrowserCommandKind.Focus && request.Action != BrowserCommandKind.Layout && request.Action != BrowserCommandKind.VisualControl) {
@@ -80,10 +90,15 @@ namespace RNAssistant.Application
                 if (request == null || !Enum.IsDefined(typeof(BrowserCommandKind), request.Action) || !Key(request.BrowserTabId))
                     throw new InvalidOperationException("Требуется точная вкладка Browser.");
                 Page page;
-                if (request.Action == BrowserCommandKind.Open)
+                if (request.Action == BrowserCommandKind.Open || request.Action == BrowserCommandKind.OpenInline)
                 {
                     if (!Key(request.OperationId) || request.OwnerScope == null) throw new InvalidOperationException("Требуется владелец и операция открытия Browser.");
-                    var openKey = request.BrowserTabId + "\n" + request.OwnerScope.Kind + "\n" + request.OwnerScope.ScopeId + "\n" + request.OwnerScope.ChatId + "\n" + request.Locator + "\n" + (request.BindChat != false);
+                    var inline = request.Action == BrowserCommandKind.OpenInline;
+                    if (inline && (_renderer == null || request.OwnerScope.Kind != BrowserOwnerKind.User ||
+                        request.OwnerScope.ScopeId != "local" || !string.IsNullOrEmpty(request.OwnerScope.ChatId)))
+                        throw new InvalidOperationException("Для интерактивного HTML требуется isolated native Browser.");
+                    var openKey = request.BrowserTabId + "\n" + request.OwnerScope.Kind + "\n" + request.OwnerScope.ScopeId + "\n" + request.OwnerScope.ChatId + "\n" +
+                        (inline ? "inline\n" + RNAssistant.Core.Tools.TextPatternEngine.Sha256(request.Html ?? "") : request.Locator) + "\n" + (request.BindChat != false);
                     if (_operations.TryGetValue(request.OperationId, out page))
                     {
                         if (page.OpenKey != openKey) throw new InvalidOperationException("Операция открытия уже принадлежит другой цели.");
@@ -94,9 +109,25 @@ namespace RNAssistant.Application
                     page = new Page { OpenKey = openKey, State = new BrowserPageStateDto { BrowserTabId = request.BrowserTabId,
                         OperationId = request.OperationId, SessionId = Guid.NewGuid().ToString("N"),
                         ChatBound = request.BindChat != false && !string.IsNullOrEmpty(request.OwnerScope.ChatId) } };
-                    Navigate(page, request.OwnerScope, request.Locator ?? "/", true);
+                    if (inline)
+                    {
+                        page.TransientContent = InlineHtmlContent.Create(request.Html, request.Title);
+                        page.TransientContent.Target.Title += " · " + Math.Max(1, (int)Math.Ceiling(_inlineLifetime.TotalSeconds)) + " с";
+                        page.State.OwnerScope = page.TransientContent.Target.OwnerScope;
+                        page.State.Target = page.TransientContent.Target;
+                        page.State.Url = page.TransientContent.Target.DisplayLocator;
+                        page.State.Title = page.TransientContent.Target.Title;
+                        page.State.Status = BrowserPageStatus.Starting; page.State.Reason = BrowserRefusalCode.None;
+                        page.State.Message = "Открытие изолированного HTML…"; page.State.DocumentGeneration = 1;
+                        page.State.ControlRevision = 1; page.State.VisitRevision = 1;
+                        page.History.Add(new Visit { Owner = page.State.OwnerScope, Locator = page.State.Url }); page.Position = 0;
+                        page.State.CanGoBack = false; page.State.CanGoForward = false;
+                        page.Lifetime = new CancellationTokenSource();
+                    }
+                    else Navigate(page, request.OwnerScope, request.Locator ?? "/", true);
                     _pages.Add(request.BrowserTabId, page); _operations.Add(request.OperationId, page); _receipts.Enqueue(request.OperationId);
                     TrimReceipts();
+                    if (inline) ExpireInlinePage(request.BrowserTabId, page.State.SessionId, page.Lifetime.Token);
                 }
                 else
                 {
@@ -104,6 +135,12 @@ namespace RNAssistant.Application
                         throw new InvalidOperationException("Browser session закрыта или устарела.");
                     if (request.OwnerScope != null && !request.OwnerScope.Matches(page.State.OwnerScope))
                         throw new InvalidOperationException("Контекст Browser изменился.");
+                    if (page.State.Target?.Kind == BrowserTargetKind.InlineHtml &&
+                        request.Action != BrowserCommandKind.Attach && request.Action != BrowserCommandKind.Layout &&
+                        request.Action != BrowserCommandKind.Focus && request.Action != BrowserCommandKind.Stop &&
+                        request.Action != BrowserCommandKind.Close && request.Action != BrowserCommandKind.ResumeAgent &&
+                        request.Action != BrowserCommandKind.VisualControl)
+                        throw new InvalidOperationException("Интерактивный HTML не поддерживает навигацию. Закройте вкладку и запустите его снова из сообщения.");
                     switch (request.Action)
                     {
                         case BrowserCommandKind.Attach:
@@ -134,7 +171,10 @@ namespace RNAssistant.Application
                         case BrowserCommandKind.Forward: Move(page, 1, request); break;
                         case BrowserCommandKind.Reload: Navigate(page, page.History[page.Position].Owner, page.History[page.Position].Locator, false); break;
                         case BrowserCommandKind.Close:
-                            page.State.Status = BrowserPageStatus.Closed; page.State.Attached = false; _pages.Remove(request.BrowserTabId); break;
+                            page.State.Status = BrowserPageStatus.Closed; page.State.Attached = false;
+                            if (page.State.Target?.Kind == BrowserTargetKind.InlineHtml)
+                                page.State.Message = "Интерактивный HTML закрыт. Скрипты остановлены.";
+                            _pages.Remove(request.BrowserTabId); ReleasePage(page); break;
                         case BrowserCommandKind.Layout:
                             if (!ValidBounds(request.Bounds)) throw new InvalidOperationException("Некорректная геометрия Browser.");
                             if (!SameBounds(page.Bounds, request.Bounds)) { page.State.ViewportRevision++; page.Bounds = request.Bounds; }
@@ -214,6 +254,27 @@ namespace RNAssistant.Application
                 if (item.State.Status == BrowserPageStatus.Closed) _operations.Remove(key); else _receipts.Enqueue(key);
             }
         }
+        private void ExpireInlinePage(string browserTabId, string sessionId, CancellationToken token)
+        {
+            _ = Task.Run(async () => {
+                try {
+                    await Task.Delay(_inlineLifetime, token).ConfigureAwait(false);
+                    await ExecuteAsync(new BrowserCommandPayload { Action = BrowserCommandKind.Close,
+                        BrowserTabId = browserTabId, SessionId = sessionId }, CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) { }
+                catch (Exception) { }
+            });
+        }
+        private static void ReleasePage(Page page)
+        {
+            if (page == null) return;
+            try { page.Lifetime?.Cancel(); page.Lifetime?.Dispose(); page.Lifetime = null; }
+            catch (ObjectDisposedException) { }
+            try { page.TransientContent?.Dispose(); }
+            catch (ObjectDisposedException) { }
+            page.TransientContent = null;
+        }
         private static bool Key(string value) => !string.IsNullOrWhiteSpace(value) && value.Length <= 256 && !value.Any(char.IsControl);
         public static bool ValidBounds(BrowserBoundsDto bounds)
         {
@@ -290,7 +351,8 @@ namespace RNAssistant.Application
             lock (_sync) { _openEpoch++;
                 foreach (var operation in _agentOpens.Values.Where(o => !o.Completion.Task.IsCompleted)) operation.Completion.TrySetException(new InvalidOperationException("The Browser owner reset."));
                 closed = _pages.Values.Select(page => { page.State.Status = BrowserPageStatus.Closed;
-                    page.State.Attached = false; page.State.Revision++; return Copy(page.State); }).ToArray(); _pages.Clear(); }
+                    page.State.Attached = false; page.State.Revision++; ReleasePage(page); return Copy(page.State); }).ToArray();
+                _pages.Clear(); }
             if (_renderer != null) _nativeReset = _renderer.ResetAsync();
             foreach (var state in closed) {
                 ObserveAgentOpen(new BrowserCommandPayload { Action = BrowserCommandKind.Close }, state); _publish?.Invoke(state);

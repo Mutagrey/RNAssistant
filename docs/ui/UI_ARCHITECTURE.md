@@ -355,17 +355,26 @@ routes мигрируют по следующему срезу versions, ред�
 dirty buffer. Отдельный inline HTML preview сообщения описан ниже и не открывает
 local Browser execution.
 
-## Inline HTML в чате — In Review, 2026-11-18
+## Inline HTML в чате — In Review, 2026-11-19
 
 Owner — общий Markdown enhancer и `app-chat-visuals`; Office, Workspace и plugin
 используют один renderer. Завершённый `html` fence после появления в viewport
-открывается в preview по умолчанию. Play/перезапуск, source, copy и expand работают
-с одним exact iframe; переключение source не сбрасывает состояние. Высота первый
-раз следует `postMessage` из iframe и ограничена 300–680 px / 72% viewport, после
-чего остаётся вертикально resizable. iframe имеет `allow-scripts` без same-origin,
-fixed CSP запрещает сеть, внешние assets, frames, forms и workers; HTML ограничен
-200 000 символов. Это presentation transient message content, не artifact/store/
-Browser route. CPU isolation и Windows/WebView2 qualification остаются открытыми.
+открывается как static preview с `sandbox=""` и `script-src 'none'`; inline
+scripts, event handlers и timers не исполняются. Source/copy/expand остаются
+доступны, высота ограничена и вертикально resizable. Fixed CSP блокирует
+automatic subresources; authored `<a>`/`<area>` лишаются href/target/download, а
+meta refresh удаляется из preview-копии, поэтому клик, keyboard activation и
+synthetic navigation не создают network request. Original source bytes не меняются.
+
+Play не запускает script-enabled iframe в Shell. `app-browser` создаёт transient
+`InlineHtml` target; `LocalBrowserPageRuntime` собирает один in-memory source
+`index.html` с fixed CSP и передаёт его native WebView2 через существующий
+`BrowserContentSession`. Browser tab владеет выполнением и остаётся единственным
+интерактивным surface; его закрытие останавливает controller, а runtime закрывает
+его по 30-секундному deadline. Network, frames, workers, forms, source/download
+grant и model bridge недоступны. Это не artifact/store и не второй Browser owner.
+Отдельный process test проверяет runaway loop и падение CPU после process-tree
+termination; реальная WebView2 CPU qualification остаётся открытой.
 
 
 ## Local Browser / Settings — In Review, 2026-11-13

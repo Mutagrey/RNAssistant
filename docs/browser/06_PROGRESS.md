@@ -544,12 +544,17 @@ viewer: 32K страницы, guarded revisions, local completion с generations
 B02 принудительно закрывает исполнение, live reads/actions/media и новые аннотации.
 Старый native singleton и Shell plugin-frame transport удалены; hidden plugin
 commands имеют ту же обязательную admission и отдельную lazy local environment,
-без Shell/Edge profile. Авторский inline HTML в чате вынесен отдельно от local
-Browser execution: с 2026-11-18 completed fenced HTML показывается в bounded
-sandboxed preview без same-origin и network, с Play/restart. B02 для Browser
-actions/media по-прежнему закрыт; это **не квалифицированный native renderer/input/
-network**. Provider source/versions routes ещё объединяются в F3/F4; старые
-iframe-specific web fixtures заменяются вместе с их consumers.
+без Shell/Edge profile. Авторский inline HTML в чате вынесен отдельно: completed
+fenced HTML показывается статически без scripts, а Play создаёт transient
+`InlineHtml` page в native Browser. Только эта page исполняет authored scripts,
+имеет fixed CSP/network denial, read-only address и 30-секундный bounded lifetime;
+close/deadline закрывает controller. B02 для обычных Browser actions/media по-прежнему
+закрыт; это **не квалифицированный native renderer/input/network**. Provider
+source/versions routes ещё объединяются в F3/F4; старые iframe-specific web fixtures
+заменяются вместе с их consumers. Отдельный P1 остаётся в static message preview:
+авторская ссылка после пользовательского клика может перейти во внешний URL; scripts
+и automatic subresources при этом запрещены. Play-page navigation policy этим
+статическим iframe не управляет.
 
 Проверки: Harness local browser 3/3, exact target 1/1, typed bridge 1/1;
 MockDemo host-neutral build — 0 errors. Production Chrome: exact owner/attach,

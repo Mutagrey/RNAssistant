@@ -202,13 +202,15 @@ namespace RNAssistant.Harness
         private static void VisualizationSkillAutomaticPreviewGuidance()
         {
             var visual = WorkspaceSkillProvider.GetSkills().Single(skill => skill.Id == ChatVisualizationSkillProvider.Id);
-            AssertEqual("1.0.2", visual.Version, "automatic HTML preview guidance has its own skill version");
-            AssertContains(visual.BodyMarkdown, "opens automatically",
-                "completed HTML preview is described as automatic");
+            AssertEqual("1.0.3", visual.Version, "static preview and isolated script guidance has its own skill version");
+            AssertContains(visual.BodyMarkdown, "static preview with scripts disabled",
+                "completed HTML preview is described as automatic and static");
+            AssertContains(visual.BodyMarkdown, "separate isolated native Browser page",
+                "user scripts require explicit isolated Play execution");
             AssertTrue(!visual.BodyMarkdown.Contains("HTML still requires Play", StringComparison.Ordinal),
                 "visual guidance does not require an extra Play step");
-            AssertContains(AgentPromptDefaults.GeneralInstructions, "HTML previews open offline automatically",
-                "the common agent prompt matches automatic preview behavior");
+            AssertContains(AgentPromptDefaults.GeneralInstructions, "Play executes its scripts only in an isolated Browser page",
+                "the common agent prompt matches static preview and isolated execution");
         }
 
         private static void BuiltInSkillPackagesLoadForEveryOfficeHost()

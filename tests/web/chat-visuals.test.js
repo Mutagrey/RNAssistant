@@ -5,11 +5,12 @@ const path = require('node:path');
 const http = require('node:http');
 const {chromium} = require('playwright');
 const root = path.resolve(__dirname, '../../web');
-const scripts = ['vendor/marked.min.js','vendor/purify.min.js','app-echarts-sandbox-runtime.js','app-html-vendor-catalog.js','app-html-vendor-runtime.js','app-icons.js','app-chat-visuals.js','app-markdown.js'];
+const scripts = ['vendor/marked.min.js','vendor/purify.min.js','app-icons.js','app-chat-visuals.js','app-markdown.js'];
 const styles=Array.from(fs.readFileSync(path.join(root,'index.html'),'utf8').matchAll(/<link rel="stylesheet"[^>]+>/g),m=>m[0]).join('');
 const shell = `<!doctype html><html data-theme="light"><head><meta charset="utf-8">${styles}</head><body>
-<script>window.state={};window.detectCodeLanguage=c=>(c.className.match(/language-(\\S+)/)||[])[1]||'';window.normalizeCodeLanguage=x=>x;window.iconSvg=()=>'';window.logOnce=()=>{};window.copyText=t=>window.copied=t;</script>
+<script>window.state={};window.detectCodeLanguage=c=>(c.className.match(/language-(\\S+)/)||[])[1]||'';window.normalizeCodeLanguage=x=>x;window.iconSvg=()=>'';window.logOnce=()=>{};window.copyText=t=>window.copied=t;window.htmlPreviews=[];</script>
 ${scripts.map(file=>`<script src="/js/${file}"></script>`).join('')}
+<script>window.RNAssistantBrowser={openHtmlPreview:function(html,options){htmlPreviews.push({html:html,options:options});return true;}};</script>
 <div id="answer" class="markdown"></div><script>window.show=(text,options={})=>{let root=document.getElementById('answer');clearMarkdownEnhancements(root);root.innerHTML=markdown(text);enhanceMarkdown(root,{enableVisuals:true,enableJsonViewer:true,sourceText:text,...options});};</script></body></html>`;
 (async () => {
  const server=http.createServer((req,res)=>{
@@ -41,57 +42,56 @@ ${scripts.map(file=>`<script src="/js/${file}"></script>`).join('')}
   await show('```mermaid\nnot a diagram\n```');
   await page.waitForFunction(()=>document.querySelector('.chat-visual-status').textContent.includes('Не удалось'));
   assert.equal(await page.locator('.chat-visual pre').isVisible(),true);
-  const html='<!doctype html><html lang="ru"><head><title>Preview</title></head><body class="authored-body"><img src="https://example.invalid/image"><iframe src="https://example.invalid/frame"></iframe><link rel="stylesheet" href="https://example.invalid/style"><h1>Пример</h1><button id="plus">Нажать</button><output id="count">0</output><div id="chart" style="height:220px"></div><script>let n=0;document.getElementById("plus").onclick=()=>document.getElementById("count").textContent=++n;echarts.init(document.getElementById("chart")).setOption({xAxis:{data:["A","B"]},yAxis:{},series:[{type:"bar",data:[2,4]}]});fetch("https://example.invalid/leak").catch(()=>{});try{parent.document.body.dataset.leak="yes"}catch(e){}</script></body></html>';
+  const html='<!doctype html><html lang="ru"><head><title>Preview</title><meta http-equiv="refresh" content="0;url=https://example.invalid/meta"></head><body class="authored-body"><img src="https://example.invalid/image"><iframe src="https://example.invalid/frame"></iframe><link rel="stylesheet" href="https://example.invalid/style"><h1>Пример</h1><a id="outside" href="https://example.invalid/navigation">Снаружи</a><button id="plus">Нажать</button><output id="count">0</output><div id="chart" style="height:220px"></div><script>let n=0;document.getElementById("plus").onclick=()=>document.getElementById("count").textContent=++n;echarts.init(document.getElementById("chart")).setOption({xAxis:{data:["A","B"]},yAxis:{},series:[{type:"bar",data:[2,4]}]});fetch("https://example.invalid/leak").catch(()=>{});try{parent.document.body.dataset.leak="yes"}catch(e){}</script></body></html>';
   await show('```html\n'+html+'\n```');
-  const frame=page.frameLocator('.chat-visual iframe');
-  await frame.locator('#chart canvas').waitFor();
-  assert.equal(await page.locator('.chat-visual pre').isVisible(),false,'completed HTML opens in preview mode by default');
+  await page.locator('.chat-visual.is-static iframe').waitFor();
+  const staticFrame=page.frameLocator('.chat-visual.is-static iframe');
+  assert.equal(await page.locator('.chat-visual pre').isVisible(),false,'completed HTML opens as a static preview by default');
   assert.equal(await page.locator('.chat-visual-surface').isVisible(),true);
+  assert.equal(await page.locator('.chat-visual-status').textContent().then(value=>value.includes('Скрипты не выполняются')),true);
+  assert.equal(await page.locator('.chat-visual iframe').getAttribute('sandbox'),'');
+  assert.equal(await staticFrame.locator('#chart canvas').count(),0,'static preview does not run authored scripts');
+  assert.equal(await staticFrame.locator('#outside').getAttribute('href'),null,'static preview neutralizes authored link navigation');
+  assert.equal((await page.locator('.chat-visual iframe').getAttribute('srcdoc')).includes('http-equiv="refresh"'),false,'static preview removes meta refresh');
+  await staticFrame.locator('#outside').evaluate(node=>node.click());
+  await page.waitForTimeout(150);
+  assert.deepEqual(external,[],'static preview cannot issue a link or refresh network request');
+  await staticFrame.locator('#plus').click();
+  assert.equal(await staticFrame.locator('#count').textContent(),'0','static preview blocks inline event handlers');
   assert.equal(await page.locator('.chat-visual').getByText('Native Browser недоступен',{exact:false}).count(),0,
     'inline HTML never reports native Browser availability');
-  assert.equal(await page.getByRole('button',{name:'Перезапустить',exact:true}).count(),1,
-    'running HTML exposes an explicit Play/reload control');
+  assert.equal(await page.getByRole('button',{name:'Запустить',exact:true}).count(),1,
+    'static HTML exposes an explicit Play control');
   assert.equal(await page.locator('.chat-visual > .block-tools button').count(),4);
   const height=await page.locator('.chat-visual.kind-html .chat-visual-surface').evaluate(node=>node.getBoundingClientRect().height);
   assert.ok(height>=360&&height<=680,'inline HTML preview has a useful default height');
   assert.equal(await page.locator('.chat-visual.kind-html .chat-visual-surface').evaluate(node=>getComputedStyle(node).resize),'vertical',
     'inline HTML preview remains directly resizable');
-  assert.equal(await frame.locator('body').getAttribute('class'),'authored-body');
-  await frame.locator('#plus').click();
-  assert.equal(await frame.locator('#count').textContent(),'1');
+  await page.getByRole('button',{name:'Запустить',exact:true}).click();
+  await page.waitForFunction(()=>htmlPreviews.length===1);
+  assert.equal(await page.evaluate(()=>htmlPreviews[0].html),html,'Play hands the exact source to the isolated Browser executor');
+  assert.equal(await page.locator('.chat-visual iframe').getAttribute('sandbox'),'','the message iframe never receives script execution');
+  assert.match(await page.locator('.chat-visual-status').textContent(),/изолированный Browser/i);
   await page.getByRole('button',{name:'Показать код'}).click();
   assert.equal(await page.locator('.chat-visual pre').isVisible(),true);
   assert.equal(await page.locator('.chat-visual-surface').isVisible(),false,'code and live HTML are separate views');
   await page.getByRole('button',{name:'Показать HTML'}).click();
-  assert.equal(await frame.locator('#count').textContent(),'1','returning to preview keeps the live frame');
-  assert.equal(await page.locator('.chat-visual iframe').getAttribute('sandbox'),'allow-scripts');
+  await page.locator('.chat-visual.is-static iframe').waitFor();
   assert.ok(external.every(url=>blocked.has(url)),'all external asset attempts must fail with CSP, not DNS/network errors');
   assert.equal(await page.evaluate(()=>document.body.dataset.leak),undefined);
   await page.screenshot({path:'/tmp/rna-chat-html-preview.png'});
-  await page.getByRole('button',{name:'Перезапустить',exact:true}).click();
-  await frame.locator('#count').filter({hasText:'0'}).waitFor();
-  assert.equal(await frame.locator('#count').textContent(),'0','Play reloads the exact inline HTML');
   await page.getByRole('button',{name:'Увеличить',exact:true}).click();
-  assert.equal(await frame.locator('#count').textContent(),'0','enlarging preserves the live frame');
   await page.getByRole('button',{name:'Свернуть',exact:true}).click();
   await show('New chat');assert.equal(await page.locator('iframe').count(),0);
   await show('```html\n'+html+'\n```');
-  await page.frameLocator('.chat-visual iframe').locator('#count').waitFor();
-  assert.equal(await page.frameLocator('.chat-visual iframe').locator('#count').textContent(),'0');
+  await page.locator('.chat-visual.is-static iframe').waitFor();
   await show('New chat');assert.equal(await page.locator('iframe').count(),0);
-  await page.evaluate(() => {
-    window.originalVendorRuntime=RNAssistantHtmlVendorRuntime;
-    window.RNAssistantHtmlVendorRuntime={ensure:()=>new Promise(resolve=>window.resolveVendor=resolve),used:()=>[{}],source:()=>({js:''})};
-  });
-  await show('```html\n<script>echarts.init()</script>\n```');
-  await page.waitForFunction(()=>typeof window.resolveVendor==='function');
-  await show('Switched session');
-  await page.evaluate(()=>resolveVendor());
-  await page.evaluate(()=>{window.RNAssistantHtmlVendorRuntime=originalVendorRuntime;});
-  assert.equal(await page.locator('iframe').count(),0,'late vendor load cannot resurrect a closed preview');
-  await show('```html\n<script>throw new Error("preview failed")</script>\n```');
-  await page.waitForFunction(()=>document.querySelector('.chat-visual-status').textContent.includes('preview failed'));
-  errors.length=0;
+  await page.evaluate(()=>{window.savedHtmlExecutor=RNAssistantBrowser.openHtmlPreview;RNAssistantBrowser.openHtmlPreview=null;});
+  await show('```html\n<p>No executor</p>\n```');
+  await page.locator('.chat-visual.is-static iframe').waitFor();
+  await page.getByRole('button',{name:'Запустить',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('.chat-visual-status').textContent.includes('недоступен'));
+  await page.evaluate(()=>{RNAssistantBrowser.openHtmlPreview=savedHtmlExecutor;});
   for(const theme of ['light','dark']){
    await page.evaluate(theme=>document.documentElement.setAttribute('data-theme',theme),theme);
    await page.setViewportSize({width:360,height:740});
@@ -101,6 +101,6 @@ ${scripts.map(file=>`<script src="/js/${file}"></script>`).join('')}
    await page.screenshot({path:`/tmp/rna-chat-visuals-${theme}.png`});
   }
   assert.deepEqual(errors,[]);
-  console.log('PASS chat visuals: real Mermaid, default isolated HTML preview with Play, source toggle, resize, lifecycle, errors and themes');
+  console.log('PASS chat visuals: real Mermaid, static no-script HTML, explicit Play handoff to isolated Browser, source toggle, resize and themes');
  } finally {await browser.close();await new Promise(resolve=>server.close(resolve));}
 })().catch(error=>{console.error(error);process.exitCode=1;});

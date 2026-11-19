@@ -628,9 +628,10 @@ Selection remains an ordinary `core.skills.load` operation, never an automatic
 intent classifier or new execution capability.
 
 The skill writes closed `mermaid` / `html` fences or Markdown tables directly in
-the response message. Mermaid renders after completion; completed HTML opens
-automatically in an offline sandbox and Play restarts the exact preview. Charts
-can use the pinned local ECharts global without CDN.
+the response message. Mermaid renders after completion; completed HTML appears
+automatically as a script-disabled static preview. Play starts the exact source
+in a separate isolated Browser page with a bounded lifetime. Charts can use the
+pinned local ECharts global without CDN in that interactive execution.
 Instructions cover responsive dimensions, units, readable labels, example-data
 labelling and honest verification claims. Durable applications and connected
 Office artifacts continue through their existing authoring skills.

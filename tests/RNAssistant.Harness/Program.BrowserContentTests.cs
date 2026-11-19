@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Linq;
 using System.Threading;
+using System.Text;
+using System.Text.RegularExpressions;
 using RNAssistant.Application;
 using RNAssistant.Application.Contracts;
 using RNAssistant.Core.Storage;
@@ -54,6 +56,49 @@ namespace RNAssistant.Harness
                 RuntimeThrows<InvalidOperationException>(() => runtime.ExecuteAsync(new BrowserCommandPayload { Action = BrowserCommandKind.Reload, BrowserTabId = "tab", SessionId = opened.SessionId }, CancellationToken.None).GetAwaiter().GetResult());
             }
             AssertTrue(renderer.Disposed, "runtime disposes its sole native adapter");
+        }
+        private static void BrowserInlineExecutorLifecycle()
+        {
+            var renderer = new BrowserRendererFixture(); renderer.Ready.SetResult(true);
+            BrowserPageStateDto latest = null;
+            var owner = new BrowserOwnerScope { Kind = BrowserOwnerKind.User, ScopeId = "local" };
+            using (var runtime = new LocalBrowserPageRuntime(request => { throw new InvalidOperationException("Inline HTML must not resolve a stored source."); },
+                value => latest = value, renderer: renderer, inlineLifetime: TimeSpan.FromMilliseconds(250)))
+            {
+                var opened = runtime.ExecuteAsync(new BrowserCommandPayload { Action = BrowserCommandKind.OpenInline,
+                    BrowserTabId = "inline", OperationId = "inline-open", OwnerScope = owner,
+                    Html = "<!doctype html><button id=run>Run</button><script>document.getElementById('run').onclick=()=>document.body.dataset.ran='yes'</" + "script>",
+                    Title = "Chat HTML" }, CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual(BrowserPageStatus.Starting, opened.Status, "inline execution waits for its native renderer");
+                AssertEqual(BrowserTargetKind.InlineHtml, opened.Target.Kind, "inline execution has a transient target kind");
+                AssertTrue(opened.Target.Capabilities.Preview && opened.Target.Capabilities.Interact && !opened.Target.Capabilities.Source,
+                    "inline execution is interactive but grants no source authority");
+                var attached = runtime.ExecuteAsync(new BrowserCommandPayload { Action = BrowserCommandKind.Attach,
+                    BrowserTabId = opened.BrowserTabId, SessionId = opened.SessionId, OperationId = opened.OperationId,
+                    Bounds = VisibleBrowserBounds() }, CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual(BrowserPageStatus.Ready, attached.Status, "native renderer accepts the isolated inline page");
+                AssertTrue(renderer.LastTransientContent != null && renderer.LastTransientContent.Target.Kind == BrowserTargetKind.InlineHtml,
+                    "runtime passes one transient content binding to the native renderer");
+                string bootstrap;
+                using (var reader = new StreamReader(renderer.LastTransientContent.Open("index.html", CancellationToken.None)))
+                    bootstrap = reader.ReadToEnd();
+                AssertContains(bootstrap, "Content-Security-Policy", "inline executor document carries the fixed CSP");
+                var encoded = Regex.Match(bootstrap, "atob\\('([^']+)'\\)").Groups[1].Value;
+                var source = Encoding.UTF8.GetString(Convert.FromBase64String(encoded));
+                AssertContains(source, "id=run", "isolated executor receives the exact accepted HTML");
+                AssertContains(source, "getElementById('run')", "user scripts stay in the native executor, not the chat iframe");
+                RuntimeThrows<InvalidOperationException>(() => runtime.ExecuteAsync(new BrowserCommandPayload { Action = BrowserCommandKind.Reload,
+                    BrowserTabId = opened.BrowserTabId, SessionId = opened.SessionId }, CancellationToken.None).GetAwaiter().GetResult());
+                var deadline = DateTime.UtcNow.AddSeconds(3);
+                while ((latest == null || latest.Status != BrowserPageStatus.Closed) && DateTime.UtcNow < deadline)
+                    Thread.Sleep(25);
+                AssertEqual(BrowserPageStatus.Closed, latest?.Status, "inline executor is closed at its exact lifetime deadline");
+                AssertContains(latest?.Message, "Скрипты остановлены", "deadline reports that the executor stopped");
+            }
+            using (var sourceOnly = new LocalBrowserPageRuntime(request => new BrowserResolveResult(), null))
+                RuntimeThrows<InvalidOperationException>(() => sourceOnly.ExecuteAsync(new BrowserCommandPayload { Action = BrowserCommandKind.OpenInline,
+                    BrowserTabId = "source-only", OperationId = "source-only-open", OwnerScope = owner,
+                    Html = "<p>Not executable</p>", Title = "Source only" }, CancellationToken.None).GetAwaiter().GetResult());
         }
         private static void BrowserNativeHistoryReconciliation()
         {
@@ -132,11 +177,13 @@ namespace RNAssistant.Harness
             internal readonly TaskCompletionSource<bool> Ready = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             internal bool Disposed;
             internal BrowserCommandPayload LastCommand;
+            internal BrowserContentSession LastTransientContent;
             internal Func<BrowserScreenshotRequest, Task<BrowserMediaCapture>> Screenshot;
             public event Action<BrowserPageStateDto> Changed;
             internal void Notify(BrowserPageStateDto state) { Changed?.Invoke(state); }
             public async Task<BrowserPageStateDto> UpdateAsync(BrowserCommandPayload command, BrowserPageStateDto state, CancellationToken token)
-            { LastCommand = command; if (command.Action == BrowserCommandKind.Attach) { await Ready.Task; state.Status = BrowserPageStatus.Ready; state.Target.Capabilities.Preview = true; } return state; }
+            { LastCommand = command; LastTransientContent = command.TransientContent;
+                if (command.Action == BrowserCommandKind.Attach) { await Ready.Task; state.Status = BrowserPageStatus.Ready; state.Target.Capabilities.Preview = true; state.Target.Capabilities.Interact = true; } return state; }
             public Task ResetAsync() => Task.CompletedTask;
             public void Dispose() { Disposed = true; }
             public IReadOnlyList<BrowserPageHandle> TargetsFor(string chatId) => new BrowserPageHandle[0];

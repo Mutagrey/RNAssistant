@@ -25,6 +25,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)Contracts\SourceComparisonContracts.cs" Link="Application\Contracts\SourceComparisonContracts.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)SourceComparisonService.cs" Link="Application\SourceComparisonService.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)BrowserTargetResolver.cs" Link="Application\BrowserTargetResolver.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)InlineHtmlContent.cs" Link="Application\InlineHtmlContent.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Contracts\BrowserTargetContracts.cs" Link="Application\Contracts\BrowserTargetContracts.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)HtmlProjectImportService.cs" Link="Application\HtmlProjectImportService.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)WorkspaceHtmlVersionService.Transfer.cs" Link="Application\WorkspaceHtmlVersionService.Transfer.cs" />

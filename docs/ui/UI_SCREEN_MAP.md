@@ -707,13 +707,16 @@ Dockview, узкой навигацией, длинным именем и мас
 
 ## HTML, Библиотека и VBA — In Review, 2026-11-03
 
-### Inline HTML в сообщении — In Review, 2026-11-18
+### Inline HTML в сообщении — In Review, 2026-11-19
 
-Завершённый fenced `html` в обычной ленте Office/Workspace/plugin показывается
-страницей по умолчанию, а не исходником. Видны Play/перезапуск, переключение
-source, copy и expand; размер стартует из содержимого, ограничен viewport и может
-меняться drag-ручкой. Остальные Markdown fences не меняются. Preview не является
-ссылочным Browser/artifact route и не даёт странице доступ к Shell, сети или bridge.
+Завершённый fenced `html` в обычной ленте Office/Workspace/plugin сразу показывается
+статической страницей с disabled scripts. Play открывает точный исходник в отдельной
+transient Browser-вкладке; только там выполняются пользовательские скрипты, без сети
+и внешних документов, с закрытием по вкладке или bounded lifetime. Source/copy/expand
+остаются у static card; Browser address read-only, source mode отсутствует. Остальные
+Markdown fences не меняются. Static preview не является Browser/artifact route и не
+даёт странице доступ к Shell или bridge. Automatic subresources запрещены CSP, а
+authored links и meta refresh нейтрализуются в preview-копии без изменения source.
 
 «Код»/редактирование текущего HTML открывает вкладку исходного чата. Другой чат
 получает свою вкладку, повторное открытие возвращает прежние правки. Выбор файла,

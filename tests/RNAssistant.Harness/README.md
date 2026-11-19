@@ -1,5 +1,27 @@
 # RNAssistant Harness
 
+## Static chat HTML and isolated Play — 2026-11-19
+
+`local browser: inline executor lifecycle` verifies that completed chat HTML stays a
+script-disabled static preview, Play hands off a transient `InlineHtml` target, the
+native renderer receives one exact in-memory document, and close/deadline releases the
+Browser content. Run:
+
+```bash
+dotnet run --project tests/RNAssistant.Harness/RNAssistant.Harness.csproj -- "local browser: inline executor lifecycle"
+node tests/web/html-executor-process.test.js
+```
+
+The Node check launches a separate Chrome process with a runaway loop, measures CPU,
+kills the process tree and requires CPU to return to zero. It is not Windows/WebView2
+qualification; that remains an open host-specific gate.
+
+Open P1: the static no-script fixture does not yet cover link navigation. A local
+Chromium click probe showed that an authored link can still load a network URL inside
+the sandboxed preview. Do not treat `script-src 'none'` as proof of zero network; the
+regression should assert no outbound request after click/keyboard activation once the
+owner is fixed. See [RISK_REGISTER](../../docs/stabilization/RISK_REGISTER.md#static-inline-html-link-navigation--open-2026-11-19).
+
 ## Bounded ProjectChat polling — 2026-11-17
 
 `journal text: bounded metadata header and append` compares 30 unchanged polls at 100,

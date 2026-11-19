@@ -10,7 +10,7 @@ using RNAssistant.Core.Models;
 namespace RNAssistant.Application.Contracts
 {
     [JsonConverter(typeof(StringEnumConverter))]
-    public enum BrowserCommandKind { Open, Layout, Navigate, Back, Forward, Reload, Focus, Close, ResumeAgent, Home, Stop, Attach, VisualControl, NavigateUser, Bind }
+    public enum BrowserCommandKind { Open, OpenInline, Layout, Navigate, Back, Forward, Reload, Focus, Close, ResumeAgent, Home, Stop, Attach, VisualControl, NavigateUser, Bind }
     [JsonConverter(typeof(StringEnumConverter))]
     public enum BrowserPageStatus { Starting, Ready, Failed, Closed, Home, Unavailable, Removed }
 
@@ -42,9 +42,12 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("binding")] public BrowserOwnerScope Binding { get; set; }
         [JsonProperty("generation")] public long? Generation { get; set; }
         [JsonProperty("bindChat")] public bool? BindChat { get; set; }
+        [JsonProperty("html", NullValueHandling = NullValueHandling.Ignore)] public string Html { get; set; }
+        [JsonProperty("title", NullValueHandling = NullValueHandling.Ignore)] public string Title { get; set; }
         // Runtime-only instruction, never accepted from Shell/model JSON.
         [JsonIgnore] public int? NativeHistoryEntryId { get; set; }
         [JsonIgnore] public string NativeLocator { get; set; }
+        [JsonIgnore] public BrowserContentSession TransientContent { get; set; }
     }
 
     public sealed class BrowserPageStateDto

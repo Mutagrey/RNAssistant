@@ -4,7 +4,7 @@
   function accept(value, expected, kind) {
     expected = expected || {};
     var caps = value && value.capabilities;
-    var kinds = ["HtmlWorkspace", "HtmlArtifact", "HtmlResource", "PluginSource", "PluginRelease", "WorkspaceHtmlProject", "Home"];
+    var kinds = ["HtmlWorkspace", "HtmlArtifact", "HtmlResource", "InlineHtml", "PluginSource", "PluginRelease", "WorkspaceHtmlProject", "Home"];
     function refuse() { throw new Error("Цель Browser не подтверждена для этого источника. Обновите представление."); }
     if (!value || value.kind !== kind || kinds.indexOf(kind) < 0 || !caps ||
         ["Ready", "Empty", "Unavailable", "Removed"].indexOf(value.state) < 0) refuse();
@@ -19,6 +19,9 @@
     });
     if (kind === "Home") {
       if (value.state !== "Empty" || value.displayLocator !== "/" || caps.preview || caps.edit || caps.interact) refuse();
+    } else if (kind === "InlineHtml") {
+      if (!value.ownerScope || value.ownerScope.kind !== "User" || value.ownerScope.scopeId !== "local" ||
+          value.ownerScope.chatId || value.state !== "Ready" || !caps.preview || !caps.interact || caps.source || caps.edit || caps.versions) refuse();
     } else if (kind === "HtmlWorkspace" || kind === "HtmlArtifact" || kind === "HtmlResource") {
       if (typeof value.chatId !== "string" || typeof value.documentId !== "string" || typeof value.resourceUri !== "string" ||
           typeof value.artifactId !== "string" || !Number.isSafeInteger(value.revision) || value.revision < 0 ||

@@ -1,6 +1,6 @@
 (function () {
   "use strict";
-  var live = new Map(), versionViews = new Map(), available = false, discussionIntent = 0;
+  var live = new Map(), versionViews = new Map(), inlineHtmlPreviews = new Map(), available = false, discussionIntent = 0;
   var overlayLayouts = new Set(), overlayFrame = 0, overlayObserver = null;
   var unavailable = "Native Browser недоступен. Исходники и версии доступны; подробности — в состоянии страницы.";
   function overlayChanged() {
@@ -39,6 +39,8 @@
   }
   function preferenceTarget(target) {
     if (!accepts(target)) return null;
+    if (target.inline) return { view: "browser", browserTabId: target.browserTabId, locator: "/",
+      ownerScope: { kind: "User", scopeId: "local", chatId: null }, title: "Browser", chatBound: false };
     var scope = target.ownerScope;
     return { view: "browser", browserTabId: target.browserTabId, locator: RNAssistantBrowserTarget.preferenceLocator(target.locator),
       ownerScope: { kind: scope.kind, scopeId: scope.scopeId, chatId: typeof scope.chatId === "string" && scope.chatId.length <= 256 ? scope.chatId : null },
@@ -153,7 +155,9 @@
       label = label || {};
       shell.element.setAttribute("aria-label", label.title || target.title || "Browser");
     }
-    var surface = RNAssistantPreviewSurface.attach(root, { reload: function () { return command("Reload"); }, canReload: function () { return active && !!session; }, discuss: discuss,
+    var surface = RNAssistantPreviewSurface.attach(root, { reload: function () { return command("Reload"); }, canReload: function () {
+        return active && !!session && !(current && current.target && current.target.kind === "InlineHtml");
+      }, discuss: discuss,
       modesHost: shell.modesHost, singleOverflow: true,
       onStatus: function (message, error) { shell.setStatus(message || "", !!error); }, onLabel: updateBrowserTitle });
     shell.setProviderToolbar(surface.bar);
@@ -445,9 +449,12 @@
         deactivate: function () { shown = false; epoch++; }, dispose: function () { dead = true; epoch++; view.dispose(); } };
     }
     function presentation() {
+      var inline = !!(current && current.target && current.target.kind === "InlineHtml");
       surface.setDocument({ address: current && current.url || target.locator,
+        addressLocked: inline,
+        allowDiscuss: !inline,
         mode: selectedMode, loading: !!current && current.status === "Starting",
-        supportedModes: current && current.status !== "Home" ? ["preview", "source"] : [],
+        supportedModes: current && current.status !== "Home" ? (inline ? ["preview"] : ["preview", "source"]) : [],
         canGoBack: current && current.canGoBack, canGoForward: current && current.canGoForward,
         back: function () { return command("Back"); }, forward: function () { return command("Forward"); },
         home: function () { return command("Home"); }, stop: function () { stopReads(); return command("Stop"); },
@@ -519,9 +526,9 @@
         RNAssistantDockWorkspace.recordNavigation(value); recordedVisit = value.visitRevision;
       }
       annotationHost.update(value);
-      if (value.status === "Closed") { session = null; sourcePage = null; fileNavigation.reset(); syncFileNavigationAvailability();
+      if (value.status === "Closed") { inlineHtmlPreviews.delete(target.browserTabId); session = null; sourcePage = null; fileNavigation.reset(); syncFileNavigationAvailability();
         loading.hidden = true; loading.textContent = "";
-        stopReads(); fail("Страница закрыта вместе с исходным контекстом."); return; }
+        stopReads(); fail(value.message || "Страница закрыта вместе с исходным контекстом."); return; }
       if (targetGeneration !== value.documentGeneration) { stopReads(); sourcePage = null; RNAssistantViewerRegistry.unmount(source); source.replaceChildren();
         fileNavigation.reset();
         RNAssistantDockWorkspace.updateTarget({ view: "browser", browserTabId: target.browserTabId, ownerScope: value.ownerScope, chatBound: value.chatBound,
@@ -535,7 +542,8 @@
         }
         if (!comparison && selectedMode === "diff") selectedMode = "source";
         providerActions.refresh(); if (homeView) { homeView.dispose(); homeView = null; } }
-      if (value.status === "Unavailable" && targetGeneration === value.documentGeneration && selectedMode === "preview") selectedMode = "source";
+      if (value.status === "Unavailable" && targetGeneration === value.documentGeneration && selectedMode === "preview" &&
+          !(value.target && value.target.kind === "InlineHtml")) selectedMode = "source";
       pageFind.update(value); surface.waiting(label(), value.message || " "); presentation(); render();
     }
     async function command(action, extra, silent) {
@@ -559,8 +567,12 @@
       opening = (async function () {
         if (!state.bridgeToken && state.initializePromise) await state.initializePromise;
         if (disposed || !active) return;
-        var value = await send("browserCommand", { action: "Open", browserTabId: target.browserTabId, operationId: operationId,
-          ownerScope: target.ownerScope, locator: target.locator, bindChat: target.chatBound !== false });
+        var html = target.inline ? inlineHtmlPreviews.get(target.browserTabId) : null;
+        if (target.inline && typeof html !== "string") throw new Error("Интерактивный HTML истёк. Нажмите Play в сообщении ещё раз.");
+        var payload = { action: target.inline ? "OpenInline" : "Open", browserTabId: target.browserTabId, operationId: operationId,
+          ownerScope: target.ownerScope, locator: target.locator, bindChat: target.chatBound !== false };
+        if (target.inline) { payload.html = html; payload.title = target.title; }
+        var value = await send("browserCommand", payload);
         if (disposed) { await send("browserCommand", { action: "Close", browserTabId: target.browserTabId, sessionId: value.sessionId }); return; }
         session = value.sessionId; apply(value);
         if (!mount.isConnected) throw new Error("Вкладка Browser не прикреплена к Dock.");
@@ -598,7 +610,7 @@
       route: function () { return { view: "browser", browserTabId: target.browserTabId, ownerScope: current && current.ownerScope || target.ownerScope, chatBound: current ? current.chatBound : target.chatBound, locator: current && current.url || target.locator, title: current && current.title || target.title }; },
       activate: function () { if (disposed || active) return; active = true; renderer.activate(); if (session) { if (targetInvalidated) reloadInvalidated(); else { render(); if (current) annotationHost.update(current); if (sourceInvalidated) refreshSource(); else versionControls.refresh(); } } else open().catch(fail); },
       deactivate: function () { if (!active) return; pageFind.deactivate(); annotationHost.deactivate(); active = false; stopReads(); versionControls.deactivate(); providerActions.deactivate(); if (comparison) comparison.deactivate(); if (homeView) homeView.deactivate(); surface.collapse(); renderer.deactivate(); layoutNative(); },
-      dispose: function () { if (disposed) return; disposed = true; active = false; handoverListeners.abort(); stopOverlayWatch(); cancelAnimationFrame(placementQueued); nativeSize.disconnect(); stopReads();
+      dispose: function () { if (disposed) return; disposed = true; active = false; inlineHtmlPreviews.delete(target.browserTabId); handoverListeners.abort(); stopOverlayWatch(); cancelAnimationFrame(placementQueued); nativeSize.disconnect(); stopReads();
         if (live.get(target.browserTabId) === apply) live.delete(target.browserTabId);
         if (versionViews.get(target.browserTabId) === versionView) versionViews.delete(target.browserTabId);
         versionControls.dispose(); providerActions.dispose(); if (comparison) comparison.dispose();
@@ -624,7 +636,22 @@
     var locator; try { locator = "/resources/" + encodeURIComponent(decodeURIComponent(match[1]) + "~" + match[2]); } catch (_) { return false; }
     return open(locator, { kind: "Document", scopeId: target.documentId, chatId: target.chatId }, Object.assign({ reuse: true, title: target.title }, options || {}));
   }
-  window.RNAssistantBrowser = { open: open, openResource: openResource, create: create, key: key, unavailable: unavailable,
+  function openHtmlPreview(html, options) {
+    if (typeof html !== "string" || !html.length || html.length > 200000) return false;
+    if (!available) return false;
+    options = options || {};
+    var browserTabId = id(), keyValue = "inline-" + browserTabId;
+    inlineHtmlPreviews.set(browserTabId, html);
+    var opened = false;
+    try {
+      opened = RNAssistantDockWorkspace.openTarget({ view: "browser", browserTabId: browserTabId,
+        operationId: "html-" + crypto.randomUUID(), locator: "/resources/" + encodeURIComponent(keyValue) + "/files/index.html",
+        ownerScope: { kind: "User", scopeId: "local" }, title: String(options.title || "HTML из чата").slice(0, 160),
+        inline: true, transient: true, chatBound: false }, { reuse: false });
+    } finally { if (!opened) inlineHtmlPreviews.delete(browserTabId); }
+    return opened;
+  }
+  window.RNAssistantBrowser = { open: open, openResource: openResource, openHtmlPreview: openHtmlPreview, create: create, key: key, unavailable: unavailable,
     openRequested: function (request) {
       if (!request || !request.operationId || !request.browserTabId || !request.ownerScope || !request.ownerScope.scopeId) return false;
       return open(request.locator, request.ownerScope, { browserTabId: request.browserTabId, operationId: request.operationId, title: request.title });

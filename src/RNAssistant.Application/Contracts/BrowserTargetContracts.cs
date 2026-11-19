@@ -4,7 +4,7 @@ using Newtonsoft.Json.Converters;
 namespace RNAssistant.Application.Contracts
 {
     [JsonConverter(typeof(StringEnumConverter))]
-    public enum BrowserTargetKind { HtmlArtifact, HtmlResource, HtmlWorkspace, PluginSource, PluginRelease, WorkspaceHtmlProject, Home }
+    public enum BrowserTargetKind { HtmlArtifact, HtmlResource, HtmlWorkspace, InlineHtml, PluginSource, PluginRelease, WorkspaceHtmlProject, Home }
 
     [JsonConverter(typeof(StringEnumConverter))]
     public enum BrowserTargetState { Ready, Empty, Unavailable, Removed }

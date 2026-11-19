@@ -19,6 +19,7 @@ namespace RNAssistant.Office.WebView
         private readonly PluginApplicationService _plugins;
         private readonly string _assets;
         private readonly Func<BrowserTargetDescriptor, CancellationToken, BrowserContentSession> _open;
+        private BrowserContentSession _providedContent;
         private readonly CancellationTokenSource _cancel = new CancellationTokenSource();
         private readonly HashSet<Stream> _streams = new HashSet<Stream>();
         private readonly TaskCompletionSource<bool> _loaded = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -46,15 +47,18 @@ namespace RNAssistant.Office.WebView
         internal event Action<BrowserPageStateDto> Changed;
         internal LocalBrowserPage(Control parent, LocalBrowserEnvironment environment, PluginApplicationService plugins, string assets,
             BrowserPageStateDto state, Func<BrowserTargetDescriptor, CancellationToken, BrowserContentSession> open,
-            Func<BrowserContentSession, BrowserResourceBinding> bindings, Func<string, string, Task<Action>> pauseRun)
+            Func<BrowserContentSession, BrowserResourceBinding> bindings, Func<string, string, Task<Action>> pauseRun,
+            BrowserContentSession providedContent = null)
         {
             _bindings = bindings; _pauseRun = pauseRun; _environment = environment; _plugins = plugins; _assets = assets; State = state; _open = open;
+            _providedContent = providedContent;
             Control = new Panel { Visible = false, TabStop = true }; parent.Controls.Add(Control);
         }
         internal async Task InitializeAsync(CancellationToken token)
         {
             using (var linked = CancellationTokenSource.CreateLinkedTokenSource(token, _cancel.Token)) {
-                var content = await Task.Run(() => _open(State.Target, linked.Token), linked.Token);
+                var provided = _providedContent; _providedContent = null;
+                var content = provided ?? await Task.Run(() => _open(State.Target, linked.Token), linked.Token);
                 if (_closed || linked.IsCancellationRequested) { content.Dispose(); await content.Drained; linked.Token.ThrowIfCancellationRequested(); }
                 Content = content; State.Target.ContentRevision = content.Target.ContentRevision;
                 var lease = await _environment.AcquireAsync();
@@ -91,7 +95,7 @@ namespace RNAssistant.Office.WebView
                     args.Cancel = AgentOwnsInput || !(Content.TryMember(uri, out member) || uri.StartsWith("blob:" + Content.Origin + "/", StringComparison.Ordinal) ||
                         Content.Plugin != null && uri.StartsWith(Content.Origin + "/.result/download/", StringComparison.Ordinal));
                 };
-                Core.Settings.AreDefaultScriptDialogsEnabled = true;
+                Core.Settings.AreDefaultScriptDialogsEnabled = Content.Target.Kind != BrowserTargetKind.InlineHtml;
                 Core.ScriptDialogOpening += (sender, args) => { /* Agent mode dismisses dialogs; it cannot silently accept a confirmation. */ };
                 Core.ProcessFailed += (sender, args) => { HasLoaded = false; State.Status = BrowserPageStatus.Failed; State.Message = "Процесс локальной страницы завершился. Обновите страницу."; _loaded.TrySetException(new InvalidOperationException(State.Message)); Publish(); };
                 await Core.CallDevToolsProtocolMethodAsync("Page.enable", "{}");
@@ -180,6 +184,7 @@ namespace RNAssistant.Office.WebView
         {
             if (_closed) return; _closed = true; _cancel.Cancel(); _loaded.TrySetCanceled(); _navigationWait?.TrySetCanceled();
             _resources?.Dispose(); _route?.Dispose(); _pluginTransport?.Dispose(); Controller?.Close(); Control.Dispose();
+            _providedContent?.Dispose(); _providedContent = null;
             lock (_streamSync) { foreach (var stream in _streams.ToArray()) stream.Dispose(); _streams.Clear(); } Content?.Dispose();
             if (_pending == 0) _drained.TrySetResult(true);
             Drained = DrainAsync();

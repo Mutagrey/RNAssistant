@@ -158,6 +158,9 @@
     function setDocument(value, onModeChange) {
       if (document.activeElement !== address || presentation && value.address !== presentation.address) closeCompletion();
       presentation = value; modeChange = onModeChange;
+      address.readOnly = !!value.addressLocked;
+      address.setAttribute("aria-readonly", String(!!value.addressLocked));
+      if (discuss) discuss.hidden = value.allowDiscuss === false;
       if (value.supportedModes && value.supportedModes.length && !modes) {
         modes = document.createElement("div"); modes.className = "view-switch"; modes.setAttribute("role", "group"); modes.setAttribute("aria-label", "Представление страницы");
         ["preview", "source"].forEach(function (mode) {

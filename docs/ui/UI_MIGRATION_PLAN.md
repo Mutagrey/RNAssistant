@@ -793,24 +793,29 @@ HtmlWorkspaceView также исправлен: reload перечитывает
 История HTML/plugin теперь использует общий portalled ActionMenu; прежние version
 popover DOM/CSS удалены. Exact guards и загрузка порциями сохранены.
 
-### Inline HTML preview — In Review, 2026-11-18
+### Inline HTML preview — In Review, 2026-11-19
 
-Пользователь потребовал вернуть HTML в чате как страницу по умолчанию с Play и
-удобным размером. Срез переключает только completed fenced HTML presentation:
-тот же sandboxed iframe, fixed CSP без сети, source/copy/expand controls, Play
-перезапускает exact frame, высота следует содержимому и остаётся resizable. Не
-добавлены Browser route, artifact/store, vendor allowlist или bridge capability;
-B02 для local Browser execution, CPU isolation и Windows/WebView2 qualification
-не закрыты.
+Завершённый fenced HTML сразу показывается в static iframe с `sandbox=""` и
+`script-src 'none'`; source/copy/expand и resize сохраняются. Play больше не
+создаёт script-enabled iframe в Shell: `app-browser` открывает transient `InlineHtml`
+target, Application создаёт in-memory `BrowserContentSession`, а native WebView2
+исполняет один точный документ с fixed CSP, read-only address и 30-секундным
+lifetime. Close вкладки или deadline освобождает controller/content; source mode и
+agent target не выдаются.
 
-Локальный Chromium visual check на 750×800 подтвердил preview по умолчанию,
-видимый Play, полный дом без source-кода и bounded высоту. DevTools smoke проверил
-source toggle, Play restart и expand; на 420 px / 125% layout не имел horizontal
-overflow. `chat-visuals.test.js` обновлён для autoplay, restart, source toggle,
-resize, CSP и lifecycle; Playwright в workspace не установлен, поэтому fixture не
-исполнялся. Для ревью: открыть чат с HTML house → увидеть preview → Play → source
-→ Play → expand; отдельно подтвердить отсутствие сети и Windows/WebView2 на target
-host.
+Проверки: `local browser: inline executor lifecycle` подтверждает target/static
+mode, передачу transient content, ready state и deadline close без resolver.
+`tests/web/html-executor-process.test.js` запускает runaway loop в отдельном Chrome
+процессе, измеряет CPU, убивает process tree и подтверждает нулевую нагрузку после
+termination. Дополнительный Chromium CDP probe подтвердил пустой sandbox static
+iframe, отсутствие исполнения inline script и Play handoff без script-enabled iframe
+в Shell. Отдельный click probe выявил, что ссылка могла навигировать sandboxed frame;
+preview теперь удаляет `href`/`target`/`download` у `<a>`/`<area>` и meta refresh.
+`chat-visuals.test.js` обновлён для static no-script preview, link/meta navigation
+refusal и Play
+handoff; Playwright в workspace не установлен. Для ревью: HTML house → static
+preview → Play → isolated Browser → закрыть вкладку; повторить narrow/125% и
+проверить отсутствие network/CPU после close. Windows/WebView2 qualification открыта.
 
 Предупреждение «Native Browser недоступен» из фото было ложной диагностикой
 inline HTML stub, а не состоянием native Browser host. Regression fixture теперь

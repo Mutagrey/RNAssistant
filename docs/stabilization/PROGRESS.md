@@ -1,28 +1,71 @@
 # Stabilization progress
 
-## Inline HTML preview in chat — In Review, 2026-11-18
+## Текущая приоритизация — 2026-11-19
 
-Implemented host-neutral / In Review, `17.6.6-dev`. Completed fenced HTML in
-Office, Workspace and plugin chats now opens as a page by default when it enters the
-viewport. The existing sandboxed visual owner keeps `allow-scripts` without
-same-origin and the fixed CSP without network, nested frames, forms or workers. A
-Play control restarts the exact iframe; source, copy and expand remain available.
-Its first height follows a bounded message from the frame, then remains vertically
-resizable up to the local viewport limit. The built-in visualization skill and
-default agent guidance now describe automatic preview plus explicit restart;
-agent prompt schema is 73.
+Критично:
 
-Local Chromium visually confirmed the 750×800 house fixture without source code,
-with Play visible and all content inside the card. A DevTools smoke confirmed the
-default preview, source toggle, Play restart and expand; the 420 px / 125% layout
-had no horizontal overflow. Node syntax checks pass; the updated Playwright fixture
-was not executed because Playwright is not installed. CPU isolation and Windows x64 /
-Office x64 / WebView2 acceptance remain open.
+1. **P1, current static-preview defect:** скрипты в HTML-сообщении не исполняются, но
+   пользовательский клик по ссылке внутри `sandbox=""` iframe уходит в сеть.
+   Поэтому static preview нельзя называть полностью network-isolated до исправления
+   и проверки. Owner и acceptance — в [RISK_REGISTER](RISK_REGISTER.md#static-inline-html-link-navigation--open-2026-11-19).
+2. **P1 release evidence:** Windows x64 / Office x64 / WebView2, DPAPI/storage-v2,
+   native Browser network/worker/input и смешанный backup остаются вне
+   host-neutral проверок. Локальный Chromium/Harness результат не закрывает эти gates.
+3. **P1 test evidence:** полный Harness не является текущим green baseline. Последний
+   зафиксированный sweep на `e5190c97` имел семь воспроизводимых fixture-сбоев и
+   зависание cancellation case; текущий HEAD нужно перепроверить до заявления о green
+   baseline. Детали — в [BACKLOG](BACKLOG.md#harness-regression-sweep--observed-2026-11-18).
 
-The former “Native Browser недоступен” line in the chat photo was not emitted by a
-native Browser page. It was the B02 source-only stub inside the inline HTML visual;
-that path now renders the sandboxed page and the regression fixture forbids that
-Browser fallback text from appearing in a message preview.
+Важно: `17.6.8` replacement preview ещё не имеет Windows/Office visual acceptance;
+Power Query native API, WebView2 JS executor CPU/cancellation и live-model A/B остаются
+открытым evidence. Playwright UI fixtures в текущем workspace не запускались.
+
+## Static chat HTML and isolated interactive execution — In Review, 2026-11-19
+
+Implemented / In Review, `17.6.9-dev`. The static presentation is host-neutral;
+interactive execution uses the native WebView2 Browser adapter. Completed fenced HTML in
+Office, Workspace and plugin chats now opens immediately as a static page with
+`sandbox=""` and `script-src 'none'`. Inline scripts, handlers and timers do not run
+in the Shell. Source, copy, expand and bounded resize remain available.
+
+Play hands the exact source to a transient `InlineHtml` Browser target. Application
+assembles one in-memory `BrowserContentSession`, and the existing native WebView2
+renderer executes it in a separate Browser page with fixed CSP, denied network/frames/
+workers/forms, a read-only address and no source/agent authority. Closing that tab or
+the 30-second runtime deadline closes the controller and releases content. The built-in
+visualization skill and default agent guidance now describe static preview plus
+isolated Play; skill version is 1.0.3 and agent prompt schema is 74.
+
+Checks: focused `local browser: inline executor lifecycle` passes, including transient
+content delivery, ready state and deadline close. `tests/web/html-executor-process.test.js`
+runs a runaway loop in a separate Chrome process, verifies the Node test process stays
+responsive, measures CPU load, kills the process tree and confirms CPU returns to zero.
+An additional Chromium CDP probe confirmed `sandbox=""`, no executed inline script in
+the static message frame, and Play handoff without creating a script-enabled Shell iframe.
+A separate adversarial probe found authored link navigation; the static renderer now
+removes navigation attributes and meta refresh from its preview copy, while source bytes
+remain unchanged. Synthetic link activation produced no network request.
+`chat-visuals.test.js` now checks static no-script preview and Play handoff; Playwright
+is not installed in the workspace, so that fixture was not executed. Windows x64 /
+Office x64 / WebView2 CPU and lifecycle qualification remain open.
+
+Open P1: a separate local Chromium click probe showed that a user-initiated `<a>` inside
+the script-disabled static iframe can navigate that frame to a network URL. Automatic
+subresource loads remain blocked by the fixed CSP, and shell/bridge access remains absent,
+but zero-network isolation of the static message is not yet proven. See
+[RISK_REGISTER](RISK_REGISTER.md#static-inline-html-link-navigation--open-2026-11-19).
+
+## Guarded core.replace confirmation preview — In Review, 2026-11-19
+
+Implemented host-neutral / In Review, `17.6.8-dev`. Office and Workspace preparation
+now returns the exact `affectedCount` plus a bounded `before → after` preview in the
+existing patch approval payload. The shared pending confirmation retains that preview,
+so the current run-changes renderer shows it before dispatch without a second tool call,
+store or mutation authority. Truncation is explicit and does not change the exact count.
+
+The focused `universal mutations:` and web renderer fixtures cover the payload, truncation
+and guarded write/read-back path; this documentation pass did not rerun them. Windows x64 /
+Office x64 / WebView2 wide, narrow and 125% visual acceptance remains open.
 
 ## Externalized accepted calls in project/plugin chats — In Review, 2026-11-18
 
@@ -159,7 +202,7 @@ On `e5190c97` the Harness and MockDemo builds pass, as do focused `markdown anal
 older failures reproduce on `650aa2d6`/`7294e45d`, and the admitted-run cancellation
 case blocks past the local 60-second bound even in isolation. One fixture-arity bug
 and one null legacy-migration fixture parent were corrected; the remaining owners and
-exact failure evidence are in [BACKLOG](BACKLOG.md#current-harness-regression-sweep--observed-2026-11-18).
+exact failure evidence are in [BACKLOG](BACKLOG.md#harness-regression-sweep--observed-2026-11-18).
 No publication or persistence guard was relaxed. The completed packaging fix commits
 the official Markdig 0.37.0 package, advances the product to `17.4.1-dev` and keeps
 clean-checkout/offline builds independent of a manual package restore.

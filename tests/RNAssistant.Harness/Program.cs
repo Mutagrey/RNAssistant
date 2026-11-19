@@ -1531,6 +1531,7 @@ namespace RNAssistant.Harness
                 Test("local browser: network access is denied", ExternalBrowserSiteAccess),
                 Test("local browser: interactive content pins exact local members", BrowserExactLocalContent),
                 Test("local browser: native delivery lifecycle", BrowserNativeDeliveryLifecycle),
+                Test("local browser: inline executor lifecycle", BrowserInlineExecutorLifecycle),
                 Test("local browser: native history reconciliation", BrowserNativeHistoryReconciliation),
                 Test("local browser: manual scope handoff and explicit binding", BrowserManualScopeHandoff),
                 Test("local browser: exact user screenshot and reset", BrowserUserScreenshotCapture),

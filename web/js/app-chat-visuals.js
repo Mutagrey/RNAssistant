@@ -25,9 +25,17 @@
     return mermaidLoad;
   }
   function dark() { return document.documentElement.getAttribute("data-theme") === "dark"; }
-  function frameDocument(html, script, interactive) {
+  function staticHtml(html) {
+    var value = String(html || "");
+    value = value.replace(/<meta\b(?=[^>]*\bhttp-equiv\s*=\s*(?:"refresh"|'refresh'|refresh\b))[^>]*>/gi, "");
+    return value.replace(/<(a|area)\b([^>]*)>/gi, function (tag, name, attributes) {
+      attributes = attributes.replace(/\s(?:href|xlink:href|target|download)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "");
+      return "<" + name + attributes + " aria-disabled=\"true\" tabindex=\"-1\">";
+    });
+  }
+  function frameDocument(html) {
     // First policy cannot be relaxed by a second meta tag in authored HTML.
-    var policy = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; " +
+    var policy = "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:; navigate-to 'none'; " +
       "connect-src 'none'; font-src 'none'; media-src 'none'; frame-src 'none'; worker-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';";
     // Never parse authored HTML in the host document: even detached DOMParser
     // documents may fetch images. The browser parses it only after the fixed CSP
@@ -37,27 +45,14 @@
     doc.head.insertBefore(meta, doc.head.firstChild);
     var style = doc.createElement("style");
     style.textContent = ":root{color-scheme:" + (dark() ? "dark" : "light") + ";}body{margin:16px;font:14px system-ui;background:" +
-      (dark() ? "transparent;color:#e5e7e8" : "transparent;color:#252b28") + ";}svg{max-width:100%}.diagram{display:flex;justify-content:center;align-items:center;min-height:80px}.diagram svg[aria-roledescription^=flowchart] .node rect{rx:14px;ry:14px}.diagram svg .cluster rect{rx:18px;ry:18px}*{box-sizing:border-box}";
+      (dark() ? "transparent;color:#e5e7e8" : "transparent;color:#252b28") + ";}svg{max-width:100%}.diagram{display:flex;justify-content:center;align-items:center;min-height:80px}.diagram svg[aria-roledescription^=flowchart] .node rect{rx:14px;ry:14px}.diagram svg .cluster rect{rx:18px;ry:18px}*{box-sizing:border-box}" +
+      "*{animation:none!important;transition:none!important;scroll-behavior:auto!important}a,area{pointer-events:none!important}";
     doc.head.appendChild(style);
-    if (interactive) {
-      var report = doc.createElement("script");
-      report.textContent = "addEventListener('error',function(e){parent.postMessage({type:'rna.chatPreview.error',message:String(e.message).slice(0,500)},'*')});" +
-        "addEventListener('unhandledrejection',function(){parent.postMessage({type:'rna.chatPreview.error',message:'Ошибка асинхронного JavaScript'},'*')});" +
-        "function rnaReportSize(){try{var d=document.documentElement,b=document.body,h=Math.ceil(Math.max(d?d.scrollHeight:0,b?b.scrollHeight:0));" +
-        "if(h)parent.postMessage({type:'rna.chatPreview.size',height:h},'*')}catch(ignore){}}" +
-        "addEventListener('load',function(){requestAnimationFrame(rnaReportSize)});";
-      doc.head.insertBefore(report, meta.nextSibling);
-    }
-    if (script) {
-      var vendor = doc.createElement("script"); vendor.textContent = script.replace(/<\/script/gi, "<\\/script");
-      doc.head.insertBefore(vendor, meta.nextSibling);
-    }
     return "<!doctype html><html>" + doc.head.outerHTML + html + "</html>";
   }
-  function makeFrame(title, content, scripts) {
+  function makeFrame(title, content) {
     var frame = document.createElement("iframe"); frame.className = "chat-visual-frame";
-    frame.name = "rn-chat-preview-" + (++sequence);
-    frame.title = title; frame.setAttribute("sandbox", scripts ? "allow-scripts" : "");
+    frame.name = "rn-chat-preview-" + (++sequence); frame.title = title; frame.setAttribute("sandbox", "");
     frame.setAttribute("referrerpolicy", "no-referrer"); frame.srcdoc = content;
     return frame;
   }
@@ -69,10 +64,15 @@
     wrap.setAttribute("aria-label", language === "mermaid" ? "Схема" : "Интерактивный пример");
     var surface = document.createElement("div"); surface.className = "chat-visual-surface";
     var status = document.createElement("div"); status.className = "chat-visual-status"; status.setAttribute("role", "status");
-    var token = 0, disposed = false, seen = false, htmlStarted = false, frameSized = false, intersection;
-    function stop() {
-      token += 1; surface.replaceChildren();
-      surface.style.height = ""; htmlStarted = false; frameSized = false;
+    var token = 0, disposed = false, seen = false, htmlStarted = false, intersection;
+    function resetHtml() {
+      token += 1;
+      Array.prototype.forEach.call(surface.querySelectorAll("iframe"), function (frame) {
+        try { frame.removeAttribute("srcdoc"); frame.src = "about:blank"; } catch (ignore) {}
+      });
+      surface.replaceChildren(); surface.style.height = "";
+      wrap.classList.remove("is-static");
+      htmlStarted = false;
       if (play) { play.disabled = false; buttonLabel(play, "Запустить", "play"); }
     }
     function showCode(value) {
@@ -81,11 +81,11 @@
       codeButton.setAttribute("aria-expanded", String(value));
       buttonLabel(codeButton, value && language === "html" ? "Показать HTML" : value ? "Скрыть код" : "Показать код",
         value && language === "html" ? "eye" : "code");
-      if (!value && language === "html" && !htmlStarted) startHtml();
+      if (!value && language === "html" && !htmlStarted) startStaticHtml();
     }
-    function fail(error) { status.textContent = "Не удалось показать: " + (error.message || error); showCode(true); }
+    function fail(error) { resetHtml(); status.textContent = "Не удалось показать: " + (error.message || error); showCode(true); }
     function showSource() { showCode(pre.hidden); }
-    var play = language === "html" ? button("Запустить", "play", function () { startHtml(); }) : null;
+    var play = language === "html" ? button("Запустить", "play", openInteractiveHtml) : null;
     var codeButton = button("Показать код", "code", showSource); codeButton.setAttribute("aria-expanded", "false");
     var copyButton = button("Копировать", "copy", function () { window.copyText(source); });
     var zoom = button("Увеличить", "external", function () {
@@ -101,28 +101,36 @@
     tools.appendChild(codeButton); tools.appendChild(copyButton); tools.appendChild(zoom);
     pre.parentNode.insertBefore(wrap, pre);
     wrap.appendChild(tools); wrap.appendChild(status); wrap.appendChild(surface); wrap.appendChild(pre); pre.hidden = true;
-    status.textContent = language === "html" ? "Подготовка просмотра…" : "Схема ожидает просмотра…";
-    async function startHtml() {
+    status.textContent = language === "html" ? "Подготовка статического просмотра…" : "Схема ожидает просмотра…";
+    function renderStaticHtml(reason) {
       if (disposed) return;
-      // Message HTML is transient chat presentation. Its readiness must never be
-      // inferred from the separate native Browser host or reuse Browser fallback text.
-      stop(); var current = token; htmlStarted = true; play.disabled = true;
-      buttonLabel(play, "Подготовка…", "play"); status.textContent = "Подготовка просмотра…"; showCode(false);
+      resetHtml(); var current = token; htmlStarted = true;
+      wrap.classList.add("is-static"); showCode(false);
       try {
         if (source.length > 200000) throw new Error("HTML превышает лимит 200 000 символов.");
-        var js = "";
-        // Only the checked-in ECharts runtime is admitted; authored vendor directives
-        // and every external asset remain blocked by the fixed CSP below.
-        if (/\becharts\s*\./.test(source)) {
-          var runtime = window.RNAssistantHtmlVendorRuntime;
-          if (!runtime) throw new Error("Локальный runtime для ECharts недоступен.");
-          var files = [{ kind: "script", content: "echarts.init" }];
-          await runtime.ensure(files); js = runtime.source(runtime.used(files)[0]).js;
-        }
-        if (disposed || current !== token) return;
-        surface.appendChild(makeFrame("HTML-превью без доступа к сети", frameDocument(source, js, true), true));
-        play.disabled = false; buttonLabel(play, "Перезапустить", "play"); status.textContent = "";
-      } catch (error) { if (!disposed && current === token) { stop(); fail(error); } }
+        surface.appendChild(makeFrame("Статический HTML без выполнения скриптов", frameDocument(staticHtml(source))));
+        status.textContent = reason || "Статический просмотр. Скрипты не выполняются.";
+      } catch (error) { if (!disposed && current === token) fail(error); }
+    }
+    function startStaticHtml() { renderStaticHtml(null); }
+    function openInteractiveHtml() {
+      if (disposed) return;
+      if (source.length > 200000) { fail(new Error("HTML превышает лимит 200 000 символов.")); return; }
+      if (!window.RNAssistantBrowser || typeof window.RNAssistantBrowser.openHtmlPreview !== "function") {
+        status.textContent = "Изолированный исполнитель Browser недоступен. Статический просмотр остаётся доступен.";
+        return;
+      }
+      showCode(false); play.disabled = true; status.textContent = "Открываю изолированный Browser…";
+      Promise.resolve().then(function () { return window.RNAssistantBrowser.openHtmlPreview(source, { title: "HTML из чата" }); })
+        .then(function (opened) {
+          if (disposed) return; play.disabled = false;
+          status.textContent = opened === false
+            ? "Не удалось открыть изолированный Browser. Статический просмотр остаётся доступен."
+            : "HTML передан в изолированный Browser. Статус выполнения показан во вкладке Browser.";
+        }, function (error) {
+          if (disposed) return; play.disabled = false;
+          status.textContent = "Не удалось запустить скрипты: " + (error.detail || error.message || error);
+        });
     }
 
     function diagram() {
@@ -143,7 +151,7 @@
           if (disposed || current !== token) return;
           // SVG lives in an inert frame: its styles/links cannot affect the transcript.
           var svg = DOMPurify.sanitize(result.svg, { USE_PROFILES: { svg: true, svgFilters: true }, FORBID_TAGS: ["foreignObject", "image", "a"] });
-          var diagramFrame = makeFrame("Схема Mermaid", frameDocument('<div class="diagram">' + svg + "</div>", ""), false);
+          var diagramFrame = makeFrame("Схема Mermaid", frameDocument('<div class="diagram">' + svg + "</div>"));
           var bounds = /viewBox="[^"]*?([\d.]+)\s+([\d.]+)"/.exec(svg);
           if (bounds && Number(bounds[1]) > 0) {
             var width = Math.max(200, surface.getBoundingClientRect().width - 32);
@@ -154,21 +162,8 @@
         } catch (error) { if (!disposed && current === token) fail(error); }
       });
     }
-    function frameMessage(event) {
-      var frame = surface.querySelector("iframe");
-      if (disposed || !frame || event.source !== frame.contentWindow || !event.data) return;
-      if (event.data.type === "rna.chatPreview.size" && !frameSized && Number.isFinite(event.data.height)) {
-        var minimum = window.innerWidth <= 480 ? 300 : 360;
-        var maximum = Math.max(minimum, Math.min(680, Math.round(window.innerHeight * 0.72)));
-        surface.style.height = Math.max(minimum, Math.min(maximum, Math.round(event.data.height))) + "px";
-        frameSized = true;
-      } else if (event.data.type === "rna.chatPreview.error") {
-        status.textContent = "Ошибка превью: " + String(event.data.message || "JavaScript").slice(0, 500);
-      }
-    }
-    window.addEventListener("message", frameMessage);
     var item = { node: wrap, dispose: function () {
-      if (disposed) return; disposed = true; window.removeEventListener("message", frameMessage); stop(); if (intersection) intersection.disconnect(); mounted.delete(item);
+      if (disposed) return; disposed = true; resetHtml(); if (intersection) intersection.disconnect(); mounted.delete(item);
     }, theme: function () { if (language === "mermaid" && seen) diagram(); } };
     wrap.__disposeChatVisual = item.dispose;
     mounted.add(item);
@@ -176,7 +171,7 @@
       intersection = new IntersectionObserver(function (entries) {
         if (entries.some(function (entry) { return entry.isIntersecting; })) {
           seen = true; intersection.disconnect();
-          if (language === "html") startHtml(); else diagram();
+          if (language === "html") startStaticHtml(); else diagram();
         }
       });
       intersection.observe(wrap);

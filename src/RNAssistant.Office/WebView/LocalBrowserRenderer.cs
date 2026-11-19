@@ -85,7 +85,8 @@ namespace RNAssistant.Office.WebView
                 if (page == null && state.Status == BrowserPageStatus.Unavailable && command.Action != BrowserCommandKind.Attach &&
                     command.Action != BrowserCommandKind.Reload && command.Action != BrowserCommandKind.Navigate && command.Action != BrowserCommandKind.NavigateUser && command.Action != BrowserCommandKind.Bind && command.Action != BrowserCommandKind.Back && command.Action != BrowserCommandKind.Forward) return state;
                 if (page == null && state.Attached) {
-                    page = new LocalBrowserPage(_parent, _environment, _plugins, _assets, state, _content, _bindings, _pauseRun) { InputAvailable = _physical != null };
+                    page = new LocalBrowserPage(_parent, _environment, _plugins, _assets, state, _content, _bindings, _pauseRun,
+                        command.TransientContent) { InputAvailable = _physical != null };
                     LocalBrowserPage.ManualOwner manual;
                     if (!_manual.TryGetValue(state.SessionId, out manual)) _manual.Add(state.SessionId, manual = new LocalBrowserPage.ManualOwner());
                     page.Manual = manual;

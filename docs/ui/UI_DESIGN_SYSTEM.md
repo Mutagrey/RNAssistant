@@ -454,19 +454,22 @@ CSS zoom к retained overlay нет; размеры bubbles, шрифты и tok
 Проверяются реальные bounds root/messages/composer относительно своей группы, а не
 только отсутствие overflow внутри уже неверно увеличенного root.
 
-## Inline HTML block — In Review, 2026-11-18
+## Inline HTML block — In Review, 2026-11-19
 
 Completed HTML card использует те же `chat-visual`/`block-tools`, `icon-btn compact`
-и SVG 15 px: play/restart, code, copy, expand. Новых tokens или отдельной кнопки
-Play с текстом не вводится. Preview является default view; source скрыт до выбора
-code. Toolbar остаётся 28 px (40 px coarse pointer), доступные title/aria-label и
-`aria-expanded` сохраняются.
+и SVG 15 px: play, code, copy, expand. Новых tokens или отдельной кнопки Play с
+текстом не вводится. Static preview является default view и всегда имеет
+`sandbox=""`/disabled scripts; source скрыт до выбора code. Toolbar остаётся 28 px
+(40 px coarse pointer), доступные title/aria-label и `aria-expanded` сохраняются.
+Static CSP блокирует automatic subresources, authored links нейтрализуются без href/
+target, а meta refresh не попадает в preview, поэтому UI может обещать отсутствие
+network navigation из static card без изменения сохранённого source.
 
-Карточка не получает фиксированную высоту экрана: первый `postMessage` из iframe
-задаёт высоту по содержимому в пределах 300–680 px и 72% viewport, затем пользователь
-меняет её вертикальной ручкой. Expand занимает существующий viewport; source и
-preview никогда не показываются одновременно. На 360 px ширина не увеличивает Shell,
-а preview остаётся внутри width группы.
+Карточка использует bounded 360–620 px default и остаётся вертикально resizable;
+Expand занимает существующий viewport, source и preview никогда не показываются
+одновременно. Play не меняет static iframe на script-enabled: он открывает общий
+Browser с read-only адресом, preview-only mode и transient lifetime. На 360 px
+ширина не увеличивает Shell, а static preview остаётся внутри width группы.
 
 ## Выбор участников для продолжения — In Review, 2026-11-04
 
