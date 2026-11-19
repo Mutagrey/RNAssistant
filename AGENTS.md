@@ -65,6 +65,12 @@ evidence и ADR — только когда нужны причина, точн�
   VSTO. Host-neutral behavior сюда не добавляется.
 - `web`: static UI без npm/bundler; feature logic — в тематических `app-*.js`,
   `app.js` — boot/shared rendering.
+- **Главное архитектурное правило:** модель принимает смысловые решения, а runtime
+  сам выполняет все технические действия, которые можно однозначно, безопасно и
+  детерминированно выполнить без изменения исходного намерения модели. Техническая
+  ошибка не становится автоматически новой задачей LLM: сначала runtime устраняет
+  причину в пределах policy, guards и доказанных эффектов. Правило обязательно для
+  проектирования каждого tool, обработки ошибок и lifecycle агента.
 - Все modes идут через `ConversationRunService` → `AgentKernel`; только kernel
   считает lifecycle/outcomes. Model wire — conversation-response v8
   `action + reason + (tool_calls | decision | outcome + results)`; `message`
