@@ -16,11 +16,12 @@ The Node check launches a separate Chrome process with a runaway loop, measures 
 kills the process tree and requires CPU to return to zero. It is not Windows/WebView2
 qualification; that remains an open host-specific gate.
 
-Open P1: the static no-script fixture does not yet cover link navigation. A local
-Chromium click probe showed that an authored link can still load a network URL inside
-the sandboxed preview. Do not treat `script-src 'none'` as proof of zero network; the
-regression should assert no outbound request after click/keyboard activation once the
-owner is fixed. See [RISK_REGISTER](../../docs/stabilization/RISK_REGISTER.md#static-inline-html-link-navigation--open-2026-11-19).
+The static preview now removes navigation attributes and meta refresh from its parsed
+copy while preserving source bytes. A Chromium CDP trusted-click probe and the updated
+`chat-visuals.test.js` cover trusted click, keyboard activation and synthetic activation
+with no outbound request. Playwright is not installed in this workspace; native
+Windows/WebView2 Play qualification remains separate. See
+[RISK_REGISTER](../../docs/stabilization/RISK_REGISTER.md#static-inline-html-link-navigation--open-2026-11-19).
 
 ## Bounded ProjectChat polling — 2026-11-17
 

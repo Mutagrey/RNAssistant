@@ -4,14 +4,10 @@
 
 Критично:
 
-1. **P1, current static-preview defect:** скрипты в HTML-сообщении не исполняются, но
-   пользовательский клик по ссылке внутри `sandbox=""` iframe уходит в сеть.
-   Поэтому static preview нельзя называть полностью network-isolated до исправления
-   и проверки. Owner и acceptance — в [RISK_REGISTER](RISK_REGISTER.md#static-inline-html-link-navigation--open-2026-11-19).
-2. **P1 release evidence:** Windows x64 / Office x64 / WebView2, DPAPI/storage-v2,
+1. **P1 release evidence:** Windows x64 / Office x64 / WebView2, DPAPI/storage-v2,
    native Browser network/worker/input и смешанный backup остаются вне
    host-neutral проверок. Локальный Chromium/Harness результат не закрывает эти gates.
-3. **P1 test evidence:** полный Harness не является текущим green baseline. Последний
+2. **P1 test evidence:** полный Harness не является текущим green baseline. Последний
    зафиксированный sweep на `e5190c97` имел семь воспроизводимых fixture-сбоев и
    зависание cancellation case; текущий HEAD нужно перепроверить до заявления о green
    baseline. Детали — в [BACKLOG](BACKLOG.md#harness-regression-sweep--observed-2026-11-18).
@@ -64,10 +60,11 @@ remain unchanged. Synthetic link activation produced no network request.
 is not installed in the workspace, so that fixture was not executed. Windows x64 /
 Office x64 / WebView2 CPU and lifecycle qualification remain open.
 
-Open P1: a separate local Chromium click probe showed that a user-initiated `<a>` inside
-the script-disabled static iframe can navigate that frame to a network URL. Automatic
-subresource loads remain blocked by the fixed CSP, and shell/bridge access remains absent,
-but zero-network isolation of the static message is not yet proven. See
+Resolved host-neutral: a Chromium CDP trusted click at an authored network link emitted
+no request after navigation attributes were removed from the preview copy. The updated
+fixture covers trusted click, keyboard activation and synthetic activation. Automatic
+subresource loads remain blocked by fixed CSP; Shell/bridge access remains absent.
+Windows/WebView2 Play qualification remains separate. See
 [RISK_REGISTER](RISK_REGISTER.md#static-inline-html-link-navigation--open-2026-11-19).
 
 ## Guarded core.replace confirmation preview — In Review, 2026-11-19

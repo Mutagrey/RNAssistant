@@ -1,22 +1,19 @@
 # Stabilization risk register
 
-## Static inline HTML link navigation — Open, 2026-11-19
+<a id="static-inline-html-link-navigation--open-2026-11-19"></a>
+## Static inline HTML link navigation — Resolved host-neutral, 2026-11-19
 
-**P1 / open host-neutral fix.** Owner: `web/js/app-chat-visuals.js` and the static
+**Resolved host-neutral.** Owner: `web/js/app-chat-visuals.js` and the static
 message-preview fixtures. Completed chat HTML is rendered in an iframe with
 `sandbox=""` and `script-src 'none'`; scripts, inline handlers, timers and automatic
-subresource loads are blocked. A local Chromium probe found that a user click on an
-authored `<a>` can still navigate that sandboxed frame to a network URL and issue the
-request. The page still has no Shell, bridge or script authority, but claims of a fully
-network-isolated static preview are false.
+subresource loads are blocked. The preview copy removes `href`/`xlink:href`, target,
+download and meta refresh before browser parsing, and CSS removes pointer activation
+from links and areas. The source bytes remain unchanged.
 
-This is separate from the native Play page, whose WebView2 navigation policy denies the
-same escape and remains In Review. Acceptance: the static preview must not emit a
-network request after any click, keyboard activation or synthetic navigation. Use the
-smallest owner fix in the existing chat visual (for example, neutralize or explicitly
-route authored links); do not enable scripts in the message and do not merge Play
-authority into the static card. Add a Chromium regression and keep Windows/WebView2
-native qualification as separate evidence. See
+A Chromium CDP probe issued a real `Input.dispatchMouseEvent` click at an authored
+network link and observed no outbound request. `chat-visuals.test.js` now covers the
+same trusted click, keyboard activation and synthetic activation. Native Play remains
+separate and its Windows/WebView2 qualification is still open. See
 [PROGRESS](PROGRESS.md#static-chat-html-and-isolated-interactive-execution--in-review-2026-11-19).
 
 ## Power Query syntax host — 2026-11-16

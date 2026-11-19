@@ -53,9 +53,13 @@ ${scripts.map(file=>`<script src="/js/${file}"></script>`).join('')}
   assert.equal(await staticFrame.locator('#chart canvas').count(),0,'static preview does not run authored scripts');
   assert.equal(await staticFrame.locator('#outside').getAttribute('href'),null,'static preview neutralizes authored link navigation');
   assert.equal((await page.locator('.chat-visual iframe').getAttribute('srcdoc')).includes('http-equiv="refresh"'),false,'static preview removes meta refresh');
-  await staticFrame.locator('#outside').evaluate(node=>node.click());
-  await page.waitForTimeout(150);
-  assert.deepEqual(external,[],'static preview cannot issue a link or refresh network request');
+  const outside = staticFrame.locator('#outside'), outsideBox = await outside.boundingBox();
+  assert.ok(outsideBox,'static link remains inspectable after navigation attributes are removed');
+  await page.mouse.click(outsideBox.x + outsideBox.width / 2, outsideBox.y + outsideBox.height / 2);
+  await outside.focus(); await page.keyboard.press('Enter');
+  await outside.evaluate(node=>node.click());
+  await page.waitForTimeout(300);
+  assert.deepEqual(external,[],'trusted, keyboard and synthetic link activation cannot issue a network request');
   await staticFrame.locator('#plus').click();
   assert.equal(await staticFrame.locator('#count').textContent(),'0','static preview blocks inline event handlers');
   assert.equal(await page.locator('.chat-visual').getByText('Native Browser недоступен',{exact:false}).count(),0,
