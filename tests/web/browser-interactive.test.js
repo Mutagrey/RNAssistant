@@ -24,8 +24,8 @@ const { chromium } = require('playwright');
     for (const file of ['app-html-vendor-catalog.js', 'app-html-vendor-runtime.js', 'app-html-resource-export.js', 'app-html-workspace-preview.js'])
       await page.addScriptTag({ path: 'web/js/' + file });
     const built = await page.evaluate(async ({ origin, batch }) => {
-      const files = [{ id: 'main', path: 'index.html', kind: 'html', content: '<!doctype html><html><head><title>Локально</title></head><body><label>Имя<input id="name"></label><button id="button">Загрузить</button><p id="result">Ожидание</p><label>Пароль<input type="password"></label></body></html>' },
-        { id: 'js', path: 'main.js', kind: 'js', content: `document.getElementById('button').onclick=async function(event){window.trusted=event.isTrusted;var data=await RN.resources.open('totals');var batch=await data.read({limit:10});document.getElementById('result').textContent=document.getElementById('name').value+': '+batch.rows[0].amount;await data.close();};RN.resources.subscribe(function(change){window.changed=change.names;});` }];
+      const files = [{ id: 'main', path: 'index.html', kind: 'html', content: '<!doctype html><html><head><title>Локально</title></head><body><label>Имя<input id="name"></label><button id="button">Загрузить</button><button id="editor">Редактор</button><textarea id="scriptInput" hidden placeholder="Введите команды"></textarea><p id="result">Ожидание</p><label>Пароль<input type="password"></label></body></html>' },
+        { id: 'js', path: 'main.js', kind: 'js', content: `document.getElementById('button').onclick=async function(event){window.trusted=event.isTrusted;var data=await RN.resources.open('totals');var batch=await data.read({limit:10});document.getElementById('result').textContent=document.getElementById('name').value+': '+batch.rows[0].amount;await data.close();};document.getElementById('editor').onclick=function(){document.getElementById('scriptInput').hidden=false;};RN.resources.subscribe(function(change){window.changed=change.names;});` }];
       const dataSources = [{ name: 'totals' }];
       const source = { generations: { 'document:test': 1 }, bindings: [{ name: 'totals', lease: { leaseId: 'test', url: 'https://rnassistant.local-resource/v1/' + 'a'.repeat(64), descriptor: { reference: batch.resource }, view: 'table', maxBatchItems: 100, maxBatchBytes: 32000 } }] };
       const snapshot = await RNAssistantHtmlResourceExport.capture(source, { fetch: async () => new Response(JSON.stringify(batch)), isCurrent: () => true });
@@ -53,6 +53,8 @@ const { chromium } = require('playwright');
       return result.result.value;
     }
     await evaluate(await fs.readFile('src/RNAssistant.Office/WebView/LocalBrowserAutomation.js', 'utf8'));
+    const closedEditor = await evaluate('__rnaLocalBrowser.read("closed-editor")');
+    assert.ok(!closedEditor.nodes.some(node => node.name === 'Введите команды'), 'hidden editor is omitted before opening');
     async function prepare(id, request) {
       await evaluate(`__rnaLocalBrowser.read(${JSON.stringify(id)})`);
       return evaluate(`__rnaLocalBrowser.prepare(${JSON.stringify(id)},${JSON.stringify(id)},${JSON.stringify(request)})`);
@@ -65,6 +67,19 @@ const { chromium } = require('playwright');
     await evaluate('__rnaLocalBrowser.admit("fill")'); await click(input);
     await cdp.send('Input.insertText', { text: 'Локально' });
     assert.equal((await evaluate('__rnaLocalBrowser.verify("fill")')).effect, 'VerifiedChange');
+    const editor = await prepare('editor', { action: 'click', name: 'Редактор', expectedText: 'Введите команды' });
+    await evaluate('__rnaLocalBrowser.admit("editor")'); await click(editor);
+    await page.waitForFunction(() => !document.getElementById('scriptInput').hidden);
+    assert.equal((await evaluate('__rnaLocalBrowser.verify("editor")')).effect, 'VerifiedChange',
+      'new placeholder text verifies the editor click');
+    const placeholderRead = await evaluate('__rnaLocalBrowser.read("placeholder-read")');
+    assert.ok(placeholderRead.nodes.some(node => node.role === 'textbox' && node.name === 'Введите команды'),
+      'placeholder names an otherwise unlabeled textbox');
+    const scriptInput = await prepare('script-fill', { action: 'fill', name: 'Введите команды', value: 'drawHouse();' });
+    await evaluate('__rnaLocalBrowser.admit("script-fill")'); await click(scriptInput);
+    await cdp.send('Input.insertText', { text: 'drawHouse();' });
+    assert.equal((await evaluate('__rnaLocalBrowser.verify("script-fill")')).effect, 'VerifiedChange',
+      'placeholder-named textbox accepts native input');
     const button = await prepare('click', { action: 'click', name: 'Загрузить', expectedText: 'Локально: 42' });
     await evaluate('__rnaLocalBrowser.admit("click")'); await click(button);
     await page.waitForFunction(() => document.getElementById('result').textContent === 'Локально: 42');

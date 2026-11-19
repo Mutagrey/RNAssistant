@@ -2062,7 +2062,7 @@ namespace RNAssistant.Runtime
                     }
                     _session.Messages.Add(ToolResultPersistence.Create(record.Context.Call.Id, record.Context.Call.Name,
                         record.Context.StepId, materialized, _payloads, fact.Summary.RunId));
-                    if (media != null) _session.Messages.Add(media);
+                    if (media != null) { _session.Messages.Add(media); ChatMessageAttachmentService.LinkMedia(_session, media); }
                 }
                 if (fact.Kind == AgentRunEventKind.SummaryChanged)
                 {

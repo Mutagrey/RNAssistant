@@ -66,7 +66,7 @@ namespace RNAssistant.Harness
                 var runtime = executor.CreateNativeRuntime(session, executor.GetControllerTools().ToArray(),
                     new AppSettings(), ChatModes.Agent, false,
                     (context, prepared) => { pendingPreparation = prepared; return "pending"; });
-                var journal = new ResourceMutationJournal(FixturePaths.Value);
+                var journal = executor.ResourceAuthority.Mutations;
                 BrowserActionEffect? presented = null;
                 source.OnPresent = effect => {
                     AssertEqual(0, journal.Unresolved().Count, "presentation follows the published terminal");
@@ -208,7 +208,7 @@ namespace RNAssistant.Harness
                 AssertEqual(ToolExecutionOutcome.Error, changed.Outcome, "confirmation cannot retarget a reopened page");
                 AssertTrue(!changed.MayHaveDispatched, "changed owner fails before dispatch");
                 AssertEqual(0, source.Dispatches, "no native mutation after owner replacement");
-                AssertEqual(0, new ResourceMutationJournal(FixturePaths.Value).Unresolved().Count, "rejected preparation leaves no unresolved attempt");
+                AssertEqual(0, executor.ResourceAuthority.Mutations.Unresolved().Count, "rejected preparation leaves no unresolved attempt");
             });
         }
     }

@@ -282,6 +282,7 @@ namespace RNAssistant.Office.Services
             {
                 prepared.Media.RunId = accepted.RunId;
                 _session.Messages.Add(prepared.Media);
+                ChatMessageAttachmentService.LinkMedia(_session, prepared.Media);
             }
         }
 

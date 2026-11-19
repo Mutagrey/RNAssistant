@@ -13,6 +13,17 @@ namespace RNAssistant.Core.Services
     public static class ResourceMediaMessages
     {
         public const string Prefix = "RESOURCE_MEDIA_INPUT";
+        public static bool IsInputShape(ChatMessage message)
+        {
+            return message != null && message.Role == "user" && message.ProtocolMessage &&
+                string.IsNullOrWhiteSpace(message.ToolCallId) && message.AcceptedCallOrigin == null &&
+                message.AttachmentAnalysis == null && message.CompletedOperation == null &&
+                !message.SyntheticResourceObservation && (message.ContextClaims?.Count ?? 0) == 0 &&
+                (message.Attachments ?? new List<ChatAttachment>()).All(item => item != null &&
+                    string.Equals(item.Kind, "image", StringComparison.OrdinalIgnoreCase));
+        }
+        public static bool IsInput(ChatMessage message)
+        { return IsInputShape(message) && (message.Content ?? string.Empty).StartsWith(Prefix, StringComparison.Ordinal); }
         public static ChatMessage Create(ToolResultMaterialization result, IEnumerable<ChatAttachment> attachments = null)
         {
             var items = (attachments ?? result.ModelAttachments).Where(item => item != null).ToList();

@@ -22,6 +22,11 @@ namespace RNAssistant.Core.Services
         }
 
         public static void Link(ChatSession session, ChatMessage message)
+        { LinkCore(session, message, false); }
+        public static void LinkMedia(ChatSession session, ChatMessage message)
+        { LinkCore(session, message, true); }
+
+        private static void LinkCore(ChatSession session, ChatMessage message, bool reusableMedia)
         {
             var attachments = (message?.Attachments ?? new List<ChatAttachment>())
                 .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id)).ToList();
@@ -48,7 +53,7 @@ namespace RNAssistant.Core.Services
                     session.Artifacts.Add(artifact);
                 }
                 else if (!string.Equals(artifact.Kind, expectedKind, StringComparison.OrdinalIgnoreCase) ||
-                    ((artifact.DocumentAuthorityId != session.DocumentAuthorityId || string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId)) &&
+                    !reusableMedia && ((artifact.DocumentAuthorityId != session.DocumentAuthorityId || string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId)) &&
                         !string.Equals(artifact.SourceMessageId, message.Id, StringComparison.OrdinalIgnoreCase)) ||
                     !string.Equals(artifact.MimeType, attachment.ContentType, StringComparison.OrdinalIgnoreCase) ||
                     string.IsNullOrWhiteSpace(artifact.ContentSha256) ||

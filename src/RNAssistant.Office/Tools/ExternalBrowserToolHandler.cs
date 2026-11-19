@@ -133,7 +133,8 @@ namespace RNAssistant.Office.Tools
                 catch (ResourceRequestException error)
                 {
                     return new ToolPreparationResult(RuntimeResult.Error(error.Message, Code(error.ErrorCode)), recovery:
-                        new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.Replan));
+                        new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect,
+                            error.ErrorCode == "browser_effect_unknown" ? ToolRetryPolicy.None : ToolRetryPolicy.Replan));
                 }
             }, token);
         }

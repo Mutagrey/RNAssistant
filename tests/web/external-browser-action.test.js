@@ -36,6 +36,7 @@ const review = process.env.BROWSER_ACTION_REVIEW;
       await evaluate(visual + ';globalThis.__rnaBrowserVisual=RNAssistantBrowserActionView.create(' + JSON.stringify(styles) + ');true');
     }
     const fill = { action: 'fill', name: 'Ввод и Tab', value: 'Пример ввода' };
+    const placeholderFill = { action: 'fill', name: 'Команды скрипта', value: 'drawHouse();' };
     const click = { action: 'click', name: 'Нажатия: 0', expectedText: 'Нажатия: 1' };
     async function prepare(request) {
       const id = 'prepared-' + (++serial);
@@ -91,6 +92,11 @@ const review = process.env.BROWSER_ACTION_REVIEW;
     await read();
     assert.equal((await act(await prepare(click))).effect, 'VerifiedChange');
     assert.ok((await read()).nodes.some(node => node.name === 'Нажатия: 1'), 'real click effect is readable');
+
+    await reset();
+    assert.equal((await act(await prepare(placeholderFill))).effect, 'VerifiedChange');
+    assert.equal(await page.locator('textarea[placeholder="Команды скрипта"]').inputValue(), placeholderFill.value,
+      'placeholder names an otherwise unlabeled textbox');
 
     await reset();
     await page.locator('input').fill('user edit');

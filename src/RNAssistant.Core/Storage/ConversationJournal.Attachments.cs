@@ -82,6 +82,15 @@ namespace RNAssistant.Core.Storage
             return entry;
         }
 
+        private bool HasAttachment(SqliteConnection db, SqliteTransaction tx, string chat, string id)
+        {
+            using (var command = Command(db, "SELECT 1 FROM chat_attachment WHERE stream=$stream AND chat=$chat AND id=$id", tx))
+            {
+                command.Parameters.AddWithValue("$chat", chat); command.Parameters.AddWithValue("$id", id);
+                return command.ExecuteScalar() != null;
+            }
+        }
+
         private void ValidateMessageAttachments(SqliteConnection db, ConversationChatCommit fact)
         {
             if (!fact.Messages.Any(item => item.Header.Attachments?.Count > 0)) return;
@@ -95,13 +104,15 @@ namespace RNAssistant.Core.Storage
                 if ((message.ResourceRefs ?? new List<ResourceRef>()).Count(item => SameRunValue(item, reference)) != 1)
                     throw new InvalidDataException("Attachment lacks its exact message reference.");
                 var prior = AttachmentEntry(db, metadata.Id, attachment.Id);
-                if (prior != null && !SameRunValue(prior.Header.Attachments.Single(item => item.Id == attachment.Id), attachment))
+                var priorAttachment = prior == null ? null : prior.Header.Attachments.SingleOrDefault(item => item.Id == attachment.Id);
+                if (prior != null && priorAttachment == null || priorAttachment != null && !SameRunValue(priorAttachment, attachment))
                     throw new InvalidOperationException("An upload cannot be rebound to different immutable evidence.");
-                if (metadata.WorkspaceId != null && (sources.ContainsKey(attachment.Id) ||
+                var reusableMedia = ResourceMediaMessages.IsInputShape(message);
+                if (metadata.WorkspaceId != null && !reusableMedia && (sources.ContainsKey(attachment.Id) ||
                     prior != null && prior.Header.Id != message.Id && !removed.Contains(prior.Header.Id) &&
                     ChatMessageOperation(db, metadata.Id, prior.Header.Id) != null))
                     throw new InvalidOperationException("A workspace original has more than one visible source message.");
-                sources[attachment.Id] = message.Id;
+                if (!reusableMedia || prior == null) sources[attachment.Id] = message.Id;
             }
         }
 
@@ -117,11 +128,14 @@ namespace RNAssistant.Core.Storage
                     }
             foreach (var message in fact.Messages)
             foreach (var attachment in message.Header.Attachments ?? new List<ChatAttachment>())
-            using (var command = Command(db, "INSERT OR REPLACE INTO chat_attachment VALUES($stream,$chat,$id,$message,$operation)", tx))
             {
-                command.Parameters.AddWithValue("$chat", fact.Card.ChatId); command.Parameters.AddWithValue("$id", attachment.Id);
-                command.Parameters.AddWithValue("$message", message.Header.Id); command.Parameters.AddWithValue("$operation", record.Operation);
-                command.ExecuteNonQuery();
+                if (ResourceMediaMessages.IsInputShape(message.Header) && HasAttachment(db, tx, fact.Card.ChatId, attachment.Id)) continue;
+                using (var command = Command(db, "INSERT OR REPLACE INTO chat_attachment VALUES($stream,$chat,$id,$message,$operation)", tx))
+                {
+                    command.Parameters.AddWithValue("$chat", fact.Card.ChatId); command.Parameters.AddWithValue("$id", attachment.Id);
+                    command.Parameters.AddWithValue("$message", message.Header.Id); command.Parameters.AddWithValue("$operation", record.Operation);
+                    command.ExecuteNonQuery();
+                }
             }
         }
 

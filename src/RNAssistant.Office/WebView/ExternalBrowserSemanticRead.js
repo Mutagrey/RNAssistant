@@ -39,6 +39,8 @@
       var source = element.labels[0];
       if (!source.closest(privateSelector)) return smallText(source);
     }
+    var hint = element.getAttribute("placeholder") || element.getAttribute("title");
+    if (hint) return hint.slice(0, 160);
     return /^(textbox|checkbox|radio|combobox)$/.test(role) ? "" : smallText(element);
   }
   function add(role, value, element) {

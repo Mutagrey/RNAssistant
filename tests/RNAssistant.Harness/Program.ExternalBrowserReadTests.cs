@@ -61,6 +61,7 @@ namespace RNAssistant.Harness
                 var thread = Thread.CurrentThread.ManagedThreadId;
                 var read = execute(ResourceToolCatalog.ReadToolId, new { target = ExternalBrowserResourceProvider.Target, representation = "text" });
                 AssertTrue(((string)read["text"]).Contains("button: Save [disabled]"), "bounded semantic text reaches the model");
+                AssertEqual(((string)read["text"]).Length, (int)read["returnedCharacters"], "the read summary counts every delivered character");
                 AssertEqual(false, (bool)read["sourceComplete"], "a semantic observation never claims the full page");
                 AssertTrue(source.ReadThread != thread, "native asynchronous capture cannot block the calling UI thread");
                 AssertEqual(1, source.Captures, "one read performs one capture");
@@ -163,7 +164,7 @@ namespace RNAssistant.Harness
                 AssertEqual((string)firstData["text"], (string)JObject.Parse(read(savedTarget).Result.DataJson)["text"],
                     "closing the Browser leaves exact captured facts readable");
                 AssertEqual(2, source.Captures, "historical reading never recaptures the live page");
-                var store = new ResourceAuthorityStore(FixturePaths.Value);
+                var store = new ResourceJournal(FixturePaths.Value);
                 var restartedAuthority = new ResourceAuthorityService(store, store, payloads: executor.Payloads);
                 var provider = new ExternalBrowserResourceProvider(() => null, authority: restartedAuthority);
                 var restored = provider.ResolveSemanticTarget(new ChatSession { Id = session.Id }, savedTarget);

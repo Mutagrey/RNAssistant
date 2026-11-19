@@ -17,7 +17,7 @@ namespace RNAssistant.Harness
         private static void BrowserTargetsRequireExactOwnerAndKind()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) => {
-                var paths = FixturePaths.Value; var chats = new ChatStore(paths); var documents = new DocumentAuthorityRegistry(paths);
+                var paths = FixturePaths.Value; var documents = new DocumentAuthorityRegistry(paths);
                 var source = NewSession(adapter);
                 source.DocumentAuthorityId = documents.Resolve("word", "browser", Path.Combine(paths.Root, "source.docx")).Id;
                 var resolverEmpty = BrowserTargetResolver.Live(source);
@@ -28,7 +28,8 @@ namespace RNAssistant.Harness
                 var exact = ChatResourceUri.CreateArtifactRevisionUri(source, original);
                 AssertTrue(WriteSharedHtmlFixture(executor, source, "<h1>two</h1>").Success, "advance head");
                 var selected = source.ActiveHtmlArtifactId;
-                var metadata = chats.DocumentArtifacts.Read(ConversationMetadata.From(source), ChatResourceUri.ArtifactSnapshot(new ResourceRef(exact)), false);
+                var artifacts = new DocumentArtifactStore(executor.ResourceAuthority.Store, executor.ResourceAuthority.Revisions, executor.Payloads);
+                var metadata = artifacts.Read(ConversationMetadata.From(source), ChatResourceUri.ArtifactSnapshot(new ResourceRef(exact)), false);
                 AssertTrue(string.IsNullOrEmpty(metadata.InlineText), "resolver needs metadata only");
                 var target = BrowserTargetResolver.Saved(source, metadata, exact);
                 AssertEqual(exact, target.ResourceUri, "saved target remains exact after head advances");
@@ -41,9 +42,9 @@ namespace RNAssistant.Harness
                 var unsupported = new ChatArtifact { Id = "not-html", Kind = "plugin", Title = "spoof.html", MimeType = "text/html", Revision = 1 };
                 RuntimeThrows<InvalidOperationException>(() => BrowserTargetResolver.Saved(source, unsupported, ChatResourceUri.CreateArtifactRevisionUri(source, unsupported)));
 
-                var catalog = new ArtifactCatalogService(documents, chats.DocumentArtifacts,
-                    new ArtifactWorkingSetService(chats.DocumentArtifacts, new ResourceMutationJournal(paths)),
-                    new ResourceAuthorityStore(paths), new ChatBlobStore(paths));
+                var catalog = new ArtifactCatalogService(documents, artifacts,
+                    new ArtifactWorkingSetService(artifacts, executor.ResourceAuthority.Mutations),
+                    executor.ResourceAuthority.Store, executor.Payloads, executor.ResourceAuthority.Revisions);
                 var export = catalog.Export(source, new ArtifactTransferRequest { ChatId = source.Id,
                     DocumentId = source.DocumentAuthorityId, ResourceUri = exact, Preview = true });
                 AssertEqual(exact, export.BrowserTarget.ResourceUri, "existing preview response carries the verified target");

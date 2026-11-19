@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.Web.WebView2.Core;
 using Newtonsoft.Json;
 using RNAssistant.Application.Contracts;
+using RNAssistant.Core.Models;
 using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office.WebView
@@ -77,13 +78,20 @@ namespace RNAssistant.Office.WebView
         {
             if (!State.ChatBound || Manual.Pending || revision != State.ControlRevision) throw new InvalidOperationException("The manual-control revision changed.");
             if (Manual.Failed) throw new InvalidOperationException("Resume the paused run explicitly in its chat, then reopen the page.");
-            if (_actionsBlocked) throw new InvalidOperationException("The previous input effect is unknown. Close and reopen this Browser tab.");
+            if (_actionsBlocked) throw new ResourceRequestException("The previous Browser effect is unknown. Close and reopen this Browser tab before another action.",
+                "browser_effect_unknown", false);
             State.ManualControl = false; State.ControlRevision++; InvalidateAutomation(); Manual.Resume?.Invoke(); Manual.Resume = null; Publish();
         }
         private void RequireAction()
         {
-            if (!InputAvailable || !Ready || !Control.Visible || State.ManualControl || _actionsBlocked || _closed)
-                throw new InvalidOperationException("Browser input is unavailable, hidden, under manual control or has an unknown effect.");
+            if (_actionsBlocked) throw new ResourceRequestException("The previous Browser effect is unknown. Close and reopen this Browser tab before another action.",
+                "browser_effect_unknown", false);
+            if (!InputAvailable || !Ready || _closed) throw new ResourceRequestException("Browser input is unavailable for the current page. Reopen the exact page before acting.",
+                "browser_execution_unavailable", false);
+            if (!Control.Visible) throw new ResourceRequestException("The Browser page is hidden. Show the exact page before acting.",
+                "browser_page_unavailable", false);
+            if (State.ManualControl) throw new ResourceRequestException("The user controls this page. Wait for explicit Resume agent; do not retry browser actions.",
+                "browser_user_control", false);
             Content.Validate();
         }
         internal async Task<BrowserObservation> ReadAsync(CancellationToken token)

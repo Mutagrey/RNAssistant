@@ -145,7 +145,7 @@ namespace RNAssistant.Office.Services
                 throw Error("This browser observation is no longer current. Read the page again.", "RESOURCE_REVISION_CHANGED");
             var selection = new ResourceReadSelection { Result = new ResourceReadResult { Resource = Describe(target, revision),
                 Representation = "text", Text = text, ContentSha256 = hash, Complete = true, SourceComplete = false,
-                TotalCharacters = text.Length, RawContentIncluded = true } };
+                ReturnedCharacters = text.Length, TotalCharacters = text.Length, RawContentIncluded = true } };
             if (_authority?.Payloads == null)
                 throw Error("Browser observations require the existing resource authority.", "RESOURCE_AUTHORITY_NOT_READY");
             // The mutable head is only action authority. The model receives the immutable

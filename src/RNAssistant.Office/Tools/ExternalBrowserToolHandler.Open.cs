@@ -37,7 +37,8 @@ namespace RNAssistant.Office.Tools
                 (string.IsNullOrWhiteSpace(_session.WorkspaceId) ? "" :
                     " If the page exists but no source is listed, discover html.project.register, register its entryPath and members, then repeat core.find in this run."), "browser_source_unavailable");
             var selected = targets[0]; var reference = ExternalBrowserResourceProvider.SourceReference(_session, selected);
-            if (!_session.Messages.Any(m => m.RunId == context.Execution.RunId && m.Role == "tool" && m.ToolName == ResourceToolCatalog.FindToolId &&
+            if (!_session.Messages.Any(m => m.RunId == context.Execution.RunId && m.ProtocolMessage && m.Role == ToolResultRoles.User &&
+                m.ToolResultRole == ToolResultRoles.User && m.ToolName == ResourceToolCatalog.FindToolId &&
                 m.ResourceRefs != null && m.ResourceRefs.Any(r => r.Uri == reference.Uri)))
                 throw Error("The source must be delivered by core.find in the current run before opening.", "browser_discovery_required");
             using (_documentAccess?.Invoke(_session)) { }

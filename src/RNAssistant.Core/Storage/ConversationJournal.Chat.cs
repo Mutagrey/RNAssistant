@@ -163,7 +163,7 @@ namespace RNAssistant.Core.Storage
                 }
                 else if ((prior.Header.Activity == null || message.Header.Id != fact.Tools?.ActivityId) && !SameRunValue(prior.Body, message.Body) ||
                     !SameRunValue(prior.Reasoning, message.Reasoning) ||
-                    !SameRunValue(prior.Header.Attachments, message.Header.Attachments) ||
+                    !IsResourceMediaRelease(prior.Header, message.Header) && !SameRunValue(prior.Header.Attachments, message.Header.Attachments) ||
                     prior.Header.Role != message.Header.Role || prior.Header.CreatedUtc != message.Header.CreatedUtc ||
                     prior.Header.ProtocolMessage != message.Header.ProtocolMessage || prior.Header.RuntimeProjection != message.Header.RuntimeProjection ||
                     !SameRunValue(prior.Header.AgentCommunication, message.Header.AgentCommunication) ||
@@ -183,6 +183,13 @@ namespace RNAssistant.Core.Storage
             ValidateChatRun(db, record, fact);
             ValidateChatTools(db, record, fact, keys, outcomes);
             return ChatReferences(record);
+        }
+
+        private static bool IsResourceMediaRelease(ChatMessage prior, ChatMessage release)
+        {
+            return ResourceMediaMessages.IsInputShape(prior) && ResourceMediaMessages.IsInputShape(release) &&
+                (prior.Attachments?.Count ?? 0) > 0 && (release.Attachments?.Count ?? 0) == 0 &&
+                release.ExcludeFromModelContext && SameRunValue(prior.ResourceRefs, release.ResourceRefs);
         }
 
         private void ApplyChatFact(SqliteConnection db, JournalRecord record, JournalCursor position,
@@ -377,7 +384,8 @@ namespace RNAssistant.Core.Storage
                     AcceptedCallPayloadService.Externalize(message, _bodies);
                 }
             }
-            else if (message.ProtocolMessage && message.ToolCallId == null && !ConversationResponseHistoryReader.Read(message).Success)
+            else if (message.ProtocolMessage && !ResourceMediaMessages.IsInput(message) && message.ToolCallId == null &&
+                !ConversationResponseHistoryReader.Read(message).Success)
                 throw new InvalidDataException("Invalid accepted response.");
             var header = message.CopyForContext(); header.Content = null; header.ReasoningContent = null;
             header.Attachments = AttachmentHeaders(message.Attachments);
@@ -461,7 +469,7 @@ namespace RNAssistant.Core.Storage
                 (message.ContextClaims?.Count ?? 0) != 0)
                 throw new NotSupportedException("Runtime/resource messages require their typed journal integration.");
             if ((message.Attachments?.Count > 0 || message.AttachmentAnalysis != null) &&
-                (message.Role != "user" || message.ProtocolMessage))
+                (message.Role != "user" || message.ProtocolMessage && !ResourceMediaMessages.IsInputShape(message)))
                 throw new InvalidDataException("Only a user message can own input attachments.");
         }
     }
