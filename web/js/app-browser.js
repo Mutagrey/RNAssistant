@@ -64,7 +64,7 @@
     var fileNavigation = createBrowserFileNavigation();
     shell.setNavigation({ element: fileNavigation.element, available: browserFilesAvailable });
     var operationId = target.operationId || id(), definitionDialog = null, targetInvalidated = false, sourceInvalidated = false, authorityRevision = -1, sourceRefreshEpoch = 0;
-    var homeSuggestionCache = [], homeSuggestionScope = "";
+    var homeSuggestionCache = [], homeSuggestionScope = "", homeSuggestionEpoch = 0;
     var discussionBusy = false, createdDiscussion = null, handoverPending = false, handoverRequested = false;
     function discussionContext() {
       var page = current, owner = page && page.target && page.target.ownerScope;
@@ -409,11 +409,13 @@
       pending.forEach(function (task) { if (task.requestId) cancelBridgeRequest(task.requestId).catch(function () {}); }); pending.clear();
     }
     function scopeKey(scope) { return scope ? [scope.kind, scope.scopeId, scope.chatId || ""].join("\n") : ""; }
-    function clearHomeSuggestions() { homeSuggestionCache = []; homeSuggestionScope = ""; }
+    function clearHomeSuggestions() { homeSuggestionCache = []; homeSuggestionScope = ""; homeSuggestionEpoch++; }
     function localSuggestions(prefix, scopeOverride) {
       var scope = scopeOverride || current && current.ownerScope || target.ownerScope, key = scopeKey(scope), seen = new Set();
       var needle = String(prefix || "").toLocaleLowerCase();
-      if (homeSuggestionScope !== key) { homeSuggestionCache = []; homeSuggestionScope = key; }
+      if (homeSuggestionScope !== key) {
+        homeSuggestionCache = []; homeSuggestionScope = key;
+      }
       var cached = homeSuggestionCache.filter(function (entry) {
         return (entry.displayLocator || "").toLocaleLowerCase().includes(needle) || (entry.title || "").toLocaleLowerCase().includes(needle);
       });
@@ -447,11 +449,12 @@
         if (searchTimer) { clearTimeout(searchTimer); searchTimer = 0; }
         var serial = ++epoch; loading = true; error = ""; view.update(model());
         var scope = current.ownerScope, requestedScope = scopeKey(scope);
+        var cacheEpoch = homeSuggestionEpoch;
         try {
           var result = await request("queryNavigationSuggestions", { ownerScope: scope, prefix: query, requestGeneration: serial, limit: 12 });
           if (dead || !shown || !current || serial !== epoch || scopeKey(current.ownerScope) !== requestedScope || result.requestGeneration !== serial) return;
           entries = (result.items || []).filter(function (entry) { return !!RNAssistantBrowserTarget.preferenceLocator(entry.displayLocator); }).slice(0, 12);
-          if (!query) { homeSuggestionCache = entries.slice(); homeSuggestionScope = requestedScope; }
+          if (!query && homeSuggestionEpoch === cacheEpoch) { homeSuggestionCache = entries.slice(); homeSuggestionScope = requestedScope; }
         } catch (failure) { if (!dead && shown && serial === epoch) error = failure.detail || failure.message; }
         finally { if (!dead && shown && current && serial === epoch) { loading = false; view.update(model()); } }
       }

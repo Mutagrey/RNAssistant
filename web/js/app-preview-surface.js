@@ -227,7 +227,7 @@
       updateAddress(); updateInfo(); setStatus(message, false); refresh();
     }
     function refresh() { reload.disabled = options.canReload ? !options.canReload() : false; }
-    function fail(label, message) { detach(); show(label, ""); setStatus(String(message || "Предпросмотр недоступен.").slice(0, 500), true); }
+    function fail(label, message) { detach(); closeCompletion(); show(label, ""); setStatus(String(message || "Предпросмотр недоступен.").slice(0, 500), true); }
     function watch(frame, label) {
       detach(); show(label, "Загрузка…");
       var current = { frame: frame,
