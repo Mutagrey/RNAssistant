@@ -638,10 +638,10 @@ namespace RNAssistant.Office
                         _toolCatalog.InvalidateDocumentVbaTools();
                     }
                 }
-                catch (RunStoreException)
+                catch (RunStoreException ex)
                 {
                     RecoverAfterRunStoreFailure(
-                        runLease, session, sessionId, ref causalTrace);
+                        runLease, session, sessionId, ex, ref causalTrace);
                     throw;
                 }
                 catch (Exception ex)

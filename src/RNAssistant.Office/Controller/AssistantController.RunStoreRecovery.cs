@@ -12,6 +12,7 @@ namespace RNAssistant.Office
             ConversationRunHandle runLease,
             ChatSession failedProjection,
             string sessionId,
+            RunStoreException failure,
             ref RunCausalTrace causalTrace)
         {
             try
@@ -34,7 +35,7 @@ namespace RNAssistant.Office
                 _chatSessions.ReloadAndReconcileInterruptedRun(
                     failedProjection == null ? null : failedProjection.Host,
                     failedProjection == null ? null : failedProjection.DocumentKey,
-                    sessionId);
+                    sessionId, RunStoreFailureDetail(failure));
             }
             catch (Exception recoveryError)
             {
@@ -45,6 +46,13 @@ namespace RNAssistant.Office
                     "; startup recovery required.",
                     recoveryError);
             }
+        }
+
+        private static string RunStoreFailureDetail(RunStoreException failure)
+        {
+            if (failure == null) return null;
+            var inner = failure.InnerException;
+            return inner == null ? failure.Message : inner.GetType().Name + ": " + inner.Message;
         }
     }
 }

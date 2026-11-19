@@ -453,10 +453,14 @@ namespace RNAssistant.Harness
                 AssertEqual(RunLifecycle.Running, owned.LastRun.KernelState.Summary.Lifecycle,
                     "recovery cannot mutate canonical state while controller owns the run");
                 runLease.Dispose();
-                var recovered = recovery.ReloadAndReconcileInterruptedRun(session.Host, session.DocumentKey, session.Id);
+                var recovered = recovery.ReloadAndReconcileInterruptedRun(session.Host, session.DocumentKey,
+                    session.Id, failure.Message);
                 AssertEqual(RunLifecycle.Failed, recovered.LastRun.KernelState.Summary.Lifecycle, "interrupted runtime is locally failed");
                 AssertEqual(afterDispatch ? 1 : 0, recovered.LastRun.KernelState.Summary.ToolCounts.WriteUnknown, "open dispatched boundary remains unknown");
                 AssertTrue(recovered.LastRun.KernelState.InFlightTool == null, "recovery clears boundary once without replay");
+                AssertContains(recovered.Messages.Last(message => message.Activity?.Kind == "diagnostic").Content,
+                    "Run evidence could not be appended",
+                    "recovery retains the original run-store failure for the diagnostics screen");
                 var recoveredRevision = recovered.Revision;
                 recovered = recovery.ReloadAndReconcileInterruptedRun(session.Host, session.DocumentKey, session.Id);
                 AssertEqual(recoveredRevision, recovered.Revision, "same-process recovery is idempotent");
@@ -2609,6 +2613,24 @@ namespace RNAssistant.Harness
                         } }
                     })
                 }));
+            events.Add(TrajectoryEvent(27, SessionEventTypes.SessionCommit, started.AddSeconds(26), "run-5", "turn-5", null,
+                new JObject
+                {
+                    ["Operations"] = new JArray(new JObject
+                    {
+                        ["Type"] = SessionOperationTypes.AssistantMessageAppended,
+                        ["Data"] = new JObject { ["Value"] = new JObject
+                        {
+                            ["Id"] = "diagnostic-5", ["RunId"] = "run-5", ["Role"] = "assistant",
+                            ["Activity"] = new JObject
+                            {
+                                ["Kind"] = "diagnostic", ["RunId"] = "run-5", ["Status"] = "failed",
+                                ["ExecutionStatus"] = "interrupted",
+                                ["ResultMessage"] = "Run evidence could not be appended."
+                            }
+                        } }
+                    })
+                }));
             var remainder = query.QueryView(events, new TrajectoryViewQueryRequest
             {
                 View = TrajectoryViews.RunCausal,
@@ -2706,6 +2728,17 @@ namespace RNAssistant.Harness
                 "the journal retains the exact interrupted status");
             AssertEqual("Сохранённые результаты не повторялись автоматически.", recoveredDiagnostic.Summary,
                 "the journal retains the user-visible recovery reason");
+
+            var kernelDiagnostic = query.QueryView(events, new TrajectoryViewQueryRequest
+            {
+                View = TrajectoryViews.RunCausal, RunId = "run-5", PageSize = 200
+            }).Rows.Single(item => item.Kind == SessionOperationTypes.AssistantMessageAppended);
+            AssertEqual("failed", kernelDiagnostic.Status,
+                "kernel-backed recovery remains a problem row instead of a normal persisted answer");
+            AssertEqual("Run diagnostic recorded", kernelDiagnostic.Title,
+                "kernel-backed recovery uses the same stable journal title");
+            AssertEqual("Run evidence could not be appended.", kernelDiagnostic.Summary,
+                "the journal retains the exact technical recovery cause");
 
             var dto = TrajectoryViewRowDto.From(accepted);
             AssertEqual("attempt-2", dto.ModelAttemptId, "bridge DTO exposes attempt correlation");

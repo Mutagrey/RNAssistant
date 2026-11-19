@@ -44,8 +44,10 @@ after its live owner disappeared retained the interruption message, but the mess
 was stored as `MessageUpdated`; the run-causal projection ignored that operation.
 The direct «Причина и детали» action also opened the Problems filter, which could be
 empty even though the exact run and its saved result existed. Diagnostic message
-updates now project as failed run rows, and direct navigation opens the complete
-exact run. Focused Harness and run-journal checks pass.
+updates and kernel-backed recovery answers now project as failed run rows, and direct
+navigation opens the complete exact run. Run-store failures also preserve their
+original technical cause in the recovery diagnostic instead of exposing only a
+generic interruption. Focused Harness and run-journal checks pass.
 
 The Windows event that released the run owner remains unproven from the screenshot;
 process/add-in restart, abnormal termination and another ownership transition remain

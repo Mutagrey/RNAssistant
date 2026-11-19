@@ -240,7 +240,7 @@ namespace RNAssistant.Core.Services
                 Id = RowId(item.Sequence, "operation", operationIndex.ToString("D4", CultureInfo.InvariantCulture)),
                 View = TrajectoryViews.RunCausal,
                 Kind = operationType,
-                Title = OperationTitle(operationType, toolId, artifactId),
+                Title = OperationTitle(operationType, toolId, artifactId, activity),
                 Summary = DisplayText(Text(Property(activity, "ResultMessage")) ?? Text(Property(data["toolResult"], "message")), 2000),
                 Target = DisplayText(Text(Property(activity, "Subtitle")), 480),
                 ErrorCode = DisplayText(Text(Property(activity, "ErrorCode")), 240),
@@ -451,7 +451,10 @@ namespace RNAssistant.Core.Services
             }
             if (Same(type, SessionOperationTypes.UserMessageAppended)) return "persisted";
             if (Same(type, SessionOperationTypes.AssistantMessageAppended))
-                return Text(Property(value, "ResponseStatus")) ?? "persisted";
+                return Same(Text(Property(activity, "Kind")), "diagnostic")
+                    ? Text(Property(activity, "Status")) ??
+                        Text(Property(activity, "ExecutionStatus")) ?? "failed"
+                    : Text(Property(value, "ResponseStatus")) ?? "persisted";
             if (Same(type, SessionOperationTypes.ToolResultRecorded)) return "recorded";
             if (Same(type, SessionOperationTypes.MessageUpdated))
                 return Text(Property(activity, "Status")) ??
@@ -484,13 +487,15 @@ namespace RNAssistant.Core.Services
             return stage;
         }
 
-        private static string OperationTitle(string type, string toolId, string artifactId)
+        private static string OperationTitle(string type, string toolId, string artifactId, JObject activity)
         {
             if (Same(type, SessionOperationTypes.RunStarted)) return "Run state started";
             if (Same(type, SessionOperationTypes.RunUpdated)) return "Run state updated";
             if (Same(type, SessionOperationTypes.RunEnded)) return "Run state ended";
             if (Same(type, SessionOperationTypes.UserMessageAppended)) return "User request persisted";
-            if (Same(type, SessionOperationTypes.AssistantMessageAppended)) return "Assistant response persisted";
+            if (Same(type, SessionOperationTypes.AssistantMessageAppended))
+                return Same(Text(Property(activity, "Kind")), "diagnostic")
+                    ? "Run diagnostic recorded" : "Assistant response persisted";
             if (Same(type, SessionOperationTypes.MessageUpdated)) return "Run diagnostic recorded";
             if (Same(type, SessionOperationTypes.ToolResultRecorded)) return "Tool result recorded: " + (toolId ?? "unknown");
             if (Same(type, SessionOperationTypes.ToolExecutionStarted)) return "Tool activity started: " + (toolId ?? "unknown");

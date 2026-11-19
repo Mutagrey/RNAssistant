@@ -126,19 +126,21 @@ namespace RNAssistant.Office.Services
         internal ChatSession ReloadAndReconcileInterruptedRun(
             string host,
             string documentKey,
-            string sessionId)
+            string sessionId,
+            string recoveryFailure = null)
         {
             if (string.IsNullOrWhiteSpace(sessionId))
                 throw new ArgumentException("Session id is required.", nameof(sessionId));
             var session = _conversations.Load(host, documentKey, sessionId) ?? _conversations.Load(sessionId);
-            return ReconcileInterruptedRun(session, null, false, true);
+            return ReconcileInterruptedRun(session, null, false, true, recoveryFailure);
         }
 
         private ChatSession ReconcileInterruptedRun(
             ChatSession session,
             string runtimeId,
             bool skipSameRuntimeWithoutOwnershipProvider,
-            bool refreshActiveProjection = false)
+            bool refreshActiveProjection = false,
+            string recoveryFailure = null)
         {
             if (session == null) return null;
             if (!session.UsesCurrentProtocol) return session;
@@ -178,7 +180,7 @@ namespace RNAssistant.Office.Services
                 // Ownership may have changed between the initial load and lease acquisition.
                 var observed = session;
                 session = ConversationRecoveryService.ReconcileFenced(observed,
-                    ReloadCanonical(observed), InterruptOfficeRun);
+                    ReloadCanonical(observed), current => InterruptOfficeRun(current, recoveryFailure));
                 // Keep cache replacement inside the recovery lease so a new run
                 // cannot race a stale or unpersisted projection into active state.
                 if (refreshActiveProjection && session != null) NotifySaved(session);
@@ -190,7 +192,7 @@ namespace RNAssistant.Office.Services
             }
         }
 
-        private ChatSession InterruptOfficeRun(ChatSession session)
+        private ChatSession InterruptOfficeRun(ChatSession session, string recoveryFailure = null)
         {
             var run = session.LastRun;
             var storedOpenToolExecution =
@@ -208,13 +210,16 @@ namespace RNAssistant.Office.Services
             run.CurrentAction = effectMayBeUnknown
                 ? "Предыдущий процесс завершился во время выполнения действия."
                 : "Предыдущий процесс завершился после сохранённой границы.";
+            var failureNote = RecoveryFailureNote(recoveryFailure);
+            var failureSuffix = failureNote == null ? string.Empty : " Техническая причина: " + failureNote + ".";
             var diagnostic = new ChatMessage
             {
                 Role = "assistant",
                 RunId = run.RunId,
-                Content = effectMayBeUnknown
+                Content = (effectMayBeUnknown
                     ? "Предыдущий запуск был прерван. Результат выполнявшегося действия неизвестен; проверьте документ перед ручным повтором."
-                    : "Предыдущий запуск был прерван после сохранённой границы. Сохранённые результаты оставлены в истории; автоматическое продолжение не выполнялось.",
+                    : "Предыдущий запуск был прерван после сохранённой границы. Сохранённые результаты оставлены в истории; автоматическое продолжение не выполнялось.") +
+                        failureSuffix,
                 Activity = new ChatActivity
                 {
                     RunId = run.RunId,
@@ -223,9 +228,10 @@ namespace RNAssistant.Office.Services
                     Status = "failed",
                     ExecutionStatus = effectMayBeUnknown ? "interrupted_unknown" : "interrupted",
                     Retryable = false,
-                    ResultMessage = effectMayBeUnknown
+                    ResultMessage = (effectMayBeUnknown
                         ? "Процесс завершился до сохранения окончательного результата. Автоматический повтор отключён."
-                        : "Запуск завершился до финального ответа. Сохранённые результаты не повторялись автоматически."
+                        : "Запуск завершился до финального ответа. Сохранённые результаты не повторялись автоматически.") +
+                            failureSuffix
                 }
             };
             session.Messages.Add(diagnostic);
@@ -241,6 +247,13 @@ namespace RNAssistant.Office.Services
                 // use its latest canonical projection instead.
                 return ReloadCanonical(session);
             }
+        }
+
+        private static string RecoveryFailureNote(string failure)
+        {
+            if (string.IsNullOrWhiteSpace(failure)) return null;
+            var text = string.Join(" ", failure.Split((char[])null, StringSplitOptions.RemoveEmptyEntries));
+            return text.Length <= 600 ? text : text.Substring(0, 599) + "…";
         }
 
         private ChatSession ReloadCanonical(ChatSession session)

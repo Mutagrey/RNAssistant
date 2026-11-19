@@ -166,11 +166,11 @@ namespace RNAssistant.Office
                         session, firstRunMessageIndex, 0,
                         runId, completion, null, updatedMessages);
                 }
-                catch (RunStoreException)
+                catch (RunStoreException ex)
                 {
                     _toolCatalog.InvalidateDocumentVbaTools();
                     RecoverAfterRunStoreFailure(
-                        runLease, session, sessionId, ref causalTrace);
+                        runLease, session, sessionId, ex, ref causalTrace);
                     throw;
                 }
                 catch (Exception ex)
@@ -241,9 +241,9 @@ namespace RNAssistant.Office
                     runProgress, RegisterPendingAgentTool, cancellation.Token).ConfigureAwait(false);
                 FinalizeControllerRun(session, firstMessage, 0, runId, completion, null, new List<ChatMessage>());
             }
-            catch (RunStoreException)
+            catch (RunStoreException ex)
             {
-                RecoverAfterRunStoreFailure(lease, session, session.Id, ref trace);
+                RecoverAfterRunStoreFailure(lease, session, session.Id, ex, ref trace);
                 throw;
             }
             finally
