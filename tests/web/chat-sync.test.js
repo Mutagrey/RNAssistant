@@ -60,6 +60,7 @@ function createSyncContext() {
     fullStates.push(response);
     context.state.activeChatId = response.activeChatId || response.ActiveChatId || "";
     context.state.messages = response.messages || response.Messages || [];
+    return true;
   };
   context.logOnce = () => {};
   context.renderChatSessions = () => {};
@@ -86,6 +87,14 @@ function createSyncContext() {
     context.nextCatalog = { activeChatId: "chat-a", chats: context.state.chats, documents: context.state.documents };
     await context.synchronizeChatState(true);
     assert.equal(calls.length, 1, "explicit catalog refresh remains available");
+  }
+  {
+    const { context, calls } = createSyncContext();
+    context.isPanelActive = name => name === "instructions" || name === "artifacts";
+    context.nextCatalog = { activeChatId: "chat-a", chats: context.state.chats, documents: context.state.documents };
+    await context.synchronizeChatState(false);
+    assert.deepEqual(calls.map(call => call.type), ["listChats"],
+      "Library and Materials keep their shared Office chat context current while visible");
   }
   {
     const { context, calls } = createSyncContext();
@@ -132,6 +141,51 @@ function createSyncContext() {
     assert.equal(catalogStates.length, 1, "new revision still applies catalog first");
     assert.equal(fullStates.length, 1, "new active revision reloads full state once");
     console.log("PASS chat sync: newer active revision triggers one explicit full reload");
+  }
+
+  {
+    const { context, calls, catalogStates, fullStates } = createSyncContext();
+    const closed = [];
+    context.state.activeChatId = "chat-missing";
+    context.state.chats = [{ Id: "chat-missing", Revision: 7, Title: "Unavailable" }];
+    context.RNAssistantConversationPanel = {
+      office: id => id === "chat-missing" ? { target: { sessionId: id } } : null,
+      closeDeleted: target => closed.push(target)
+    };
+    context.RNAssistantHtmlWorkspaceSurface = { closeDeleted: target => closed.push(target) };
+    context.nextCatalog = {
+      activeChatId: "chat-b",
+      chats: [{ Id: "chat-b", Revision: 1, Title: "Available" }],
+      documents: []
+    };
+    context.nextFull = { activeChatId: "chat-b", sessionRevision: 1, messages: [{ Content: "Recovered context" }] };
+    await context.synchronizeChatState(true);
+    assert.deepEqual(calls.map(call => call.type), ["listChats", "getChatState"]);
+    assert.equal(calls[1].payload.chatId, "chat-b", "missing mounted chat rebinds to the canonical catalog selection");
+    assert.equal(catalogStates.length, 1);
+    assert.equal(fullStates[0].activeChatId, "chat-b");
+    assert.equal(context.state.activeChatId, "chat-b", "Library and Materials inherit a usable conversation context");
+    assert.deepEqual(JSON.parse(JSON.stringify(closed)), [{ source: "office", sessionId: "chat-missing" }, { chatId: "chat-missing" }],
+      "the retired conversation and its chat-owned editors close only after fallback state is accepted");
+    console.log("PASS chat sync: retired mounted chat rebinds before shared resource reads");
+  }
+  {
+    const { context, calls } = createSyncContext();
+    const closed = [];
+    context.state.activeChatId = "chat-missing";
+    context.state.chats = [{ Id: "chat-missing", Revision: 7, Title: "Unavailable" }];
+    context.RNAssistantConversationPanel = {
+      office: id => id === "chat-missing" ? { target: { sessionId: id } } : null,
+      closeDeleted: target => closed.push(target)
+    };
+    context.RNAssistantHtmlWorkspaceSurface = { closeDeleted: target => closed.push(target) };
+    context.nextCatalog = { activeChatId: "chat-b", chats: [{ Id: "chat-b", Revision: 1 }], documents: [] };
+    context.nextFull = Promise.reject(new Error("canonical chat unavailable"));
+    await context.synchronizeChatState(true);
+    assert.deepEqual(calls.map(call => call.type), ["listChats", "getChatState"]);
+    assert.equal(context.state.activeChatId, "chat-missing", "failed canonical read does not invent a context switch");
+    assert.equal(closed.length, 0, "the unavailable exact view remains visible for its existing retry path");
+    console.log("PASS chat sync: failed canonical rebind preserves the unavailable exact view");
   }
 
   {

@@ -520,9 +520,11 @@ async function retryChatDetail() {
 async function synchronizeChatState(force) {
   // DOM focus events are not an explicit forced refresh.
   force = force === true;
+  var needsOfficeChatContext = typeof isPanelActive === "function" &&
+    (isPanelActive("instructions") || isPanelActive("artifacts"));
   if (state.bridgeUnavailable || state.chatNavigationPending || state.initializePromise || state.officeHostChatPending ||
       (!force && (document.hidden || !document.hasFocus() || currentActiveSend() ||
-        typeof isPanelActive === "function" && !isPanelActive("chat") ||
+        typeof isPanelActive === "function" && !isPanelActive("chat") && !needsOfficeChatContext ||
         window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office"))) return;
   if (state.chatSyncPromise) {
     var pendingSync = state.chatSyncPromise;
@@ -543,6 +545,26 @@ async function synchronizeChatState(force) {
         var panels = window.RNAssistantConversationPanel;
         var component = panels && panels.office(state.activeChatId);
         var responseChatId = panels ? component && component.target.sessionId : payloadActiveChatId(response);
+        var staleChatId = state.activeChatId || "";
+        var canonicalChatId = payloadActiveChatId(response);
+        var selectedChatMissing = !!staleChatId && !catalogChatSummary(response, staleChatId);
+        if (selectedChatMissing && canonicalChatId && canonicalChatId !== staleChatId) {
+          // A legacy import or deletion can retire the chat currently mounted in
+          // Dockview while the native catalog already has a valid active chat.
+          // Rebind the shared resource context before Library/Materials issue reads.
+          applyChatCatalogState(response);
+          var fallbackNavigationVersion = state.chatNavigationVersion || 0;
+          var fallback = await loadChatState(canonicalChatId);
+          if (!state.chatNavigationPending && fallbackNavigationVersion === state.chatNavigationVersion &&
+              state.activeChatId === staleChatId) {
+            var rebound = applyChatState(fallback);
+            if (!rebound) return;
+            if (panels) panels.closeDeleted({ source: "office", sessionId: staleChatId });
+            if (window.RNAssistantHtmlWorkspaceSurface)
+              RNAssistantHtmlWorkspaceSurface.closeDeleted({ chatId: staleChatId });
+          }
+          return;
+        }
         var reloadDetail = (!panels || !!component) && shouldReloadChatDetailFromCatalog(response, responseChatId);
         applyChatCatalogState(response);
         if (reloadDetail) {

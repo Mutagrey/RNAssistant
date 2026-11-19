@@ -16,6 +16,18 @@
 Power Query native API, WebView2 JS executor CPU/cancellation и live-model A/B остаются
 открытым evidence. Playwright UI fixtures в текущем workspace не запускались.
 
+## Retired Office chat rebind — In Review, 2026-11-19
+
+Implemented host-neutral `17.6.15-dev`. When catalog synchronization no longer
+contains the chat mounted in Dockview, the UI reads the catalog's canonical active
+chat and only after that closes the retired conversation/chat-owned editor tabs.
+Library and Materials therefore keep a valid exact conversation context. There is no
+automatic selection of an imported chat or a fallback when the canonical read fails.
+
+Check: `node tests/web/chat-sync.test.js` passes the retired mounted-chat case together
+with the existing catalog/navigation cases. Windows x64 / Office x64 / WebView2 visual
+and lifecycle acceptance for Library/Materials after a real migration remains open.
+
 ## Browser discovery, read, input and media regressions — Resolved host-neutral, 2026-11-19
 
 Implemented `17.6.13-dev`. Current-run `core.find` results are admitted through their

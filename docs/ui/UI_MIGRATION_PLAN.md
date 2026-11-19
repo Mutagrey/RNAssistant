@@ -1,5 +1,15 @@
 # План модернизации production UI
 
+## Retired Office chat rebind — In Review, 2026-11-19
+
+Срез закрывает переход Library/Материалов на несуществующий `activeChatId` после
+storage cutover. Owner — `app-chat-session.js`; existing DockWorkspace закрывает
+устаревшую вкладку, второй context store не создаётся. `node tests/web/chat-sync.test.js`
+проверяет canonical rebind, закрытие conversation/HTML editor и сохранение прежней
+поведенческой ветки. Windows x64 / Office x64 / WebView2: после реального переноса
+проверить Library, Материалы, draft старого чата, закрытие его вкладки и wide/narrow/
+125% visual states; evidence остаётся открытым.
+
 ## Project/chat row actions — In Review, 2026-11-19
 
 Scope: existing `app-project-chats.js`, `app-chat-groups.js`, shared

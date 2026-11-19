@@ -1,5 +1,11 @@
 # Дизайн-система и компоненты RNAssistant
 
+## Retired Office chat rebind — In Review, 2026-11-19
+
+Визуальных компонентов не добавлено. Общая недоступная вкладка остаётся видимой при
+ошибке canonical-чтения и закрывается через существующий DockWorkspace только после
+принятия состояния заменяющего чата. Focus, tabs и layout остаются у общих owners.
+
 ## Tree row actions — In Review, 2026-11-19
 
 `NavigationTree` keeps row actions in one right-aligned overlay that appears while the

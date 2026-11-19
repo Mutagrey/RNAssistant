@@ -1,5 +1,16 @@
 # Архитектура UI RNAssistant
 
+## Retired Office chat rebind — In Review, 2026-11-19
+
+Catalog synchronization owns repair of a stale mounted Office chat. If `listChats`
+returns a different canonical `activeChatId` and no longer contains the selected
+session, `app-chat-session.js` loads that exact catalog chat through `getChatState`.
+Only an accepted snapshot replaces the shared context and closes the retired
+conversation plus chat-owned HTML editors; a failed read keeps the explicit
+unavailable view. Library and Materials consume the existing global Office context,
+so their visible lifetime keeps the shared catalog sync enabled. No second context
+store or separate recovery path is introduced.
+
 ## Project/chat row actions — In Review, 2026-11-19
 
 `app-project-chats.js` remains the Workspace tree adapter. Project rows expose the
