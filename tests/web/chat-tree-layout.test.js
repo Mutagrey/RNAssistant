@@ -27,10 +27,21 @@ const root = path.resolve(__dirname, '../..');
     assert.equal(await page.locator('#projectChatLayout, .chat-scope-switcher, #projectChatRefresh, .chat-office-launch-list').count(), 0);
     assert.equal(await page.locator('#chatDockHost').evaluate(n => n.parentElement.id), 'chatLayout');
     const doc = (await row(office).evaluate(n => n.parentElement.dataset.parentKey));
-    for (const key of [doc, 'project:preview-data-workspace']) {
-      assert.equal(await row(key).evaluate(n => getComputedStyle(n).fontWeight), '400');
-      assert.equal(await row(key).locator('[data-tree-action]').count(), 1, 'one compact parent menu');
-    }
+    assert.equal(await row(doc).evaluate(n => getComputedStyle(n).fontWeight), '400');
+    assert.equal(await row(doc).locator('[data-tree-action]').count(), 1, 'Office keeps one compact parent menu');
+    const projectRow = row('project:preview-data-workspace');
+    assert.equal(await projectRow.evaluate(n => getComputedStyle(n).fontWeight), '400');
+    assert.equal(await projectRow.locator('[data-tree-action]').count(), 4, 'project exposes new, open, delete and more actions');
+    assert.deepEqual(await projectRow.locator('[data-tree-action]').evaluateAll(nodes => nodes.map(node => node.title)), [
+      'Новый чат в «Управленческая отчётность»', 'Открыть проект «Управленческая отчётность»',
+      'Удалить историю «Управленческая отчётность»', 'Другие действия проекта «Управленческая отчётность»'
+    ]);
+    assert.equal(await projectRow.locator('button[title^="Новый чат в"]').evaluate(n => getComputedStyle(n).visibility), 'hidden');
+    assert.equal(await projectRow.locator('button[title^="Открыть проект"]').evaluate(n => getComputedStyle(n).visibility), 'hidden');
+    assert.equal(await projectRow.locator('button[title^="Удалить историю"]').evaluate(n => getComputedStyle(n).visibility), 'hidden');
+    await projectRow.hover();
+    assert.equal(await projectRow.locator('[data-tree-action]').last().evaluate(n => getComputedStyle(n).visibility), 'visible');
+    assert.equal(await projectRow.locator('button[title^="Удалить историю"]').evaluate(n => getComputedStyle(n).visibility), 'visible');
     const folder = row('project:preview-data-workspace').locator('.project-folder-icon');
     const accent = async () => page.evaluate(() => { const n=document.createElement('span'); n.style.color='var(--accent)'; document.body.append(n); const color=getComputedStyle(n).color; n.remove(); return color; });
     assert.equal(await folder.evaluate(n => getComputedStyle(n).color), await accent());
@@ -51,6 +62,10 @@ const root = path.resolve(__dirname, '../..');
     assert.equal(await page.evaluate(() => treeHost === document.getElementById('chatDockHost') && treeHost.parentElement.id === 'chatLayout'), true);
     await row(office).locator('.navigation-tree-label').click();
     assert.equal(await page.evaluate(() => officePanel === RNAssistantConversationPanel.selected()), true, 'same retained Office view');
+    await row('project:preview-data-workspace').locator('button[title^="Открыть проект"]').click();
+    await page.waitForFunction(() => RNAssistantConversationPanel.selected().target.sessionId === 'preview-project-review');
+    assert.equal(await page.evaluate(() => RNAssistantWorkspaceChat.owner()), 'project', 'direct open selects the project adapter');
+    await row(office).locator('.navigation-tree-label').click();
     await page.evaluate(() => {
       const target={source:'workspace',workspaceId:'preview-data-workspace',sessionId:'preview-project-review'};
       window.projectPanel=RNAssistantConversationPanel.find(target);
@@ -67,13 +82,14 @@ const root = path.resolve(__dirname, '../..');
     await page.evaluate(() => { for(let i=0;i<30;i++){renderChatSessions({navigationOnly:true});RNAssistantProjectChats.refreshTree();} });
     assert.equal(await page.evaluate(() => retainedRow === document.querySelector('[data-tree-key="chat:preview-chat"]')), true, 'passive paints retain navigation DOM');
     const menu = page.getByRole('menu');
-    async function chatMenu(key) { await row(key).hover(); await row(key).locator('[data-tree-action]').click(); }
+    async function chatMenu(key) { await row(key).hover(); await row(key).locator('[data-tree-action][aria-haspopup]').click(); }
     await chatMenu(office);
     const officeActions = await menu.getByRole('menuitem').allTextContents();
     assert.equal(await menu.getByRole('menuitem').count(), await menu.locator('button > svg').count(), 'every chat action has a shared icon');
-    assert.equal(await menu.locator('button.is-danger').count(), 1);
+    assert.equal(await menu.locator('button.is-danger').count(), 0, 'delete stays on the hovered row');
+    assert.equal(await row(office).locator('.tree-action.is-danger').count(), 1, 'chat has one direct hover-delete action');
     await page.keyboard.press('Escape');
-    assert.equal(await row(office).locator('[data-tree-action]').evaluate(n => n === document.activeElement), true);
+    assert.equal(await row(office).locator('[data-tree-action][aria-haspopup]').evaluate(n => n === document.activeElement), true);
     await chatMenu(project);
     assert.deepEqual(await menu.getByRole('menuitem').allTextContents(), officeActions, 'Office/project menus have identical labels and order');
     await page.keyboard.press('Escape');
@@ -107,7 +123,7 @@ const root = path.resolve(__dirname, '../..');
     await page.locator('#projectChatConnectionSubmit').click(); await page.locator('#projectChatConnection').waitFor({state:'hidden'});
     assert.equal(await page.evaluate(()=>creationCalls.filter(x=>x.type==='createProjectWorkspace').length), 1);
     await row(project).locator('.navigation-tree-label').click();
-    await add.click(); await menu.getByRole('menuitem',{name:'Новый чат',exact:true}).click();
+    await row(project).locator('button[title^="Новый чат в"]').click();
     await page.waitForFunction(()=>creationCalls.some(x=>x.type==='createProjectChat'));
     assert.equal(await page.evaluate(()=>creationCalls.find(x=>x.type==='createProjectChat').payload.workspaceId), 'preview-data-workspace');
     await page.waitForFunction(()=>!RNAssistantProjectChats.isCatalogBusy());

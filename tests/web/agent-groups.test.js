@@ -74,7 +74,7 @@ const assert=require('node:assert/strict'), path=require('node:path'), {spawn}=r
   await row(reviewChild).locator('.navigation-tree-label').click();
   assert.equal(await page.evaluate(()=>firstGroupPanel===RNAssistantConversationPanel.office('preview-summary')),true,'all links open the same chat component');
   assert.equal(await page.locator('#chatSessionList .navigation-tree-row.selected').count(),1,'only the chosen occurrence is selected');
-  async function action(key){await row(key).hover();await row(key).locator('[data-tree-action]').click();}
+  async function action(key){await row(key).hover();await row(key).locator('[data-tree-action][aria-haspopup]').click();}
   async function menu(key,label){await action(key);await page.getByRole('menuitem',{name:label,exact:true}).click();}
   const calls=()=>page.evaluate(()=>groupCalls.length);
   const paint=()=>page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
@@ -121,7 +121,7 @@ const assert=require('node:assert/strict'), path=require('node:path'), {spawn}=r
   await action(groupKey);await page.keyboard.press('Escape');
   assert.equal(await page.locator('.rna-action-menu-popup').count(),0,'Escape returns from the existing shared action menu');
   const documentKey=await row(groupKey).evaluate(node=>node.parentElement.dataset.parentKey);
-  const createButton=()=>row(documentKey).locator('[data-tree-action]');
+  const createButton=()=>row(documentKey).locator('[data-tree-action][aria-haspopup]');
   async function createDialog(){await menu(documentKey,'Новая группа чатов…');return opened('Новая группа чатов');}
   let before=await calls(),dialog=await createDialog();
   assert.equal(await focused(dialog.getByRole('textbox',{name:'Название группы',exact:true})),true,'create focuses the name input');
@@ -162,7 +162,7 @@ const assert=require('node:assert/strict'), path=require('node:path'), {spawn}=r
   }
   await page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});await paint();
   assert.equal(await calls(),before,'Escape cancels rename');
-  assert.equal(await focused(row(groupKey).locator('[data-tree-action]')),true,'Escape returns from dialog to its menu trigger');
+  assert.equal(await focused(row(groupKey).locator('[data-tree-action][aria-haspopup]')),true,'Escape returns from dialog to its menu trigger');
   await menu(groupKey,'Переименовать группу');dialog=await opened('Переименовать группу');
   await nameInput().fill('  Шахматы  ');await nameInput().press('Enter');await dialog.waitFor({state:'hidden'});
   assert.equal(await calls(),before,'unchanged trimmed rename closes without a mutation');

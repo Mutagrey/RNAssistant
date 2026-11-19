@@ -221,10 +221,9 @@ async function activateDocument(documentKey) {
   }
 }
 
-async function deleteDocument(host, documentKey, title) {
+async function deleteDocument(host, documentKey) {
   if (!host || !documentKey ||
-      !RNAssistantHtmlWorkspaceSurface.canDelete({ host: host, documentKey: documentKey }) ||
-      !window.confirm("Удалить документ «" + (title || "Документ") + "» из истории вместе со всеми чатами? Сам Office-файл удалён не будет.")) {
+      !RNAssistantHtmlWorkspaceSurface.canDelete({ host: host, documentKey: documentKey })) {
     return;
   }
 
@@ -285,8 +284,7 @@ async function compactChatContext() {
 async function deleteChat(chatIdValue) {
   var targetChatId = typeof chatIdValue === "string" ? chatIdValue : state.activeChatId;
   if (!targetChatId || state.chatDeletions[targetChatId] ||
-      !RNAssistantHtmlWorkspaceSurface.canDelete({ chatId: targetChatId }) ||
-      !window.confirm("Удалить этот чат?")) {
+      !RNAssistantHtmlWorkspaceSurface.canDelete({ chatId: targetChatId })) {
     return;
   }
 

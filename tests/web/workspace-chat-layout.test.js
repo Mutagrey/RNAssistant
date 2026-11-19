@@ -283,9 +283,9 @@ fs.mkdirSync(captures, {recursive:true});
     assert.equal(await page.locator('#chatInput').inputValue(),'Черновик первой беседы');
     assert.equal(await frame.getAttribute('data-route-probe'),'same-instance','switching source chats keeps the preview');
     const deletedRow=page.locator('[data-tree-key="project-chat:'+sourceWorkspace+':'+firstSession+'"]');
-    page.once('dialog',dialog=>dialog.accept());
     await deletedRow.hover();
-    await deletedRow.getByRole('button',{name:/Удалить чат/}).click();
+    await deletedRow.locator('.tree-action.is-danger').click();
+    await deletedRow.locator('.tree-action.is-danger').click();
     await page.waitForFunction(session=>RNAssistantWorkspaceChat.selectedSession('preview-plugin-workspace')===session,secondSession);
     assert.equal(await frame.getAttribute('data-route-probe'),'same-instance',
       'deleting the selected chat opens another source chat without replacing the preview');

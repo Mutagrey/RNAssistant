@@ -75,7 +75,9 @@ const { spawn } = require('node:child_process'), { chromium } = require('playwri
       state.chatSyncPromise = new Promise(resolve => window.releaseSync = resolve);
     });
     await row.hover();
-    await row.getByRole('button', { name: 'Удалить чат', exact: true }).click();
+    const deleteAction = row.locator('.tree-action.is-danger');
+    await deleteAction.click();
+    await deleteAction.click();
     await page.waitForFunction(() => state.chatDeletions['preview-summary']);
     assert.match(await row.innerText(), /Удаление…/, 'pending state starts before the navigation queue drains');
     assert.equal(await row.getByRole('button', { name: 'Удаление…', exact: true }).isDisabled(), true);
@@ -92,7 +94,8 @@ const { spawn } = require('node:child_process'), { chromium } = require('playwri
     assert.equal(await row.getByRole('button', { name: 'Удалить чат', exact: true }).isEnabled(), true);
     assert.match(await page.locator('#logBox').textContent(), /Удаление не выполнено/);
 
-    await row.getByRole('button', { name: 'Удалить чат', exact: true }).click();
+    await deleteAction.click();
+    await deleteAction.click();
     await page.waitForFunction(() => window.deleteRequests === 2);
     assert.equal(await row.count(), 1, 'the row stays until native confirmation');
     await page.evaluate(() => finishDelete());

@@ -213,20 +213,22 @@ select:not([multiple]):not([size]) { appearance: none; padding-inline-end: 34px;
 .navigation-tree-badge { flex: none; color: var(--ink-muted); font-size: 10px; }
 .navigation-tree-badge.is-warning, .navigation-tree-badge.is-critical { color: var(--warning); }
 .navigation-tree .navigation-tree-label { flex: 1; min-width: 0; min-height: 0; display: block; padding: 0; text-align: left; white-space: nowrap; overflow: hidden; border: 0; border-radius: 0; background: none; font: inherit; color: inherit; }
+.navigation-tree-row:is(:hover, :focus-within, .is-focused) > .navigation-tree-label { padding-right: calc(var(--tree-action-count, 0) * (var(--shell-group-action) + var(--shell-group-action-gap)) + var(--tree-gap)); }
 .navigation-tree .navigation-tree-label-text { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .navigation-tree .navigation-tree-label.is-scrolling .navigation-tree-label-text { width: max-content; overflow: visible; text-overflow: clip; will-change: transform; }
 .navigation-tree-item + .navigation-tree-item > .navigation-tree-row.is-group { margin-top: 3px; }
 .navigation-tree-row.is-group .navigation-tree-label { color: var(--ink-muted); font-size: 11px; }
 .navigation-tree .tree-trailing { position: relative; display: flex; flex: none; align-items: center; gap: var(--tree-gap); }
-.navigation-tree .tree-actions { position: absolute; z-index: 1; top: 50%; right: 100%; display: flex; visibility: hidden; pointer-events: none; align-items: center; gap: 0; transform: translateY(-50%); background: var(--surface-hover); }
-.navigation-tree-row:hover .tree-actions, .navigation-tree-row.selected .tree-actions, .navigation-tree-row:focus-within .tree-actions, .navigation-tree-row.is-focused .tree-actions { visibility: visible; pointer-events: auto; }
+.navigation-tree .tree-actions { position: absolute; z-index: 1; top: 50%; right: 100%; display: flex; visibility: hidden; pointer-events: none; align-items: center; gap: var(--shell-group-action-gap); transform: translateY(-50%); background: var(--surface-hover); }
+.navigation-tree-row:hover .tree-actions, .navigation-tree-row:focus-within .tree-actions, .navigation-tree-row.is-focused .tree-actions { visibility: visible; pointer-events: auto; }
 .navigation-tree-row.selected .tree-actions { background: var(--surface-selected); }
 .navigation-tree .tree-actions.has-menu { position: static; transform: none; margin-block: calc(-1 * var(--tree-parent-inset)); background: transparent; }
-.navigation-tree .tree-action { box-sizing: border-box; display: grid; place-items: center; width: 24px; min-width: 24px; height: 26px; min-height: 0; padding: 5px; border: 0; border-radius: 6px; background: transparent; color: var(--ink-muted); }
+.navigation-tree .tree-action { box-sizing: border-box; display: grid; place-items: center; width: var(--shell-group-action); min-width: var(--shell-group-action); height: var(--shell-control); min-height: 0; padding: 0; border: 0; border-radius: var(--shell-radius); background: transparent; color: var(--ink-muted); }
 .navigation-tree .tree-action:hover { color: var(--ink); background: var(--surface-selected); }
 .navigation-tree .tree-action.is-danger:hover { color: var(--danger); }
+.navigation-tree .tree-action.is-confirming { color: var(--danger); background: var(--danger-soft); }
 .navigation-tree .tree-action:focus-visible { outline-offset: -2px; }
-.navigation-tree .tree-action svg { width: 13px; height: 13px; }
+.navigation-tree .tree-action svg { width: var(--shell-group-action-icon); height: var(--shell-group-action-icon); }
 .tree-status { flex-shrink: 0; width: 7px; height: 7px; margin: 0 10px 0 4px; border-radius: 50%; background: var(--accent); }
 .tree-run { width: 13px; height: 13px; border: 1.5px solid var(--line-strong); border-top-color: var(--accent); border-right-color: var(--accent); background: none; }
 .tree-attention { background: var(--warning); }
@@ -242,6 +244,7 @@ select:not([multiple]):not([size]) { appearance: none; padding-inline-end: 34px;
 @keyframes tree-spin { to { transform: rotate(360deg); } }
 @media (hover: none) {
   .navigation-tree .tree-actions { position: static; transform: none; visibility: visible; pointer-events: auto; margin-block: -4px; background: transparent; }
+  .navigation-tree-row:focus-within > .navigation-tree-label { padding-right: 0; }
 }
 @media (pointer: coarse) {
   .navigation-tree-row, [data-density="compact"] .navigation-tree-row { min-height: 40px; }

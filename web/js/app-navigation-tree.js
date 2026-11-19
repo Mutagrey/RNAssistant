@@ -3,6 +3,7 @@
 
   var mounts = new WeakMap();
   var positions = Object.create(null);
+  var confirmations = new WeakMap();
   var sequence = 0;
   function icon(name) { return window.RNAssistantIcons.render(name); }
 
@@ -35,6 +36,7 @@
     var record = { root: root, nodes: new Map(), rows: new Map(), events: new AbortController(), options: options };
     var selected = null;
     var prefix = root.id || "navigation-tree-" + (++sequence);
+    var confirmKeys = new Set();
     var marquee = null, hoveredRow = null;
 
     function indexNodes(items) {
@@ -61,9 +63,14 @@
       if (!row || window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
       var label = row.querySelector(".navigation-tree-label"), copy = label && label.firstElementChild;
       if (!copy || !copy.animate) return;
-      var actions = row.querySelector(".tree-actions"), labelRect = label.getBoundingClientRect();
-      var visibleWidth = actions && getComputedStyle(actions).position === "absolute"
-        ? Math.max(1, Math.min(label.clientWidth, actions.getBoundingClientRect().left - labelRect.left - 4)) : label.clientWidth;
+      var actions = row.querySelector(".tree-actions"), labelRect = label.getBoundingClientRect(), actionEdge = null;
+      if (actions) Array.from(actions.querySelectorAll(".tree-action")).forEach(function (action) {
+        var rect = action.getBoundingClientRect();
+        if (getComputedStyle(action).visibility !== "hidden" && rect.width)
+          actionEdge = actionEdge === null ? rect.left : Math.min(actionEdge, rect.left);
+      });
+      var visibleWidth = actionEdge === null ? label.clientWidth :
+        Math.max(1, Math.min(label.clientWidth, actionEdge - labelRect.left - 4));
       if (copy.scrollWidth <= visibleWidth + 1) return;
       var current = marquee = { row: row, label: label, copy: copy, tooltip: label.title, timer: null, animation: null };
       current.timer = window.setTimeout(function () {
@@ -85,6 +92,19 @@
       if (marquee && marquee.row === row) return;
       stopMarquee();
       if (row) startMarquee(row);
+    }
+
+    function actionKey(node, action, index) { return node.key + "|" + index + "|" + action.title; }
+    function paintAction(button, action, confirming) {
+      button.classList.toggle("is-confirming", !!confirming);
+      button.title = confirming ? action.confirmTitle : action.title;
+      button.setAttribute("aria-label", button.title);
+      button.innerHTML = confirming ? action.confirmIconHtml || icon("check") : action.iconHtml || "";
+    }
+    function clearConfirmation() {
+      var pending = confirmations.get(root);
+      if (pending && pending.button && pending.button.isConnected) paintAction(pending.button, pending.action, false);
+      confirmations.delete(root);
     }
 
     function build(items, depth, parentKey) {
@@ -160,18 +180,23 @@
           appendTrailing(status);
         }
         if (node.actions && node.actions.length) {
-          var actions = element("span", "tree-actions" + (node.actions.length === 1 && node.actions[0].menu ? " has-menu" : ""));
+          var visibleActions = node.actions.filter(function (action) { return !action.hidden; });
+          var staticMenu = visibleActions.length === 1 && visibleActions[0].menu;
+          var actions = element("span", "tree-actions" + (staticMenu ? " has-menu" : ""));
+          row.style.setProperty("--tree-action-count", String(staticMenu ? 0 : visibleActions.length));
           node.actions.forEach(function (action, actionIndex) {
             if (action.hidden) return;
             var button = element("button", "tree-action" + (action.danger ? " is-danger" : ""));
             button.type = "button";
             button.tabIndex = -1;
             button.disabled = !!action.disabled;
-            button.title = action.title;
-            button.setAttribute("aria-label", action.title);
             button.dataset.treeAction = String(actionIndex);
+            var key = action.confirmTitle ? actionKey(node, action, actionIndex) : "";
+            var pending = key && confirmations.get(root);
+            if (key) confirmKeys.add(key);
+            if (key) button.dataset.treeConfirmKey = key;
             if (action.menu) { button.setAttribute("aria-haspopup", "menu"); button.setAttribute("aria-expanded", "false"); }
-            button.innerHTML = action.iconHtml || "";
+            paintAction(button, action, !!pending && pending.key === key);
             actions.appendChild(button);
           });
           appendTrailing(actions);
@@ -194,6 +219,8 @@
     root.replaceChildren();
     if (!nodes.length && options.emptyText !== "") root.appendChild(element("p", "tree-empty", options.emptyText || "Ничего не найдено"));
     else root.appendChild(build(nodes, 1, ""));
+    var retainedConfirmation = confirmations.get(root);
+    if (retainedConfirmation && !confirmKeys.has(retainedConfirmation.key)) confirmations.delete(root);
     mounts.set(root, record);
 
     function visibleRows() {
@@ -271,7 +298,20 @@
       if (actionButton) {
         var node = record.nodes.get(item.dataset.treeKey);
         var action = node.actions[Number(actionButton.dataset.treeAction)];
-        if (action && !action.disabled && typeof action.onClick === "function") action.onClick(node, actionButton);
+        if (!action || action.disabled || typeof action.onClick !== "function") return;
+        var key = actionButton.dataset.treeConfirmKey, pending = confirmations.get(root);
+        if (action.confirmTitle) {
+          if (!key || !pending || pending.key !== key) {
+            clearConfirmation();
+            confirmations.set(root, { key: key, action: action, button: actionButton });
+            paintAction(actionButton, action, true);
+            actionButton.focus({ preventScroll: true });
+            return;
+          }
+          confirmations.delete(root);
+          paintAction(actionButton, action, false);
+        } else clearConfirmation();
+        action.onClick(node, actionButton);
         return;
       }
       if (event.target.closest("[data-tree-toggle]")) toggle(item, !record.nodes.get(item.dataset.treeKey).expanded);
@@ -301,6 +341,12 @@
     });
     var search = "", searchAt = 0;
     on("keydown", function (event) {
+      var pending = confirmations.get(root);
+      if (event.key === "Escape" && pending) {
+        clearConfirmation();
+        event.preventDefault(); event.stopPropagation();
+        return;
+      }
       if (event.target.closest(".tree-action")) return;
       if ((event.key === "Enter" || event.key === " ") && event.target.closest("button")) return;
       var item = event.target.closest('[role="treeitem"]');
@@ -344,6 +390,7 @@
     if (positionKey) positions[positionKey] = { focusKey: focused && focused.dataset.treeKey, scroll: root.scrollTop };
     record.events.abort();
     record.stopMarquee();
+    confirmations.delete(root);
     mounts.delete(root);
   }
 

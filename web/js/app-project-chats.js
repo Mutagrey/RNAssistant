@@ -109,6 +109,12 @@
     return (entry.chats || []).some(function (chat) { return runBlocksDeletion(chatRunStatus(entry, chat)); }) ||
       entry.workspaceId === projectId() && !!currentId() && runBlocksDeletion(runStatus());
   }
+  function projectMoreAction(entry, groupScope) {
+    var action = RNAssistantActionMenu.treeActions("Другие действия проекта «" + entry.name + "»", [
+      RNAssistantChatGroups.createAction(groupScope)
+    ])[0];
+    return action;
+  }
   function renderTree() {
     var selected = currentId(), needle = query.trim().toLocaleLowerCase("ru");
     var selectedRun = runState();
@@ -147,32 +153,35 @@
             { title: "Переименовать чат", iconHtml: window.RNAssistantNavigationTree.icon("edit"),
               disabled: !entry.available, onClick: function () { rename(entry, chat); } },
             { title: "Удалить чат", iconHtml: window.RNAssistantNavigationTree.icon("trash"), danger: true,
+              confirmTitle: "Подтвердить удаление чата", confirmIconHtml: window.RNAssistantNavigationTree.icon("check"),
               disabled: !entry.available || runBlocksDeletion(runStatus),
               onClick: function () { remove(entry, chat); } }
           ]), workspaceId: entry.workspaceId, sessionId: chat.Id };
       });
       items = RNAssistantChatGroups.decorate(items, entry.chats || [], groupScope, needle);
       if (needle && !ownMatch && !items.length) return null;
-      return { key: "project:" + entry.workspaceId, kind: "parent", alignChildLabels: true,
+      return { key: "project:" + entry.workspaceId, kind: "parent", selectable: true, alignChildLabels: true,
         title: entry.name, selected: entry.workspaceId === projectId() && !currentSnapshot(),
         badge: entry.available ? "" : "нет папки",
         tooltip: entry.rootPath + (entry.available ? "" : " · папка недоступна"),
         iconHtml: window.RNAssistantIcons.render("folder", "project-folder-icon"), expanded: needle ? true : expanded[entry.workspaceId] !== false,
         workspaceId: entry.workspaceId, children: items,
-        actions: RNAssistantActionMenu.treeActions("Действия проекта «" + entry.name + "»", [
-          RNAssistantChatGroups.createAction(groupScope),
-          { title: "Новый чат", iconHtml: window.RNAssistantNavigationTree.icon("plus"),
+        actions: [
+          { title: "Новый чат в «" + entry.name + "»", iconHtml: window.RNAssistantNavigationTree.icon("plus"),
             disabled: !entry.available, onClick: function () { create(entry.workspaceId); } },
-          { title: "Открыть «" + entry.name + "»", iconHtml: window.RNAssistantNavigationTree.icon("external"),
-            onClick: function () { selectProject(entry.workspaceId); } },
+          { title: "Открыть проект «" + entry.name + "»", iconHtml: window.RNAssistantNavigationTree.icon("open"),
+            disabled: !entry.available, onClick: function () { selectProject(entry.workspaceId); } },
           { title: "Удалить историю «" + entry.name + "»", iconHtml: window.RNAssistantNavigationTree.icon("trash"), danger: true,
-            disabled: historyBlocked(entry), onClick: function () { removeHistory(entry); } }
-        ]) };
+            confirmTitle: "Подтвердить удаление истории «" + entry.name + "»", confirmIconHtml: window.RNAssistantNavigationTree.icon("check"),
+            disabled: historyBlocked(entry), onClick: function () { removeHistory(entry); } },
+          projectMoreAction(entry, groupScope)
+        ] };
     }).filter(Boolean);
     window.RNAssistantWorkspaceNavigation.update("projects", nodes, {
       emptyText: query ? "Ничего не найдено" : !catalog ? catalogError ? "Проекты недоступны" : "Загрузка…" : "Добавьте проект через +",
       onSelect: function (item) {
         RNAssistantChatGroups.select(item);
+        if (item.kind === "parent" && item.workspaceId && !item.sessionId) { selectProject(item.workspaceId); return; }
         var entry = projects().find(function (project) { return project.workspaceId === item.workspaceId; });
         if (entry && entry.pluginId && window.RNAssistantPlugins)
           window.RNAssistantPlugins.select(entry.pluginId, item.sessionId);
@@ -222,7 +231,11 @@
     if (selectedWorkspaceId !== workspaceId) { ++serial; selectedWorkspaceId = workspaceId; }
     render();
     var entry = project();
-    if (openFirst !== false && entry.available && entry.chats && entry.chats.length) open(workspaceId, entry.chats[0].Id);
+    if (openFirst === false || !entry.available || !entry.chats || !entry.chats.length) return;
+    var remembered = window.RNAssistantWorkspaceChat.selectedSession(workspaceId);
+    var chat = entry.chats.find(function (item) { return item.Id === remembered; }) || entry.chats[0];
+    switchTab("chat");
+    return setScope("projects", { workspaceId: workspaceId, sessionId: chat.Id });
   }
   async function open(workspaceId, sessionId) {
     selectedWorkspaceId = workspaceId;
@@ -271,7 +284,6 @@
     catch (error) { if (version === serial) notice(error.detail || error.message, true); }
   }
   async function remove(entry, chat) {
-    if (!window.confirm("Удалить чат «" + chat.Title + "»? История этого чата будет удалена; файлы проекта останутся.")) return;
     try { await window.RNAssistantChatDrafts.flushWorkspace({ workspaceId: entry.workspaceId, sessionId: chat.Id });
       await send("deleteProjectChat", { workspaceId: entry.workspaceId, sessionId: chat.Id });
       var currentProject = projects().find(function (item) { return item.workspaceId === entry.workspaceId; });
@@ -298,7 +310,6 @@
       notice(error.detail || error.message, true); }
   }
   async function removeHistory(entry) {
-    if (!window.confirm("Удалить историю проекта «" + entry.name + "» и убрать его из дерева? Папка и файлы останутся.")) return;
     try { await window.RNAssistantChatDrafts.flushAll();
       await send("deleteProjectHistory", { workspaceId: entry.workspaceId });
       if (catalog) {

@@ -1,5 +1,15 @@
 # Дизайн-система и компоненты RNAssistant
 
+## Tree row actions — In Review, 2026-11-19
+
+`NavigationTree` keeps row actions in one right-aligned overlay that appears while the
+row is hovered, focused or keyboard-focused. Project order is `+`, open, delete, `…`;
+chat order is delete, `…`. Label padding is derived from the current action count so
+text ends before the overlay instead of being painted underneath it. Action dimensions
+use the existing shell control/group tokens, 1 px action gaps and the common row radius.
+A destructive action's first click applies the shared confirming state and check icon;
+the second click executes it. No screen-specific sizes are copied into adapters.
+
 ## Prepared replacement diff — In Review, 2026-11-19
 
 `RunChanges.renderPrepared` повторно использует `inline-change` и общий text-diff.

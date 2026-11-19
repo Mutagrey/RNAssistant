@@ -15,7 +15,7 @@ const root=path.resolve(__dirname,'../..');
   for(const name of ['app-icons.js','app-accent.js','app-navigation-tree.js','app-action-menu.js'])await standalone.addScriptTag({path:path.join(root,'web/js',name)});
   await standalone.addScriptTag({path:path.join(root,'web/data-templates/ui/operation-view.js')});
   await standalone.evaluate(()=>{
-   window.calls={select:0,menu:0,cancel:0};
+   window.calls={select:0,menu:0,cancel:0,confirm:0};
    RNAssistantNavigationTree.render(document.getElementById('tree'),[{key:'g',kind:'parent',title:'Проект',expanded:true,iconHtml:RNAssistantIcons.render('folder'),children:[{key:'c',kind:'leaf',title:'Чат',selected:true,iconHtml:RNAssistantIcons.render('chat')}]}],{onSelect:()=>{calls.select++;}});
    document.getElementById('actions').addEventListener('click',function(){RNAssistantActionMenu.open(this,[{label:'Недоступно',disabled:true,onSelect:()=>{throw Error('disabled action');}},{label:'Открыть',icon:'open',onSelect:()=>calls.menu++},{label:'Закрыть',icon:'close',onSelect:()=>calls.menu++}]);});
    const operation=document.getElementById('operation');
@@ -38,7 +38,8 @@ const root=path.resolve(__dirname,'../..');
   await standalone.evaluate(()=>{
    const root=document.createElement('div');root.id='stableTree';root.style.cssText='width:240px;height:96px;overflow:auto';document.body.appendChild(root);
    window.stableNodes=Array.from({length:20},(_,i)=>({key:'row-'+i,kind:'chat',title:'Чат с длинным названием, которое не помещается в боковой панели '+i,
-    selected:i===0,actions:[{title:'Изменить',iconHtml:RNAssistantIcons.render('edit')},{title:'Удалить',iconHtml:RNAssistantIcons.render('trash')}]}));
+    selected:i===0,actions:[{title:'Изменить',iconHtml:RNAssistantIcons.render('edit')},{title:'Удалить',iconHtml:RNAssistantIcons.render('trash'),danger:true,
+      confirmTitle:'Подтвердить удаление',confirmIconHtml:RNAssistantIcons.render('check'),onClick:()=>calls.confirm++}]}));
    RNAssistantNavigationTree.render(root,stableNodes);
   });
   const dimensions=()=>standalone.locator('#stableTree [data-tree-key="row-0"]').evaluate(item=>{
@@ -50,6 +51,12 @@ const root=path.resolve(__dirname,'../..');
   await standalone.locator('#stableTree [data-tree-key="row-0"]').hover();
   assert.deepEqual(await dimensions(),idleDimensions,'hover keeps tree row and label geometry stable');
   assert.equal(await standalone.locator('#stableTree .tree-actions').first().evaluate(n=>getComputedStyle(n).visibility),'visible');
+  const stableDelete=standalone.locator('#stableTree [data-tree-key="row-0"] .tree-action.is-danger');
+  await stableDelete.click();
+  assert.deepEqual(await stableDelete.evaluate(n=>[calls.confirm,n.getAttribute('aria-label'),n.classList.contains('is-confirming')]),[0,'Подтвердить удаление',true],
+   'first destructive click becomes an inline confirmation');
+  await stableDelete.click();
+  assert.equal(await standalone.evaluate(()=>calls.confirm),1,'second destructive click executes once');
   const stableLabel=standalone.locator('#stableTree [data-tree-key="row-0"] .navigation-tree-label');
   assert.equal(await stableLabel.evaluate(n=>n.classList.contains('is-scrolling')),false,'reduced motion keeps the static ellipsis and full tooltip');
   await standalone.mouse.move(500,400);await standalone.emulateMedia({reducedMotion:'no-preference'});

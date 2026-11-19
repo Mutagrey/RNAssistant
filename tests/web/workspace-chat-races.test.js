@@ -259,9 +259,9 @@ const root = path.resolve(__dirname, '../..');
       };
     });
     const sourceRow = page.locator('[data-tree-key="project-chat:preview-plugin-workspace:' + sourceSession + '"]');
-    page.once('dialog', dialog => dialog.accept());
     await sourceRow.hover();
-    await sourceRow.getByRole('button', {name:/Удалить чат/}).click();
+    await sourceRow.locator('.tree-action.is-danger').click();
+    await sourceRow.locator('.tree-action.is-danger').click();
     await page.waitForFunction(() => !!deleteReply.release);
     await page.evaluate(() => RNAssistantProjectChats.open('preview-data-workspace', 'preview-project-review'));
     await page.evaluate(async () => {
@@ -283,9 +283,9 @@ const root = path.resolve(__dirname, '../..');
       };
     });
     const sourceProject = page.locator('[data-tree-key="project:preview-plugin-workspace"]');
-    page.once('dialog', dialog => dialog.accept());
     await sourceProject.locator(':scope > .navigation-tree-row').hover();
-    await sourceProject.locator('button[title^="Удалить историю"]').click();
+    await sourceProject.locator('.tree-action.is-danger').click();
+    await sourceProject.locator('.tree-action.is-danger').click();
     await page.waitForFunction(() => !!historyReply.release);
     await page.evaluate(() => RNAssistantProjectChats.open('preview-data-workspace', 'preview-project-review'));
     await page.evaluate(async () => {
@@ -480,9 +480,9 @@ const root = path.resolve(__dirname, '../..');
         return result;
       };
     });
-    page.once('dialog', dialog => dialog.accept());
     await renamedRow.hover();
-    await renamedRow.getByRole('button', {name:/Удалить чат/}).click();
+    await renamedRow.locator('.tree-action.is-danger').click();
+    await renamedRow.locator('.tree-action.is-danger').click();
     await page.waitForFunction(() => !!deleteCatalogReply.release);
     await page.locator('#projectChatNew').click();
     await page.waitForFunction(previousId => RNAssistantProjectChats.snapshot()?.sessionId?.startsWith('preview-project-') &&
@@ -503,9 +503,9 @@ const root = path.resolve(__dirname, '../..');
       };
     });
     const removedHistoryRow = page.locator('[data-tree-key^="project:"]').filter({hasText:'rna-connected-current'}).first();
-    page.once('dialog', dialog => dialog.accept());
     await removedHistoryRow.locator(':scope > .navigation-tree-row').hover();
-    await removedHistoryRow.locator('button[title^="Удалить историю"]').click();
+    await removedHistoryRow.locator('.tree-action.is-danger').click();
+    await removedHistoryRow.locator('.tree-action.is-danger').click();
     await page.waitForFunction(() => !!historyCatalogReply.release);
     await page.locator('#projectChatNew').click();
     await page.waitForFunction(previousId => RNAssistantProjectChats.snapshot()?.sessionId?.startsWith('preview-project-') &&

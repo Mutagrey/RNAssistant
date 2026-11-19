@@ -443,8 +443,9 @@ async function serve() {
     assert.deepEqual(workspaceIsolation, { crossWorkspace: true, secondCount: 2, firstCount: 3 });
     await normal.locator('#projectChatRefresh').click();
     await normal.locator('#projectChatTree [data-tree-key="project:preview-plan-workspace"] > .navigation-tree-row').hover();
-    normal.once('dialog', dialog => dialog.accept());
-    await normal.locator('#projectChatTree [data-tree-key="project:preview-plan-workspace"] > .navigation-tree-row').getByRole('button', { name: 'Удалить историю «План продаж»' }).click();
+    const planDelete = normal.locator('#projectChatTree [data-tree-key="project:preview-plan-workspace"] > .navigation-tree-row .tree-action.is-danger');
+    await planDelete.click();
+    await planDelete.click();
     await normal.waitForFunction(async () => !(await send('getProjectChats', {})).projects.some(p => p.workspaceId === 'preview-plan-workspace'));
     assert.equal(await normal.locator('#projectChatTree [data-tree-key="project:preview-plan-workspace"]').count(), 0,
       'deleting history removes the workspace from the tree');

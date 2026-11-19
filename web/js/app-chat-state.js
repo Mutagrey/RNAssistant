@@ -936,8 +936,7 @@ function chatDocumentTreeNode(documentItem, query) {
     tooltip: [documentItem.title, documentItem.path, status].filter(Boolean).join(" · "),
     className: documentHostClass(documentItem.host).trim(),
     children: children,
-    actions: RNAssistantActionMenu.treeActions("Действия документа «" + documentItem.title + "»", [
-      RNAssistantChatGroups.createAction(groupScope),
+    actions: [
       { title: "Новый чат", iconHtml: tree.icon("plus"), onClick: function () { createDocumentChat(documentItem); } },
       { title: documentItem.open ? "Активировать документ" : "Открыть документ", iconHtml: tree.icon("open"),
         hidden: !documentItem.open && !documentItem.path,
@@ -947,8 +946,12 @@ function chatDocumentTreeNode(documentItem, query) {
         } },
       { title: "Удалить историю документа", iconHtml: tree.icon("trash"),
         hidden: !documentItem.chats.length, danger: true,
-        onClick: function () { deleteDocument(documentItem.host, documentItem.documentKey, documentItem.title); } }
-    ])
+        confirmTitle: "Подтвердить удаление истории документа", confirmIconHtml: tree.icon("check"),
+        onClick: function () { deleteDocument(documentItem.host, documentItem.documentKey); } },
+      RNAssistantActionMenu.treeActions("Другие действия документа «" + documentItem.title + "»", [
+        RNAssistantChatGroups.createAction(groupScope)
+      ])[0]
+    ]
   };
 }
 
@@ -994,6 +997,7 @@ function chatTreeNode(chat) {
         onClick: function () { renameChat(id); } },
       { title: deleting ? "Удаление…" : activity.active ? "Сначала остановите запрос" : "Удалить чат",
         iconHtml: window.RNAssistantNavigationTree.icon("trash"), danger: true, disabled: activity.active || deleting,
+        confirmTitle: "Подтвердить удаление чата", confirmIconHtml: window.RNAssistantNavigationTree.icon("check"),
         onClick: function () { deleteChat(id); } }
     ]
   };

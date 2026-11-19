@@ -1,5 +1,17 @@
 # Архитектура UI RNAssistant
 
+## Project/chat row actions — In Review, 2026-11-19
+
+`app-project-chats.js` remains the Workspace tree adapter. Project rows expose the
+existing group, new-chat, open and delete-history commands; title selection and the
+direct open command use the same `selectProject` → Workspace scope path, so they
+cannot open a panel under the previous adapter. `app-chat-groups.js` keeps delete as
+the row's direct danger action and groups diagnostics, rename, plugin membership and
+chat groups under the existing `…`. `NavigationTree` renders one right-aligned
+hover/focus action cluster and owns the first-click confirmation state for destructive
+actions. The first click changes presentation only; the second invokes the existing
+command. This state is ephemeral, is not persisted and adds no mutation authority.
+
 ## core.replace confirmation preview — In Review, 2026-11-19
 
 Office `OfficeResourceMutationHandler` и Workspace `FileHandler` строят exact

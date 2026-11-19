@@ -1,5 +1,21 @@
 # План модернизации production UI
 
+## Project/chat row actions — In Review, 2026-11-19
+
+Scope: existing `app-project-chats.js`, `app-chat-groups.js`, shared
+`NavigationTree` and product tree CSS. Project title/open use the existing Workspace
+scope and exact catalog; chats keep the same commands and authority. Presentation adds
+one right-aligned hover/focus action cluster, direct delete and a shared two-click
+confirmation state without a second tree, menu or navigation store.
+
+Focused host-neutral `project-chat-tree-actions.test.js` covers project label/open
+routing, remembered chat selection, action order, direct new/open/delete actions and
+the remaining chat menu. A local Chromium probe verifies the first delete click sends
+no command and the second sends one. Node syntax checks cover changed scripts.
+Chromium/WebView2 wide, 420 px and 125% visual acceptance remain open; Windows/Office
+qualification is not claimed.
+Rollback is this scoped JS/CSS/docs diff.
+
 ## core.replace confirmation preview — In Review, 2026-11-19
 
 Scope: existing Office/Workspace preparation и общий pending approval. Runtime

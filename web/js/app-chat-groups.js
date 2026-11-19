@@ -136,25 +136,31 @@
       ids.forEach(function (id) {
         var original = byId.get(id); if (!original || entries.has(id)) return;
         var node = Object.assign({}, original), oldActions = original.actions || [];
+        var destructive = oldActions.filter(function (action) { return action.danger; }).map(function (action) {
+          var direct = Object.assign({}, action);
+          if (group) {
+            direct.title = "Удалить чат везде";
+            direct.confirmTitle = "Подтвердить удаление чата везде";
+          }
+          return direct;
+        });
         node.chatGroupScope = key(scope);
         node.iconHtml = group ? RNAssistantAgentCommunication.marker(id) : "";
         node.key = group ? original.key + ":group:" + group.id : original.key;
-        node.actions = [menuAction("Действия чата «" + node.title + "»", function (target, button) {
+        var more = menuAction("Другие действия чата «" + node.title + "»", function (target, button) {
           var items = oldActions.filter(function (action) { return !action.hidden; }).map(function (action) {
-            return { label: group && action.danger ? "Удалить чат везде" : action.title,
+            return { label: action.title,
               disabled: action.disabled, danger: action.danger, iconHtml: action.iconHtml,
               onSelect: function () { action.onClick(target, button); } };
-          });
-          var destructive = items.filter(function (item) { return item.danger; });
-          items = items.filter(function (item) { return !item.danger; });
+          }).filter(function (item) { return !item.danger; });
           items.push({ separator: true }, { label: "Группы чата…", icon: "group", disabled: disabled(scope),
             onSelect: function () { membershipMenu(scope, id, button); } });
           if (group) items.push({ label: "Убрать из группы", icon: "close", disabled: disabled(scope),
             onSelect: function () { change(scope, "Remove", group, { members: [id] }); } });
-          if (destructive.length) items = items.concat([{ separator: true }], destructive);
           if (view.error) items.push({ label: view.error, disabled: true, icon: false });
           return items;
-        })];
+        });
+        node.actions = destructive.concat([more]);
         entries.set(id, node);
       });
       var roots = [];

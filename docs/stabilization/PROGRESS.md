@@ -20,6 +20,21 @@
 Power Query native API, WebView2 JS executor CPU/cancellation и live-model A/B остаются
 открытым evidence. Playwright UI fixtures в текущем workspace не запускались.
 
+## Project/chat tree row actions — In Review, 2026-11-19
+
+Implemented host-neutral, `17.6.11-dev`. Project title selection and the direct open
+action now share the Workspace `selectProject` path, including the remembered chat,
+instead of leaving the previous chat adapter mounted. Rows expose one right-aligned
+hover/focus action cluster in `+ / open / delete / …` order; chat rows expose delete
+and `…`, while diagnostics, rename, plugin and group membership stay under `…`. Shared
+NavigationTree owns action spacing and the first-click destructive confirmation.
+
+Check: `node tests/web/project-chat-tree-actions.test.js` passes label/open routing,
+remembered selection and action/menu separation; changed scripts pass `node --check`.
+A headless Chromium probe verifies the right-aligned order, 1 px gaps, first delete
+click producing confirmation with zero command and the second producing one command.
+WebView2 wide/narrow/125% acceptance remains open.
+
 ## Static chat HTML and isolated interactive execution — In Review, 2026-11-19
 
 Implemented / In Review, `17.6.9-dev`. The static presentation is host-neutral;
