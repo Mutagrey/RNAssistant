@@ -11,6 +11,13 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.6.18-dev
+
+- Материалы показывают первый кадр не более чем за 50 строк и раскрывают уже
+  загруженные элементы следующими пачками по 50 без повторного bridge-чтения.
+  Render дерева HTML-workspace переиспользует зависимости до изменения состава,
+  содержимого, ревизии или активного HTML-материала.
+
 ### 17.6.17-dev
 
 - Audit/GC CAS и очистка runtime data выполняются на bridge worker, а `Bootstrap`

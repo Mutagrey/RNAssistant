@@ -128,9 +128,11 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       RNAssistantArtifactCatalog.show();
     });
     await page.locator('#artifactCatalogStatus').filter({hasText:'Показаны первые 500'}).waitFor();
-    assert.equal(await page.locator('#htmlWorkspaceTree [data-tree-key^="catalog::"]').count(),500,'bounded metadata rendering');
-    assert.equal(await page.locator('#artifactCatalogMore').isVisible(),false,'bound is explicit, not an endless append');
+    assert.equal(await page.locator('#htmlWorkspaceTree [data-tree-key^="catalog::"]').count(),50,'first render is bounded to 50 materials');
+    assert.equal(await page.locator('#artifactCatalogMore').isVisible(),true,'loaded overflow remains reachable without another bridge read');
+    await page.locator('#artifactCatalogMore').click();
+    await page.waitForFunction(()=>document.querySelectorAll('#htmlWorkspaceTree [data-tree-key^="catalog::"]').length===100);
     assert.equal(errors.length, 0, errors.join("\n"));
-    console.log("PASS material source: 1100/420 px, exact HTML targets, keyboard selection, independent drafts, search/error/stale and 500-item bounds");
+    console.log("PASS material source: 1100/420 px, exact HTML targets, keyboard selection, independent drafts, search/error/stale and progressive 50/500 bounds");
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

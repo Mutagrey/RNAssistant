@@ -5,6 +5,7 @@
   var selected = null, editorNavigation = false, collapsed = {}, loading = false;
   var overviewLoading = false, overviewError = "", queryDirty = false, catalogNotice = "";
   var maximumCatalogItems = 500;
+  var catalogRenderStep = 50, renderLimit = catalogRenderStep;
   var overviewSort = { key: "updated", descending: true };
   function el(id) { return document.getElementById("artifactCatalog" + id); }
   function node(tag, text, className) {
@@ -20,13 +21,21 @@
       search: $("artifactNavSearch"), title: "Материалы", commands: $("artifactCreateCommands"),
       commandLabel: "Добавить материал", status: el("Status"), more: el("More")
     }, { searchDelay: 200, onQueryPending: function () { generation++; loading = false; queryDirty = true; },
-      onQuery: function () { if (typeof isPanelActive !== "function" || isPanelActive("artifacts")) load(); }, onRetry: function () { load(); }, onMore: function () { if (!loading && next) load(next); } });
+      onQuery: function () { if (typeof isPanelActive !== "function" || isPanelActive("artifacts")) load(); }, onRetry: function () { load(); },
+      onMore: function () {
+        if (response && response.items.length > renderLimit) {
+          renderLimit = Math.min(response.items.length, renderLimit + catalogRenderStep);
+          renderOverview(); render(); navigationState(); return;
+        }
+        if (!loading && next) load(next);
+      } });
     return navigationPane;
   }
   function navigationState() {
     var message = el("Status").textContent;
     navigation().setState({ busy: loading, message: catalogNotice && message.indexOf(catalogNotice) < 0 ?
-      [message, catalogNotice].filter(Boolean).join("\n") : message, retry: !!overviewError, more: !!next });
+      [message, catalogNotice].filter(Boolean).join("\n") : message, retry: !!overviewError,
+      more: !!next || !!(response && response.items.length > renderLimit) });
   }
   function status(text) { el("Status").textContent = text || ""; el("Message").textContent = text || ""; navigationState(); }
   function icon(item) {
@@ -46,8 +55,15 @@
   }
   function sourceChatTitle(item) {
     if (item.sourceChatTitle) return item.sourceChatTitle;
-    var source = (state.chats || []).find(function (chat) { return (chat.Id || chat.id) === item.sourceChatId; });
+    var source = sourceChatTitles()[item.sourceChatId];
     return source && (source.Title || source.title) || (item.sourceChatId ? "Чат " + item.sourceChatId.slice(0, 8) : "Чат не указан");
+  }
+  var chatTitleCache = { chats: null, value: null };
+  function sourceChatTitles() {
+    if (chatTitleCache.chats === state.chats && chatTitleCache.value) return chatTitleCache.value;
+    var value = Object.create(null);
+    (state.chats || []).forEach(function (chat) { value[chat.Id || chat.id] = chat; });
+    chatTitleCache.chats = state.chats; chatTitleCache.value = value; return value;
   }
   function overviewDate(value) {
     var date = new Date(value);
@@ -66,18 +82,18 @@
   }
   function renderOverview() {
     var overview = el("Overview"), rows = el("OverviewRows");
-    if (!overview) return;
+    if (!overview || !rows) return;
     overview.hidden = false;
     if (!selected) el("All").setAttribute("aria-current", "page");
     else el("All").removeAttribute("aria-current");
 
-    rows.replaceChildren();
+    var fragment = document.createDocumentFragment();
     document.querySelectorAll("#artifactCatalogOverviewTable [data-artifact-sort-head]").forEach(function (head) {
       var key = head.getAttribute("data-artifact-sort-head");
       if (key === overviewSort.key) head.setAttribute("aria-sort", overviewSort.descending ? "descending" : "ascending");
       else head.removeAttribute("aria-sort");
     });
-    var items = !overviewLoading && !overviewError && response && response.items || [];
+    var items = !overviewLoading && !overviewError && response && response.items ? response.items.slice(0, renderLimit) : [];
     items.forEach(function (item) {
       var row = document.createElement("tr"), name = document.createElement("td"), open = node("button", "", "rna-table-link artifact-overview-link");
       open.type = "button";
@@ -92,13 +108,10 @@
       row.appendChild(dateCell);
       row.tabIndex = 0;
       row.setAttribute("aria-label", "Открыть материал «" + item.title + "»");
-      row.addEventListener("click", function () { select(item.resourceUri); });
-      row.addEventListener("keydown", function (event) {
-        if (event.target !== row || event.key !== "Enter" && event.key !== " ") return;
-        event.preventDefault(); select(item.resourceUri);
-      });
-      rows.appendChild(row);
+      row.dataset.artifactUri = item.resourceUri;
+      fragment.appendChild(row);
     });
+    rows.replaceChildren(fragment);
     el("OverviewTable").hidden = !items.length;
     el("OverviewEmpty").hidden = !!items.length;
     el("OverviewEmpty").textContent = overviewError || (overviewLoading ? "Загрузка материалов…" :
@@ -116,7 +129,7 @@
   function backToOverview() {
     if (!canMutate()) return false;
     selected = null;
-     renderOverview(); render();
+    render();
     return true;
   }
   function editorItem(artifact) {
@@ -132,7 +145,7 @@
   function editor(artifact, preserveOverview) {
 
     selected = editorItem(artifact); editorNavigation = true;
-    renderOverview(); renderOverview();
+    if (!preserveOverview) renderOverview();
   }
   function sync() {
     if (chat !== state.activeChatId) {
@@ -152,7 +165,7 @@
     var id = state.activeChatId, nav = state.chatNavigationVersion, version = ++generation;
     if (!id) { response = null; next = null; loading = false; selected = null; overviewError = ""; overviewLoading = false; catalogNotice = "";
        renderOverview(); status("Откройте или создайте чат документа."); render(); return; }
-    if (!cursor) next = null;
+    if (!cursor) { next = null; renderLimit = catalogRenderStep; }
     queryDirty = false; chat = id; loading = true; overviewLoading = !cursor; overviewError = ""; catalogNotice = "";
     status("Загрузка…"); el("More").hidden = true; renderOverview();
     try {
@@ -167,11 +180,12 @@
       response = result; next = limited ? null : result.nextCursor;
       // A filter changes the tree, never the already opened exact resource.
       if (selected) selected = result.items.find(function (item) { return item.resourceUri === selected.resourceUri; }) || selected;
-      el("More").hidden = !next;
+      if (cursor) renderLimit = Math.min(maximumCatalogItems, Math.max(renderLimit, result.items.length));
+      el("More").hidden = !next && result.items.length <= renderLimit;
       catalogNotice = limited ? "Показаны первые " + maximumCatalogItems + " материалов. Уточните поиск или фильтр." : "";
       status(result.items.length ? "" : "Артефакты не найдены.");
       if (!selected) editor(null, true);
-      renderOverview(); render();
+      render();
     } catch (error) {
       if (current(id, nav) && version === generation) {
         overviewError = error.detail || error.message || "Не удалось загрузить материалы.";
@@ -206,7 +220,7 @@
   async function copyItem(item, button, listed) {
     var copied = await mutate("copyArtifact", { chatId: listed.chatId, expectedSessionRevision: listed.sessionRevision,
       documentId: item.documentId, resourceUri: item.resourceUri, operationId: operationId() }, button);
-    if (copied) { editor(); render(); }
+    if (copied) { editor(null, true); render(); }
     return copied;
   }
   function remove(item, listed, button) {
@@ -291,7 +305,7 @@
       if (!chats[key]) { chats[key] = makeGroup(key, sourceChatTitle(item), "chat"); parent.children.push(chats[key]); }
       return chats[key];
     }
-    response.items.forEach(function (item) {
+    response.items.slice(0, renderLimit).forEach(function (item) {
       var artifact = localArtifact(item), artifactId = artifact && (artifact.Id || artifact.id);
       if (artifactId) byId[artifactId] = item.resourceUri;
       var entry = { key: "catalog::" + item.resourceUri, itemType: "artifact", itemId: item.resourceUri,
@@ -344,7 +358,7 @@
       if (!current(id, nav) || RNAssistantHtmlWorkspaceSurface.isDirty(state.activeChatId)) return;
       var result = await send("importArtifact", { chatId: id, expectedSessionRevision: catalogState.sessionRevision, uploadLeaseId: lease.leaseId, operationId: operationId() });
       if (!current(id, nav)) return;
-      applyChatStateForChat(result, id); editor(); show("chat");
+      applyChatStateForChat(result, id); editor(null, true); show("chat");
     } catch (error) { if (current(id, nav)) status(error.detail || error.message); }
     finally { pending = false; renderOverview(); if (lease) await send("closeArtifactTransfer", { chatId: id, leaseId: lease.leaseId }).catch(function () {}); }
   }
@@ -360,6 +374,17 @@
   el("All").addEventListener("click", backToOverview);
   el("Import").addEventListener("click", function () { if (canMutate()) el("File").click(); });
   el("File").addEventListener("change", function () { var file = this.files[0]; this.value = ""; importFile(file); });
+  var overviewRows = el("OverviewRows");
+  if (overviewRows) {
+    overviewRows.addEventListener("click", function (event) {
+      var row = event.target.closest("tr[data-artifact-uri]"); if (row) select(row.dataset.artifactUri);
+    });
+    overviewRows.addEventListener("keydown", function (event) {
+      var row = event.target.closest("tr[data-artifact-uri]");
+      if (!row || event.target !== row || event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault(); select(row.dataset.artifactUri);
+    });
+  }
   window.RNAssistantArtifactCatalog = { show: show, editor: editor, sync: sync, changeLink: changeLink,
     commands: function (target) {
       var item = response && target.chatId === state.activeChatId && response.chatId === target.chatId &&

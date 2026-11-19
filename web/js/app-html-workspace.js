@@ -3,6 +3,7 @@
   // Catalog metadata is selected; editable working copies belong to addressed Dock views.
   var htmlPreview = RNAssistantHtmlWorkspacePreview, workspaceArtifacts = RNAssistantHtmlWorkspaceArtifacts;
   var workspaceTree = RNAssistantHtmlWorkspaceTree, workspaceModel = RNAssistantHtmlWorkspaceModel.create(state);
+  var dependencyCache = { workspace: null, editVersion: -1, activeArtifactId: "", files: "", value: [] };
   var prop = workspaceModel.prop;
   var workspace = workspaceModel.workspace;
   var files = workspaceModel.files;
@@ -53,6 +54,18 @@
     };
   }
 
+  function workspaceDependencies() {
+    var current = workspace(), editVersion = state.htmlWorkspaceEditVersion || 0, activeArtifactId = state.activeHtmlArtifactId || "";
+    var signature = files().map(function (file) { return filePath(file) + ":" + fileContent(file).length; }).join("|");
+    if (dependencyCache.workspace !== current || dependencyCache.editVersion !== editVersion ||
+        dependencyCache.activeArtifactId !== activeArtifactId || dependencyCache.files !== signature) {
+      dependencyCache.workspace = current; dependencyCache.editVersion = editVersion;
+      dependencyCache.activeArtifactId = activeArtifactId; dependencyCache.files = signature;
+      dependencyCache.value = htmlPreview.dependencies(files());
+    }
+    return dependencyCache.value;
+  }
+
   function renderHtmlWorkspaceList() {
     if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.sync();
     var search = $("artifactNavSearch");
@@ -66,7 +79,7 @@
       query: search ? search.value : "",
       files: files().map(workspaceTreeFile),
       dataSources: dataSources().map(workspaceTreeData),
-      dependencies: htmlPreview.dependencies(files()),
+      dependencies: workspaceDependencies(),
       artifacts: libraryArtifacts.map(workspaceTreeArtifact),
       plans: latestPlanArtifacts().map(workspaceTreeArtifact),
       selected: state.htmlWorkspaceSelection || {},

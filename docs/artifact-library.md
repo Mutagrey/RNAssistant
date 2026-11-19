@@ -139,6 +139,9 @@ table row/tree item/chat card opens the same addressed object view. **Все м�
 returns to the table without closing independent views. Saved HTML uses the common
 Browser with **Страница / Исходник**, file selection and paged TextViewer with the shared readonly CodeMirror. The live
 editor is explicit. Shared Markdown/text/JSON viewers remain owned by MaterialView.
+The UI progressively paints 50 loaded rows/tree entries at a time while retaining the
+existing 500-item aggregate bound; revealing local overflow does not repeat the bridge
+catalog read.
 The catalog reads registered local document
 authorities, including closed documents; it is not another durable inventory. Bodies
 are loaded on demand. Enumeration still scans retained metadata; response pagination
