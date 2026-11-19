@@ -16,6 +16,21 @@
 Power Query native API, WebView2 JS executor CPU/cancellation и live-model A/B остаются
 открытым evidence. Playwright UI fixtures в текущем workspace не запускались.
 
+## Browser discovery, read, input and media regressions — Resolved host-neutral, 2026-11-19
+
+Implemented `17.6.13-dev`. Current-run `core.find` results are admitted through their
+actual `user` tool-result role, live reads report returned characters, and unlabeled
+textboxes use visible `placeholder`/`title` semantic names. Unknown effects now return
+the typed `browser_effect_unknown` close/reopen requirement without retry. Standalone
+Workspace media is linked through the canonical attachment owner, persisted through the
+conversation journal as a narrow typed input, delivered once to a vision model, and
+released after that model step.
+
+Checks: `external browser:` 9/9, `local browser:` 18/18, `journal attachments:` 3/3,
+`journal history:` 5/5, `journal text:` 4/4, `journal resources:` 3/3 and focused agent
+media cases pass. Static preview trusted/synthetic activation emits no network request.
+Windows x64 / Office x64 / WebView2 native input and visual qualification remain open.
+
 ## Project/chat tree row actions — In Review, 2026-11-19
 
 Implemented host-neutral, `17.6.11-dev`. Project title selection and the direct open

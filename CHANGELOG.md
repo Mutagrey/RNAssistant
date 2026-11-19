@@ -11,6 +11,15 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.6.13-dev
+
+- Browser снова проходит полный локальный сценарий после `core.find`: открытие
+  использует фактический формат tool result, чтение показывает реальное число
+  символов, а поля без label доступны по `placeholder`/`title`. Unknown effect
+  теперь требует явного close/reopen, request-scoped изображения корректно
+  проходят journal и доставляются модели один раз. Ссылки в static HTML preview
+  не создают сетевой переход при trusted click, keyboard или synthetic activation.
+
 ### 17.6.12-dev
 
 - Вызовы инструментов снова видны в Workspace и чатах плагинов во время
