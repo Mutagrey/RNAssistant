@@ -32,7 +32,7 @@ copies only the requested architecture's pair into `lib`, which is the
 loader's matching fallback. Never copy the x64 pair into an x86 package. Exact
 Windows x86 import, page preview, scanned-page rendering and image-capable model
 sending remain qualification gates despite the complete package wiring. See the exact
-[PDF bitness boundary](../../docs/dependencies.md#pdf-bitness-boundary).
+[PDF bitness boundary](../../docs/dependencies.md#native-rendering-bitness-boundary).
 
 Each publish replaces current product files and removes stale files recorded in
 `.rnassistant-portable-files`. It preserves unrelated files and directories,

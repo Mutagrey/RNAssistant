@@ -1,6 +1,6 @@
 # RNAssistant backlog
 
-## Current Harness regression sweep — observed 2026-11-18
+## Harness regression sweep — observed 2026-11-18
 
 Owner: Harness fixtures, Workspace steering and plugin run lifetime. On `e5190c97`
 the Harness and MockDemo builds pass; focused `markdown analysis:`,
@@ -8,7 +8,9 @@ the Harness and MockDemo builds pass; focused `markdown analysis:`,
 failures, then `plugins: admitted run cancellation and shutdown belong to application`
 does not complete even when run alone; the process remains blocked in a wait past the
 local 60-second check. This is not Windows evidence and does not yet distinguish a
-runtime deadlock from a fixture wait.
+runtime deadlock from a fixture wait. This is a dated observation, not a claim about the
+current `main` after `150e8854`: the full Harness has not been rerun here. Treat it as
+open baseline evidence until the exact filters are checked again.
 
 The seven failures also reproduce on `650aa2d6` and the UI parent `7294e45d`, so they
 are older than the Markdig and Power Query commits:
@@ -30,7 +32,8 @@ are older than the Markdig and Power Query commits:
   events before persisting its synthetic chat, so trace admission correctly fails.
 - `text search: default directory browse through runtime`: the fixture invoked the
   changed private `ResourceSchema` signature with four instead of five parameters;
-  this fixture drift was corrected and the focused case now passes.
+  this fixture drift was corrected after the sweep and the focused case now passes, so
+  a future full run should not automatically reproduce all seven entries above.
 
 Do not weaken the publication, persistence or concurrency guards to make these
 fixtures pass. Re-check each owner after migrating the fixture to the current

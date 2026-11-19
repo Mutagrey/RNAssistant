@@ -33,10 +33,10 @@
 - [PreviewSurface](../../web/js/app-preview-surface.js): `attach/watch/waiting/fail/clear`;
   общие location, status, reload и actions. `iframe.load` означает загрузку frame,
   а не доказательство бизнес-эффекта или выполнения всего JS.
-- [BrowserObjectView](../../web/js/app-browser-object-view.js): `create/load/reload/stop`;
+- `BrowserObjectView` (removed in the later Shell migration): `create/load/reload/stop`;
   lazy load, abort/generation, late value disposal, retained ready DOM. Это UI lifetime,
   не будущий BrowserSession service.
-- [HtmlArtifactView](../../web/js/app-html-artifact-view.js): `load/create/renderSource/mode`.
+- `HtmlArtifactView` (removed in the later Shell migration): `load/create/renderSource/mode`.
   `exportArtifact(preview:true)` → bounded download → `HtmlResourceExport.fromArtifactViews`
   → `HtmlWorkspacePreview.build` → iframe. `closeArtifactTransfer` находится в finally.
   Здесь же пока локальный переключатель «Страница / Исходник» и выбор файла.
@@ -48,9 +48,9 @@
   `Prepare` и read-back barrier; [Targets](../../src/RNAssistant.Office/Services/HtmlWorkspaceTargets.cs)
   разрешает semantic workspace независимо от выбора UI; [NavigationService](../../src/RNAssistant.Core/Services/HtmlWorkspaceNavigationService.cs)
   восстанавливает history/redo из metadata. Максимальный номер не определяет active head.
-- [PluginView](../../web/js/app-plugin-view.js) владеет адресным presentation/lifecycle;
+- `PluginView` (removed in the later Shell migration) владеет адресным presentation/lifecycle;
   [app-plugins](../../web/js/app-plugins.js) — общей навигацией и вызовами владельца;
-  [PluginReleaseView](../../web/js/app-plugin-release-view.js) открывает pinned release.
+  `PluginReleaseView` (removed in the later Shell migration) открывает pinned release.
   [PluginApplicationService](../../src/RNAssistant.Application/PluginApplicationService.cs):
   `Check/Apply/ReleaseHistory/RestoreVersion/Open/StageVisualSelection/DisableAsync`.
   Restore опубликованной версии переключает registry head, а не переписывает source workspace.
