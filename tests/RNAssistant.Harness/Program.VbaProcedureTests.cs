@@ -140,8 +140,10 @@ namespace RNAssistant.Harness
                 }
                 var allocated = GC.GetAllocatedBytesForCurrentThread();
                 var read = provider.ReadProcedure("large.bas", "value", "property-get", 1000);
-                AssertTrue(GC.GetAllocatedBytesForCurrentThread() - allocated < 8L * 1024 * 1024,
-                    "procedure lookup does not allocate the 16-MiB workspace source body");
+                var allocatedBytes = GC.GetAllocatedBytesForCurrentThread() - allocated;
+                Console.WriteLine("VBA_PROCEDURE_ALLOCATED " + allocatedBytes);
+                AssertTrue(allocatedBytes < 8L * 1024 * 1024,
+                    "procedure lookup does not allocate the 16-MiB workspace source body: " + allocatedBytes);
                 AssertEqual(procedure, read.Result.Text, "streaming lookup preserves BOM-relative UTF-16 offsets and CRLF/Unicode");
                 AssertEqual((long)commentLength + 4, read.Evidence.Single().Coverage.Start.Value, "selected source starts after BOM/comment/CRLF");
                 var handler = new WorkspaceResourceHandler(provider, null, () => null, false, null, 1000);
@@ -168,7 +170,7 @@ namespace RNAssistant.Harness
 
                 var ports = typeof(WorkspaceConversationService).GetNestedType("WorkspacePorts", BindingFlags.NonPublic);
                 var schema = JObject.Parse((string)ports.GetMethod("ResourceSchema", BindingFlags.Static | BindingFlags.NonPublic)
-                    .Invoke(null, new object[] { false, true, true, 50000 }));
+                    .Invoke(null, new object[] { false, true, true, 50000, false }));
                 string error;
                 AssertTrue(ToolSchemaSupport.ValidateArguments(new JObject { ["target"] = "wide.bas" }, schema, false, out error),
                     "unqualified workspace reads retain their original schema branch");

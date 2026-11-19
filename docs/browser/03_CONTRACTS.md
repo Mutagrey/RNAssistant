@@ -126,6 +126,11 @@ RN.resources open/read/close/subscribe uses a per-page bounded lease owner over 
 existing ResourceDataPlane. It never holds its lock across host reads. HTML assembly
 uses existing preview/vendor code in a controlled isolated world before authored JS
 runs. Plugin SDK/commands share the isolated environment and their original grants.
+`WorkspaceHtmlProject` projects its exact HTML/CSS/JS members into a transient
+assembly view so the same pinned vendor pool and script ordering apply; this view
+creates no history or DataSources. Document HTML workspaces keep their declared
+`RN.resources` bindings. Raw `HtmlResource` remains source-only, while plugin pages
+keep package member/SDK routes and do not implicitly receive the workspace vendor pool.
 The final consumer closes the worker broker; profile cleanup waits for process exit.
 
 Input uses native CDP, not DOM event dispatch/value assignment. Semantic admission

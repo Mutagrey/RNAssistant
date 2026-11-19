@@ -21,7 +21,7 @@ namespace RNAssistant.Application
             target.ContentRevision = DocumentArtifactStore.WorkspaceHtmlFingerprint(snapshot);
             var members = snapshot.Members.ToDictionary(member => member.Path, StringComparer.Ordinal);
             var blobs = new ChatBlobStore(_paths);
-            return new BrowserContentSession(target, members.Keys, target.RelativePath ?? snapshot.EntryPath,
+            return new BrowserContentSession(target, snapshot.Members.Select(member => member.Path), target.RelativePath ?? snapshot.EntryPath,
                 (path, cancellation) => {
                     var member = members[path];
                     return blobs.OpenVerifiedRead(new PayloadRef(member.Sha256, member.ByteLength, member.Mime).ToBlobReference(),

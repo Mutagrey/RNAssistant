@@ -146,6 +146,7 @@ namespace RNAssistant.Harness
             WithTempPaths(paths => {
                 var parent = Path.GetDirectoryName(paths.Root);
                 var projectRoot = Path.Combine(parent, "project-" + Guid.NewGuid().ToString("N"));
+                var pluginSourceRoot = Path.Combine(parent, "plugin-source-" + Guid.NewGuid().ToString("N"));
                 var backup = Path.Combine(parent, "application-backup-" + Guid.NewGuid().ToString("N"));
                 var restoredRoot = Path.Combine(parent, "application-restore-" + Guid.NewGuid().ToString("N"));
                 try
@@ -154,6 +155,12 @@ namespace RNAssistant.Harness
                         .Create("Excel", "legacy-document", "Legacy.xlsx", "Legacy chat");
                     var nativeStore = new ConversationJournal(paths, "document:application-backup", StorageProtector.None);
                     var native = nativeStore.CreateChat("application-native", "native-document", "Native", ConversationRunPolicy.For(ChatModes.Agent));
+                    var pluginFixture = SeedLegacyPluginImport(paths, StorageProtector.None, pluginSourceRoot);
+                    ResourceJournal pluginResources;
+                    var nativePlugins = NativeLegacyPluginTarget(paths, StorageProtector.None, out pluginResources);
+                    var importedPlugin = nativePlugins.ImportLegacyRegistration(pluginFixture.Registration.PluginId, pluginFixture.Origin);
+                    AssertEqual(2, nativePlugins.ListVersions(pluginFixture.Registration.PluginId, null).Items.Count,
+                        "legacy plugin versions are migrated before application backup");
                     var workspaces = new WorkspaceStore(paths);
                     workspaces.Open(projectRoot);
                     Directory.CreateDirectory(Path.Combine(paths.ToolsDirectory, "common", "custom"));
@@ -167,7 +174,7 @@ namespace RNAssistant.Harness
                     Directory.CreateDirectory(Path.Combine(paths.Root, "plugin-results", "result"));
                     File.WriteAllText(Path.Combine(paths.Root, "plugin-results", "result", "value.txt"), "excluded result");
                     var result = JournalCasService(paths, StorageProtector.None).BackupApplication(backup);
-                    AssertEqual(1, result.ExternalWorkspaceRoots.Count, "backup records its external workspace root");
+                    AssertEqual(2, result.ExternalWorkspaceRoots.Count, "backup records project and plugin source roots");
                     AssertTrue(File.Exists(Path.Combine(backup, "backup.json")), "application manifest is published");
                     AssertTrue(File.Exists(Path.Combine(backup, "data", "chats", AppDataPaths.SafeFileName("Excel|legacy-document"),
                         AppDataPaths.SafeFileName(legacy.Id) + ".events.jsonl")), "legacy chat is copied");
@@ -180,9 +187,22 @@ namespace RNAssistant.Harness
                     var restored = CasMaintenanceService.RestoreApplication(backup, restoredRoot, _ => StorageProtector.None);
                     var restoredPaths = restored.RestoredPaths;
                     AssertTrue(restored.IndexRebuilt && restored.RestartRequired, "restore reports rebuild and explicit restart");
-                    AssertEqual(0, restored.MissingExternalWorkspaceRoots.Count, "existing external workspace is reported available");
+                    AssertEqual(0, restored.MissingExternalWorkspaceRoots.Count, "existing external workspaces are reported available");
                     AssertTrue(new ChatStore(restoredPaths).ListHeaders(false).Any(item => item.Id == legacy.Id), "legacy chat restores");
-                    AssertTrue(StorageJournal.Inventory(restoredPaths).Single().Segments.All(File.Exists), "native journal restores");
+                    AssertTrue(StorageJournal.Inventory(restoredPaths).All(stream => stream.Segments.All(File.Exists)),
+                        "all native journals restore");
+                    ResourceJournal restoredPluginResources;
+                    var restoredPlugins = NativeLegacyPluginTarget(restoredPaths, StorageProtector.None, out restoredPluginResources);
+                    AssertEqual(JsonConvert.SerializeObject(importedPlugin.Registration),
+                        JsonConvert.SerializeObject(restoredPlugins.Get(pluginFixture.Registration.PluginId)),
+                        "migrated plugin registration restores without identity drift");
+                    AssertEqual(2, restoredPlugins.ListVersions(pluginFixture.Registration.PluginId, null).Items.Count,
+                        "migrated plugin version catalog restores");
+                    var restoredRelease = restoredPlugins.ReadSavedRelease(pluginFixture.Registration.PluginId,
+                        pluginFixture.Latest.VersionId);
+                    AssertEqual("<main>Saved version 3</main>", Encoding.UTF8.GetString(
+                        restoredPlugins.ReadFile(restoredRelease, "index.html")),
+                        "restored plugin release reads its immutable CAS bytes");
                     AssertEqual("retained asset", File.ReadAllText(Path.Combine(restoredPaths.Root, "assets", "asset.txt")), "local asset restores byte-exactly");
                     AssertTrue(File.Exists(Path.Combine(restoredPaths.Root, "tools", "common", "custom", "tool.json")), "tool package restores");
                     AssertTrue(File.Exists(Path.Combine(restoredPaths.Root, "skills", "custom", "SKILL.md")), "skill package restores");
@@ -198,6 +218,7 @@ namespace RNAssistant.Harness
                 finally
                 {
                     if (Directory.Exists(projectRoot)) Directory.Delete(projectRoot, true);
+                    if (Directory.Exists(pluginSourceRoot)) Directory.Delete(pluginSourceRoot, true);
                     if (Directory.Exists(backup)) Directory.Delete(backup, true);
                     if (Directory.Exists(restoredRoot)) Directory.Delete(restoredRoot, true);
                 }

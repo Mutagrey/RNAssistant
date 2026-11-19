@@ -26,22 +26,33 @@ namespace RNAssistant.Core.Services
         public static ResourceRevisionMetadata RequirePublished(IResourceRevisionStore revisions,
             ResourceAuthoritySnapshot snapshot, ResourceRef exact)
         {
-            var metadata = exact?.IsExact == true ? revisions.GetRevision(snapshot.ScopeId, exact) : null;
-            if (metadata == null || PublicationOrder(snapshot, exact) == null)
-                throw Unavailable("The exact resource revision has not crossed its publication barrier or is unavailable.");
+            if (exact?.IsExact != true)
+                throw Unavailable("Exact resource identity is missing or not revision-pinned.");
+            var metadata = revisions.GetRevision(snapshot.ScopeId, exact);
+            if (metadata == null)
+                throw Unavailable("Exact resource revision metadata is not registered.");
+            if (PublicationOrder(snapshot, exact) == null)
+                throw Unavailable("Exact resource revision has not crossed its publication barrier.");
             return metadata;
         }
 
         public static string ReadPayload(ChatBlobStore payloads, PayloadRef payload, long maximumBytes)
         {
-            if (payloads == null || payload == null || payload.ByteLength > maximumBytes)
-                throw Unavailable("The exact snapshot payload is unavailable or exceeds its bound.");
+            if (payloads == null || payload == null)
+                throw Unavailable("Exact snapshot payload owner or reference is missing.");
+            if (payload.ByteLength > maximumBytes)
+                throw Unavailable("Exact snapshot payload exceeds the bounded read budget.");
             string text;
             try { text = payloads.ReadText(payload.ToBlobReference()); }
-            catch (Exception error) when (error is IOException || error is InvalidDataException ||
-                error is CryptographicException || error is System.Text.DecoderFallbackException)
-            { throw Unavailable("The exact snapshot payload is unavailable or corrupt."); }
-            if (text == null) throw Unavailable("The exact snapshot payload is unavailable.");
+            catch (CryptographicException)
+            { throw Unavailable("Exact snapshot payload failed storage-protection verification."); }
+            catch (InvalidDataException)
+            { throw Unavailable("Exact snapshot payload failed integrity validation."); }
+            catch (System.Text.DecoderFallbackException)
+            { throw Unavailable("Exact snapshot payload has invalid text encoding."); }
+            catch (IOException)
+            { throw Unavailable("Exact snapshot payload could not be read from storage."); }
+            if (text == null) throw Unavailable("Exact snapshot payload is missing from storage.");
             return text;
         }
 

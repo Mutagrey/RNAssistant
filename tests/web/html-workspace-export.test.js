@@ -55,6 +55,9 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
   const textValue = "</script><!--<script>Данные 😀";
   const textBatch = { resource: ref, view: "text", text: textValue, offset: 0, nextOffset: textValue.length,
     done: true, coverage: { kind: "whole", fields: [] } };
+  const jsonValue = "{\"total\":42}";
+  const jsonBatch = { resource: ref, view: "text", text: jsonValue, offset: 0, nextOffset: jsonValue.length,
+    done: true, coverage: { kind: "whole", fields: [] } };
   function binding(name, view, index, binary) {
     const id = String(index).repeat(64);
     return { name, lease: { leaseId: id, url: "https://rnassistant.local-resource/v1/" + id,
@@ -64,7 +67,8 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
     binding("bound", "table", 1), binding("text", "text", 2),
     binding("image", "image", 3, { payload: { byteLength: 4, contentType: "image/png" } }),
     binding("empty", "table", 4),
-    binding("original", "raw", 5, { payload: { byteLength: 4, contentType: "application/octet-stream" } })
+    binding("original", "raw", 5, { payload: { byteLength: 4, contentType: "application/octet-stream" } }),
+    binding("json", "text", 6)
   ] };
   const reads = [];
   const captureOptions = {
@@ -76,6 +80,7 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
         return new Response(new Uint8Array([0, 1, 254, 255]).slice(offset, offset + limit));
       }
       const batch = url.includes("/" + "2".repeat(64)) ? textBatch :
+        url.includes("/" + "6".repeat(64)) ? jsonBatch :
         url.includes("/" + "4".repeat(64)) ? table(0, [], true) :
           url.includes("offset=0") ? table(0, [12, 34], false) : table(2, [56], true);
       return new Response(JSON.stringify(batch));
@@ -84,7 +89,7 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
   const snapshot = await context.RNAssistantHtmlResourceExport.capture(resourceExport, captureOptions);
   assert.throws(() => context.RNAssistantHtmlResourceExport.script({ ...snapshot, version: 1 }, () => {},
     resourceExport.bindings.map(item => item.name), value => value), /RESOURCE_EXPORT_INVALID/);
-  assert.equal(reads.length, 8);
+  assert.equal(reads.length, 9);
   assert.ok(reads[1].includes("offset=2"), "export follows bounded sequential offsets");
   assert.equal(snapshot.resources[0].descriptor.reference.revision, "r1");
   assert.equal(snapshot.resources[0].url, undefined, "transient host capability is not exported");
@@ -121,6 +126,10 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
   let restored = "";
   for await (const batch of textHandle.stream({ limit: 3 })) restored += batch.text;
   assert.equal(restored, textValue);
+  const jsonHandle = await offline.RN.resources.open("json");
+  let jsonText = "";
+  for await (const batch of jsonHandle.stream({ limit: 3 })) jsonText += batch.text;
+  assert.equal(JSON.parse(jsonText).total, 42, "text bindings can be streamed and parsed as JSON");
   const imageHandle = await offline.RN.resources.open("image");
   const binary = await imageHandle.read();
   assert.deepEqual(Array.from(new Uint8Array(binary.bytes)), [0, 1]);

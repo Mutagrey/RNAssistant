@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Application;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Storage;
@@ -130,6 +131,74 @@ namespace RNAssistant.Office.Services
             EnsureRevision(artifact, address.Revision);
             EnsureNotRemoved(session, artifact, parentUri);
             return _htmlResources.ResolveMemberPath(session, artifact, memberPath, memberType);
+        }
+
+        internal ResourceDescriptor ResolveBrowserDisplayLocator(ChatSession session, string locator)
+        {
+            BrowserLocalLocator parsed;
+            if (!BrowserLocalLocator.TryParse(locator, out parsed) ||
+                parsed.Kind != BrowserLocatorKind.Resource && parsed.Kind != BrowserLocatorKind.ResourceVersion ||
+                string.IsNullOrWhiteSpace(parsed.RelativePath))
+                throw new ResourceRequestException(
+                    "A complete local Browser /resources/... file address is required.",
+                    "resource_target_not_found", false);
+            if (_documentArtifacts == null || string.IsNullOrWhiteSpace(session?.DocumentAuthorityId))
+                throw new ResourceRequestException(
+                    "The local Browser resource has no available document owner.",
+                    "RESOURCE_PROVIDER_UNAVAILABLE", false);
+
+            var owner = ConversationMetadata.From(session);
+            ResourceRef snapshot;
+            try
+            {
+                if (parsed.VersionId != null)
+                {
+                    var version = _documentArtifacts.HtmlVersion(owner, parsed.Key,
+                        parsed.VersionId, true);
+                    snapshot = version?.ContentReference;
+                }
+                else if (parsed.Key.IndexOf('~') >= 0)
+                {
+                    var key = parsed.Key.Split('~');
+                    int revision;
+                    if (key.Length != 2 || !int.TryParse(key[1], out revision) || revision < 1)
+                        throw new ResourceRequestException(
+                            "The local Browser resource revision is invalid.",
+                            "resource_target_not_found", false);
+                    snapshot = new ResourceRef(ResourceUri.Create(ChatResourceUri.ProviderName,
+                        session.DocumentAuthorityId, "artifact", key[0], "revision",
+                        revision.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                        revision.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                }
+                else
+                {
+                    if (HtmlWorkspaceIdentity.LogicalId(parsed.Key) == null)
+                        throw new ResourceRequestException(
+                            "The local Browser resource identity is invalid.",
+                            "resource_target_not_found", false);
+                    snapshot = _documentArtifacts.CurrentHtmlSnapshot(owner, parsed.Key);
+                }
+            }
+            catch (SavedVersionException ex)
+            {
+                throw new ResourceRequestException(ex.Message,
+                    "resource_target_not_found", false);
+            }
+            catch (System.IO.InvalidDataException ex)
+            {
+                throw new ResourceRequestException(ex.Message,
+                    "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
+            }
+            if (snapshot == null || !snapshot.IsExact)
+                throw new ResourceRequestException(
+                    "The local Browser resource has no exact published revision.",
+                    "resource_target_not_found", false);
+
+            var segments = ResourceUri.Parse(snapshot.Uri).Segments
+                .Concat(new[] { "member", "file" })
+                .Concat(parsed.RelativePath.Split('/'))
+                .ToArray();
+            return Resolve(session, ResourceUri.Create(ChatResourceUri.ProviderName, segments));
         }
 
         internal ResourceDescriptor ResolveMessageAttachmentTarget(ChatSession session, string target)
@@ -1146,8 +1215,18 @@ namespace RNAssistant.Office.Services
 
         private ArtifactDiscoveryProjection ProjectHtmlDiscovery(ChatSession session)
         {
-            var result = new ArtifactDiscoveryProjection { Session = CopyDiscoverySession(session, new List<ChatArtifact>()) };
-            if (_documentArtifacts == null || string.IsNullOrEmpty(session?.DocumentAuthorityId)) return result;
+            var local = (session?.Artifacts ?? new List<ChatArtifact>()).Where(item => item != null &&
+                    string.IsNullOrWhiteSpace(item.DocumentAuthorityId) && item.Kind == ChatArtifactKinds.HtmlWorkspace)
+                .GroupBy(item => HtmlWorkspaceIdentity.LogicalId(item.Id) ?? item.Id, StringComparer.Ordinal)
+                .Select(group => group.OrderByDescending(item => item.Revision).First()).ToList();
+            var result = new ArtifactDiscoveryProjection { Session = CopyDiscoverySession(session, local) };
+            if (_documentArtifacts == null || string.IsNullOrEmpty(session?.DocumentAuthorityId))
+            {
+                result.SourceRevision = TextPatternEngine.Sha256(string.Join("\n", local.Select(item =>
+                    item.Id + ":" + item.Revision + ":" + item.ContentSha256)));
+                FilterDiscoveryAvailability(result);
+                return result;
+            }
             int? offset = 0;
             long? generation = null;
             do

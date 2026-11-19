@@ -231,6 +231,16 @@ namespace RNAssistant.Core.Services
                 }
                 catch (RegexMatchTimeoutException) { Incomplete(page, "regex_timeout"); return Retain(page); }
                 catch (ResourceRequestException ex) when (ex.ErrorCode == "resource_search_stale") { throw; }
+                // An explicit target cannot be represented as a successful partial
+                // collection scan. Preserve its owner error; do not guess a new path.
+                catch (ResourceRequestException) when (!string.IsNullOrEmpty(request.Target)) { throw; }
+                catch (Exception ex) when (!string.IsNullOrEmpty(request.Target) &&
+                    (ex is IOException || ex is UnauthorizedAccessException || ex is DecoderFallbackException))
+                {
+                    var code = ex is UnauthorizedAccessException ? "resource_search_access_denied" :
+                        ex is DecoderFallbackException ? "resource_search_encoding_invalid" : "resource_search_unavailable";
+                    throw new ResourceRequestException(ex.Message, code, false);
+                }
                 catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is ResourceRequestException || ex is DecoderFallbackException)
                 {
                     page.UnavailableScopes.Add(source.Target); page.SourceComplete = false;

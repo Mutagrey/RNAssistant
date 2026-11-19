@@ -513,8 +513,11 @@ the cursor, exact references and exact counters for audit and replay.
 Model result projection exposes one conservative `complete` verdict instead of the
 separate scan/source/match flags. Only a complete scan with complete sources, exact
 totals, no gaps and no continuation is complete. Otherwise `totalMatches` is projected
-as `matchesSeen`, an observed lower bound, and `next=true` is present when continuation
-is available. UI presentation accepts this projection and historical canonical flags.
+as `matchesSeen`, an observed lower bound. `next=true` is present only for the latest
+search result in the run that still owns the live handler. A saved result from an
+earlier run, or a search superseded within the same run, projects `nextExpired=true`
+with a fresh-search instruction; it never advertises a dead cursor. UI presentation
+accepts the conservative completeness projection and historical canonical flags.
 `core.replace` keeps the exact single-target guard: explicit `expectedMatches` uses a
 completed search receipt, while the inline mode performs its own complete-source
 1–100 preflight. `matchesSeen` never counts as an exact replacement total. Real

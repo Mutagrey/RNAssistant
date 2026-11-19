@@ -129,7 +129,9 @@ namespace RNAssistant.Harness
                 {
                     var text = name == "Truncated.md" ? "# Small\nok\n# Large\n" + new string('x', 1000001) : "# Small\r\nok";
                     var draft = ingestion.Stage(ConversationMetadata.From(session), name, name.EndsWith(".md") ? "text/markdown" : "text/plain", Encoding.UTF8.GetBytes(text));
-                    var message = new ChatMessage { Role = "user", Attachments = ingestion.LoadDrafts(session, new[] { draft.Id }).ToList() };
+                    var attachments = ingestion.LoadDrafts(session, new[] { draft.Id }).ToList();
+                    if (name == "Truncated.md") attachments.Single().TextTruncated = true;
+                    var message = new ChatMessage { Role = "user", Attachments = attachments };
                     session.Messages.Add(message); ingestion.CommitAndLink(session, message, session.Messages.Count - 1);
                 }
                 var provider = new ChatArtifactResourceProvider(payloads: executor.Payloads, documentArtifacts: chats.DocumentArtifacts);

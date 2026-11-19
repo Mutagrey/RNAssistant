@@ -1,53 +1,41 @@
 # RNAssistant backlog
 
-## Harness regression sweep — observed 2026-11-18
+## Plugin Harness sweep and shutdown split — 2026-11-19
 
-Owner: Harness fixtures, Workspace steering and plugin run lifetime. On `e5190c97`
-the Harness and MockDemo builds pass; focused `markdown analysis:`,
-`markdown resources:` and the JS vendor gate pass. The full Harness reproduces seven
-failures, then `plugins: admitted run cancellation and shutdown belong to application`
-does not complete even when run alone; the process remains blocked in a wait past the
-local 60-second check. This is not Windows evidence and does not yet distinguish a
-runtime deadlock from a fixture wait. This is a dated observation, not a claim about the
-current `main` after `150e8854`: the full Harness has not been rerun here. Treat it as
-open baseline evidence until the exact filters are checked again.
+The canonical macOS temporary root was used for this recheck. `plugins: admitted run
+cancellation and shutdown belong to application` passes in 2.8 seconds. The complete
+`plugins:` filter finishes in 32.6 seconds without the reported >60-second hang, but
+is not green: 19 passed / 3 failed / 22 total. The independent failures are
+`plugins: approval continuation belongs to application`, `plugins: input receipt
+reconnect is read-only and scoped` and `plugins: project chat recovers abandoned run
+under lease`.
 
-The seven failures also reproduce on `650aa2d6` and the UI parent `7294e45d`, so they
-are older than the Markdig and Power Query commits:
+Do not diagnose those failures as the shutdown hang or weaken run/data leases to make
+them pass. Separate the admitted-run path from native worker/command and transport
+teardown as described in
+[RISK_REGISTER](RISK_REGISTER.md#plugin-runtime-shutdown-hang--open-2026-11-19).
+Windows x64 / Office x64 / WebView2 evidence remains the next gate for the native
+shutdown wait.
 
-- `universal mutations: public Office routing`: the HTML helper calls
-  `ArtifactWorkingSetService.Change` before the new workspace snapshot has crossed its
-  authority publication barrier.
-- `text search: Office parity`: the fixture still writes the retired bare
-  `HTML file: index.html` target instead of creating an explicit HTML workspace.
-- `plugin versions: catalog migration save activation deletion and restart`: after
-  correcting a null fixture parent, migration still yields zero entries instead of the
-  expected two. Runtime versus fixture ownership remains open.
-- `plugins: project chat edit replaces history before rerun`: the fixture creates a
-  session through the journal composition, then writes it through a fresh `ChatStore`
-  without first persisting that storage; the guard correctly refuses it.
-- `workspace: steer uses active run owner`: the established tool-scenario gap still
-  reproduces (`tool executes before steer` is false); the model-wait scenario passes.
-- `workspace: steer recovery preserves delivery evidence`: the fixture appends input
-  events before persisting its synthetic chat, so trace admission correctly fails.
-- `text search: default directory browse through runtime`: the fixture invoked the
-  changed private `ResourceSchema` signature with four instead of five parameters;
-  this fixture drift was corrected after the sweep and the focused case now passes, so
-  a future full run should not automatically reproduce all seven entries above.
+## Harness regression sweep — focused recheck 2026-11-19
 
-Do not weaken the publication, persistence or concurrency guards to make these
-fixtures pass. Re-check each owner after migrating the fixture to the current
-explicit-workspace and journal-native contracts.
+Owner: Harness fixtures, Workspace steering and plugin run lifetime. The historical
+`e5190c97` sweep listed seven failures and a blocked cancellation case. On 2026-11-19
+all seven named filters and `plugins: admitted run cancellation and shutdown belong to
+application` pass on the current host-neutral tree. The fixtures were aligned to the
+current explicit-workspace, publication and journal-native contracts; the product
+guards were not weakened. A full Harness sweep has still not been rerun, so this is
+not a green-baseline claim or Windows evidence.
 
-## JS tool fixture uses an invalid new id — observed 2026-11-18
+The later `tool pack: optional schema requires exact admission` fixture also now
+creates its explicit HTML workspace before exercising optional schema admission and
+checks the canonical published artifact. R61 was regenerated from the effective host
+catalog; every runtime revision and plumbing-shaped property decision is reviewed.
 
-Owner: `tests/RNAssistant.Harness/Program.ToolStoreTests.cs`. The focused case
-`tools: read-only JS source and policy` fails at `JS source validates was false` on
-clean `daa20a63` as well as this working tree. Its fixture creates the new id
-`common.count_rows_js`, while `CapabilityNaming.ValidNewId` now requires lower-case
-dotted segments and rejects the underscore. The WebView2 executor cutover does not
-touch this validation path. Move the fixture to a valid new id, or persist it first
-as an exact legacy custom id, without weakening the new-id guard.
+## JS tool fixture uses an invalid new id — fixed 2026-11-19
+
+The fixture now uses the valid new id `user.count.rows`; the underscore rule remains
+unchanged and the focused JS source/policy case passes.
 
 ## Markdown truncated fixture — observed 2026-11-16
 

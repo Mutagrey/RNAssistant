@@ -157,6 +157,13 @@ and a download action. Saved resources open read-only without changing the edito
 blocks mutations and editor source changes, but not independent read-only selection. Late list/preview/mutation responses
 cannot replace newer navigation or edits.
 
+Material raw HTML remains source-only under its typed capabilities and creates no
+workspace DataSources. Import it to an HTML workspace first when preview assembly,
+pinned vendors or `RN.resources` bindings are required. Workspace projects keep their
+exact members; Browser derives a transient HTML/CSS/JS assembly view for pinned
+vendors and script ordering without inventing history or DataSources. Plugin pages
+keep package members and the plugin SDK.
+
 Saved HTML version menus resolve the current document publication on every opening through
 typed `getSavedHtmlHistory(chatId, documentId, resourceUri, cursor)`. ArtifactCatalogService
 validates the exact snapshot, reads existing DocumentArtifactStore metadata and reuses

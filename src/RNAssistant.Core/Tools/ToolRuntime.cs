@@ -80,7 +80,8 @@ namespace RNAssistant.Core.Tools
             if (tool == null) return Reject(context, "unknown_tool", "No handler is registered for this exact tool id.");
             var admissionError = CheckDispatch(context);
             if (admissionError != null) return Reject(context, "tool_not_exposed", admissionError);
-            if (!context.Policy.Matches(EffectivePolicy(tool))) return Reject(context, "tool_policy_changed", "The captured tool policy or revision changed.");
+            if (!context.Policy.Matches(EffectivePolicy(tool))) return Reject(context, "tool_policy_changed",
+                "Originating request tool contract differs from current runtime policy or binding. No dispatch occurred; inspect exact admission/revision state. This is not an argument-format repair.");
             var policy = _runPolicy == null ? tool.Registration.Policy : EffectivePolicy(tool).Policy;
             if (_runPolicy != null && (!_runPolicy.Allows(context.Call.Name, policy, tool.Registration.Binding) ||
                 ConversationRunPolicy.IsPlanningArtifact(context.Call.Name, tool.Registration.Binding) &&
@@ -96,6 +97,10 @@ namespace RNAssistant.Core.Tools
                 var value = ParseArguments(context.Call.ArgumentsJson);
                 var schema = tool.Schema();
                 ToolSchemaSupport.RemoveOptionalNulls(value, schema);
+                // Keep direct/manual execution aligned with the v8 parser. This only
+                // wraps a value when the exact declared array schema validates it;
+                // scalar coercion, union guessing and unknown fields remain forbidden.
+                ToolSchemaSupport.NormalizeSingletonArrays(value, schema);
                 string error;
                 if (!ToolSchemaSupport.ValidateArguments(value, schema, true, out error))
                     return Reject(context, "invalid_arguments", error);
@@ -414,6 +419,9 @@ namespace RNAssistant.Core.Tools
                 case "tool_not_exposed":
                 case "tool_binding_unavailable":
                 case "tool_policy_changed":
+                    // Replan also encodes admission-revision-based unblocking in
+                    // AgentProgressTracker. Do not turn this into None: a legitimate
+                    // newly admitted binding would otherwise stay blocked.
                     return new ToolRecoveryContract(
                         ToolFailureKind.RejectedNoEffect,
                         ToolRetryPolicy.Replan);

@@ -95,9 +95,12 @@ target. Repeat the identical options and exact returned coordinates. One ephemer
 chain per handler retains ordered target membership and exact source pins, never
 another content store. Changes to membership or observed sources reject it;
 restart/catalog refresh may discard the handler and then continuation explicitly
-returns `resource_search_stale`. Start a fresh query, without silently replaying
-an old page. Previous coverage gaps cannot disappear on a later page. There is
-no atomic snapshot of the entire directory tree across independent calls.
+returns `resource_search_stale`. Model projection therefore advertises `next=true`
+only for the latest search in the owning run; saved or superseded results expose
+`nextExpired=true` and require a fresh semantic search. Start a fresh query without
+silently replaying an old page. Previous coverage gaps cannot disappear on a later
+page. There is no atomic snapshot of the entire directory tree across independent
+calls.
 
 Per-call work bounds: 5000 traversal entries, 100 searched sources, 8 Mi UTF-16
 characters; regex lines above 65536 characters are skipped explicitly. A source

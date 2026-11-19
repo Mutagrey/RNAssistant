@@ -7,14 +7,57 @@
 1. **P1 release evidence:** Windows x64 / Office x64 / WebView2, DPAPI/storage-v2,
    native Browser network/worker/input и смешанный backup остаются вне
    host-neutral проверок. Локальный Chromium/Harness результат не закрывает эти gates.
-2. **P1 test evidence:** полный Harness не является текущим green baseline. Последний
-   зафиксированный sweep на `e5190c97` имел семь воспроизводимых fixture-сбоев и
-   зависание cancellation case; текущий HEAD нужно перепроверить до заявления о green
-   baseline. Детали — в [BACKLOG](BACKLOG.md#harness-regression-sweep--observed-2026-11-18).
+2. **P1 test evidence:** полный Harness не является текущим green baseline. Семь
+   ранее зафиксированных focused-сбоев и cancellation case 2026-11-19 проходят,
+   включая R61 после регенерации baseline. Полный sweep текущего HEAD ещё не
+   выполнен, поэтому green baseline не заявляется. Детали — в
+   [BACKLOG](BACKLOG.md#harness-regression-sweep--focused-recheck-2026-11-19).
 
 Важно: `17.6.8` replacement preview ещё не имеет Windows/Office visual acceptance;
 Power Query native API, WebView2 JS executor CPU/cancellation и live-model A/B остаются
 открытым evidence. Playwright UI fixtures в текущем workspace не запускались.
+
+## Maintenance bridge, SQLite scope and legacy migration checks — In Review, 2026-11-19
+
+CAS audit/GC and runtime clear now leave the WebView/UI caller before entering their
+synchronous owners. Runtime clear resets Workspace/plugin owners before publishing
+`Bootstrap`; maintenance operations without cooperative post-dispatch cancellation
+are explicitly non-cancellable with a bounded 300-second UI wait. Conversational scope
+lookup opens the disposable SQLite projection under `JournalIndexAdmission` and
+releases that gate before canonical inventory or the existing repair path.
+
+Checks: `diagnostics: CAS maintenance and clear do not block the bridge`,
+`storage optimization: router scope discovery honors repair admission`, bounded index
+admission and `tools: read-only JS source and policy` pass. Existing-data migration
+passes host-neutral on canonical macOS temporary roots: legacy recovery 2/2, chat
+import 4/4, background all-pages migration 1/1, plugin import 3/3, plugin version
+lifecycle 4/4 and application backup/restore 1/1. The backup fixture now performs the
+combined cycle on one profile: legacy plugin registration/version import, backup v3,
+restore, registration/version read-back and immutable release CAS read. Windows/Office/
+WebView2, DPAPI and the real old-profile visual/lifecycle path remain open.
+
+The focused plugin admitted-run shutdown case also passes in 2.8 seconds. A full
+`plugins:` filter finishes in 32.6 seconds without reproducing the reported >60-second
+hang, but reports 19/22 because three neighboring fixtures fail independently. The
+remaining shutdown boundary and those failures are tracked in
+[RISK_REGISTER](RISK_REGISTER.md#plugin-runtime-shutdown-hang--open-2026-11-19) and
+[BACKLOG](BACKLOG.md#plugin-harness-sweep-and-shutdown-split--2026-11-19).
+
+## Root-cause patchset and runtime contracts — In Review, 2026-11-19
+
+Implemented host-neutral `17.6.17-dev`. Direct ToolRuntime execution now uses the
+same narrow singleton-array normalization as the v8 parser; admission drift and exact
+target/CAS publication failures remain fail-closed but carry owner-specific
+diagnostics. Historical `core.search` projection no longer promises a continuation
+after its owning run or handler has been superseded: it reports `nextExpired` and asks
+for a fresh semantic search. The latest search in the owning run retains `next=true`.
+
+Checks: the five patchset scenarios, all seven previously failing focused Harness cases,
+the cancellation case, R61 inventory, optional schema admission, request schema modes,
+storage CAS (16/16), catalog publication and focused text search pass. Two older CAS
+fixtures were aligned with the canonical create-only rule: known bytes never repair or
+overwrite retained corruption. Full Harness and Windows/Office/WebView2 qualification
+remain open.
 
 ## Retired Office chat rebind — In Review, 2026-11-19
 
@@ -241,7 +284,9 @@ On `e5190c97` the Harness and MockDemo builds pass, as do focused `markdown anal
 older failures reproduce on `650aa2d6`/`7294e45d`, and the admitted-run cancellation
 case blocks past the local 60-second bound even in isolation. One fixture-arity bug
 and one null legacy-migration fixture parent were corrected; the remaining owners and
-exact failure evidence are in [BACKLOG](BACKLOG.md#harness-regression-sweep--observed-2026-11-18).
+exact failure evidence are in [BACKLOG](BACKLOG.md#harness-regression-sweep--focused-recheck-2026-11-19).
+The 2026-11-19 focused recheck passes all seven filters and the cancellation case;
+the full sweep remains unclaimed.
 No publication or persistence guard was relaxed. The completed packaging fix commits
 the official Markdig 0.37.0 package, advances the product to `17.4.1-dev` and keeps
 clean-checkout/offline builds independent of a manual package restore.

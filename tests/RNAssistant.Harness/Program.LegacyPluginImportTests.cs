@@ -26,7 +26,8 @@ namespace RNAssistant.Harness
             internal ResourceAuthorityScopeId Scope = new ResourceAuthorityScopeId("plugins", "local");
         }
 
-        private static LegacyPluginImportFixture SeedLegacyPluginImport(AppDataPaths paths, StorageProtector protector)
+        private static LegacyPluginImportFixture SeedLegacyPluginImport(AppDataPaths paths, StorageProtector protector,
+            string sourceRoot = null)
         {
             var fixture = new LegacyPluginImportFixture { Authority = new ResourceAuthorityStore(paths),
                 Blobs = new ChatBlobStore(paths, () => protector) };
@@ -34,7 +35,7 @@ namespace RNAssistant.Harness
             var mutations = new ResourceMutationJournal(paths);
             var files = new WorkspaceFileService(paths, fixture.Authority, fixture.Authority, mutations);
             fixture.Store = new PluginStore(paths, old, fixture.Authority, mutations, files, fixture.Blobs);
-            fixture.Workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "old-plugin-source"));
+            fixture.Workspace = new WorkspaceStore(paths).Open(sourceRoot ?? Path.Combine(paths.Root, "old-plugin-source"));
             var manifest = new PluginManifestV1 { Id = "retained-plugin", Name = "Original plugin", Version = "1.0.0",
                 Entry = "index.html", Files = new[] { "plugin.json", "index.html" }, FormatVersion = 1, HostProtocol = 1,
                 Vendors = new[] { new PluginVendorDependency { Id = "retained-vendor", Version = "1.2.3", Mount = "vendor/retained" } } };

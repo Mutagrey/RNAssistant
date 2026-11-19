@@ -294,6 +294,33 @@ namespace RNAssistant.Harness
                 AssertEqual(raw, context.Call.ArgumentsJson, "normalization cannot rewrite accepted arguments");
             }
             AssertEqual(schema, f.Registry.Find("fixture.read").Descriptor.ParametersJson, "handler cannot mutate captured schema");
+
+            // The model parser already supports this exact array shorthand. Manual
+            // ToolRuntime calls must not disagree or need a corrective model turn.
+            var arraySchema = new JObject {
+                ["type"] = "object", ["required"] = new JArray("resources"), ["additionalProperties"] = false,
+                ["properties"] = new JObject {
+                    ["resources"] = new JObject {
+                        ["type"] = "array", ["description"] = "Semantic resource names",
+                        ["minItems"] = 1, ["items"] = new JObject { ["type"] = "string" }
+                    }
+                }
+            }.ToString(Newtonsoft.Json.Formatting.None);
+            var singleton = new ToolRuntimeFixture(RuntimeRegistration(schema: arraySchema));
+            singleton.Handler.Run = (context, token) => {
+                var resources = context.Arguments["resources"] as JArray;
+                AssertTrue(resources != null && resources.Count == 1 && (string)resources[0] == "sales",
+                    "runtime uses the parser's narrow singleton-array normalization");
+                return Task.FromResult(new ToolHandlerResult(RuntimeResult.Ok("Read"), ToolEffectEvidence.None));
+            };
+            var singletonRaw = "{\"resources\":\"sales\"}";
+            var singletonCall = singleton.Context(singletonRaw);
+            AssertEqual(ToolExecutionOutcome.Ok, (await singleton.Runtime.ExecuteAsync(singletonCall, CancellationToken.None)).Outcome,
+                "direct runtime accepts exactly the same valid shorthand");
+            AssertEqual(singletonRaw, singletonCall.Call.ArgumentsJson, "accepted intent is not silently rewritten");
+            AssertEqual(ToolExecutionOutcome.Error, (await singleton.Runtime.ExecuteAsync(
+                singleton.Context("{\"resources\":true}"), CancellationToken.None)).Outcome,
+                "normalization cannot coerce unrelated scalar types");
         }
 
         private static async Task ToolRuntimeValidatesArgumentsBeforeHandler()
@@ -333,6 +360,11 @@ namespace RNAssistant.Harness
                 var result = await f.Runtime.ExecuteAsync(f.Context(snapshot: snapshot), CancellationToken.None);
                 AssertEqual(ToolExecutionOutcome.Error, result.Outcome, "all policy fields and typed identity must match");
                 AssertContains(result.Result.DataJson, "tool_policy_changed", "stale captured contract");
+                AssertContains(result.Result.Message, "Originating request tool contract", "drift is attributed to admission/runtime rather than model arguments");
+                AssertEqual(ToolRetryPolicy.Replan, result.Recovery.RetryPolicy,
+                    "admission revision change still releases a correctly re-admitted call");
+                AssertEqual(ToolDispatchEvidence.NotDispatched, result.Evidence.Dispatch,
+                    "a changed runtime contract fails before any effect");
             }
             AssertEqual(0, f.Handler.Calls, "stale or untyped snapshot cannot execute");
             var confirmation = new ToolRuntimeFixture(RuntimeRegistration(policy: Policy(ToolEffect.Write,

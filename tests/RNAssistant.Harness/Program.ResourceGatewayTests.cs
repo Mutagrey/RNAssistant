@@ -1977,7 +1977,7 @@ namespace RNAssistant.Harness
                 var gateway = executor.ResourceGateway;
 
                 var discovery = gateway.List(session, null, null, null, 20);
-                AssertEqual("catalog,chat,context,document,excel,state,vba", string.Join(",", discovery.Providers.ToArray()),
+                AssertEqual("browser,catalog,chat,context,document,excel,state,vba", string.Join(",", discovery.Providers.ToArray()),
                     "resource discovery exposes the registered providers only");
 
                 var defaultVba = gateway.List(

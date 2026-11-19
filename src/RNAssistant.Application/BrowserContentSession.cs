@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using RNAssistant.Application.Contracts;
@@ -45,6 +46,42 @@ namespace RNAssistant.Application
         { return !string.IsNullOrEmpty(path) && path.Length <= 2048 && !path.Any(char.IsControl) &&
             !path.Contains("\\") && !path.Contains(":") && !path.Contains("%") && !path.Contains("?") && !path.Contains("#") &&
             path.Split('/').All(part => part.Length > 0 && part != "." && part != ".."); }
+        public async Task<HtmlWorkspaceSnapshot> AssemblyWorkspaceAsync(CancellationToken cancellationToken)
+        {
+            if (HtmlWorkspace != null) return HtmlWorkspace;
+            if (Target.Kind != BrowserTargetKind.WorkspaceHtmlProject) return null;
+            var transient = new HtmlWorkspaceSnapshot { ActiveFileId = EntryPath };
+            long total = 0;
+            foreach (var path in Members)
+            {
+                var kind = AssemblyFileKind(path);
+                if (kind == null) continue;
+                using (var source = Open(path, cancellationToken))
+                using (var content = new MemoryStream())
+                {
+                    var buffer = new byte[81920];
+                    int read;
+                    while ((read = await source.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false)) > 0)
+                    {
+                        if ((total += read) > 16 * 1024 * 1024)
+                            throw new InvalidOperationException("Workspace HTML assembly exceeds 16 MiB.");
+                        content.Write(buffer, 0, read);
+                    }
+                    string text;
+                    try { text = new UTF8Encoding(false, true).GetString(content.ToArray()); }
+                    catch (DecoderFallbackException) { throw new InvalidOperationException("Workspace HTML contains a non-UTF-8 assembly member."); }
+                    transient.Files.Add(new HtmlWorkspaceFile { Id = path, Path = path, Kind = kind, Content = text });
+                }
+            }
+            return transient;
+        }
+        private static string AssemblyFileKind(string path)
+        {
+            if (path.EndsWith(".html", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".htm", StringComparison.OrdinalIgnoreCase)) return "html";
+            if (path.EndsWith(".css", StringComparison.OrdinalIgnoreCase)) return "css";
+            if (path.EndsWith(".js", StringComparison.OrdinalIgnoreCase)) return "js";
+            return null;
+        }
         public string Url(string path) => Origin + "/" + string.Join("/", path.Split('/').Select(Uri.EscapeDataString));
         public string InitialUrl(string locator)
         {

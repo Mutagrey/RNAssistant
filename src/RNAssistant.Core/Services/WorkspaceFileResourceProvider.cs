@@ -95,8 +95,23 @@ namespace RNAssistant.Core.Services
             {
                 var capturedTarget = target;
                 result.Items.Add(new ResourceSearchSource { Target = target, Open = cancellation => {
-                    var snapshot = _files.CaptureFile(_workspace, capturedTarget, 64L * 1024 * 1024, cancellation);
-                    var stream = _files.OpenExactRead(_workspace, capturedTarget, snapshot.Reference, 64L * 1024 * 1024, cancellation);
+                    WorkspaceFileSnapshot snapshot;
+                    try { snapshot = _files.CaptureFile(_workspace, capturedTarget, 64L * 1024 * 1024, cancellation); }
+                    catch (FileNotFoundException) {
+                        // Missing semantic source is distinct from a missing CAS
+                        // payload: only CaptureFile establishes this diagnosis.
+                        throw new ResourceRequestException("Exact workspace search target was not found.", "resource_not_found", false);
+                    }
+                    catch (WorkspaceFileException error) {
+                        throw new ResourceRequestException(error.Message, error.Code, false);
+                    }
+                    Stream stream;
+                    try { stream = _files.OpenExactRead(_workspace, capturedTarget, snapshot.Reference, 64L * 1024 * 1024, cancellation); }
+                    catch (WorkspaceFileException error) {
+                        // A published payload/authority failure is not evidence that
+                        // the semantic path is missing. Preserve the storage owner code.
+                        throw new ResourceRequestException(error.Message, error.Code, false);
+                    }
                     return new ResourceSearchText { Reference = snapshot.Reference,
                         Reader = new StreamReader(stream, new UTF8Encoding(false, true), false, 81920) };
                 } });

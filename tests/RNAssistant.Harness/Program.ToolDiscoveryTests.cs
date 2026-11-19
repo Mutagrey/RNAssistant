@@ -736,12 +736,26 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 const string optionalId = "html.data.write";
+                var settings = new AppSettings
+                {
+                    AgentResponseMode = AgentResponseModes.JsonSchema,
+                    MaxAgentFormatRetries = 2,
+                    ContextWindowOverrideTokens = 65536,
+                    AutoConfirmToolActions = true
+                };
+                var session = NewSession(adapter);
+                var catalog = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
+                AssertTrue(executor.ExecuteManual(Command(HtmlWorkspaceToolCatalog.CreateToolId,
+                    "title", "Progressive"), catalog, settings, false, true, session).Success,
+                    "the explicit workspace prerequisite is created without model admission");
+                var workspace = HtmlWorkspaceTargets.Workspace(
+                    new ChatStore(FixturePaths.Value).DocumentArtifacts, session, session.Artifacts.Last());
                 var earlyWrite = ModelProtocolWire.WriteAcceptedCall("Attempt the tool before admission.",
                     "Создаю сразу.", new ConversationToolCall { Name = optionalId,
-                        Arguments = new JObject { ["name"] = "progressive", ["json"] = "{}" } });
+                        Arguments = new JObject { ["workspace"] = workspace, ["name"] = "progressive", ["json"] = "{}" } });
                 var write = ModelProtocolWire.WriteAcceptedCall("Create the requested HTML file.",
                     "Создаю после admission.", new ConversationToolCall { Name = optionalId,
-                        Arguments = new JObject { ["name"] = "progressive", ["json"] = "{}" } });
+                        Arguments = new JObject { ["workspace"] = workspace, ["name"] = "progressive", ["json"] = "{}" } });
                 var responses = new Queue<string>(new[]
                 {
                     earlyWrite,
@@ -751,7 +765,6 @@ namespace RNAssistant.Harness
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 var options = new List<LlmRequestOptions>();
-                var session = NewSession(adapter);
                 LlmCompletionDelegate completion = (completionSettings, messages, requestOptions, stream, cancellationToken) =>
                 {
                     requests.Add(messages.ToList());
@@ -760,14 +773,6 @@ namespace RNAssistant.Harness
                         ScriptedVerifiedFinish(session, "The admitted HTML write completed.", "HTML создан.",
                             "The requested HTML file was created.", optionalId) });
                 };
-                var settings = new AppSettings
-                {
-                    AgentResponseMode = AgentResponseModes.JsonSchema,
-                    MaxAgentFormatRetries = 2,
-                    ContextWindowOverrideTokens = 65536,
-                    AutoConfirmToolActions = true
-                };
-                var catalog = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteWithApprovalsAsync(
                     ChatModes.Agent,
                     "Создай progressive.html.",
@@ -778,7 +783,11 @@ namespace RNAssistant.Harness
                     null).GetAwaiter().GetResult();
 
                 AssertEqual("HTML создан.", result.AssistantText, "optional tool run completes");
-                AssertTrue(session.HtmlWorkspace != null && session.HtmlWorkspace.DataSources.Any(file =>
+                var published = session.Artifacts.Where(artifact => artifact.Kind == ChatArtifactKinds.HtmlWorkspace)
+                    .OrderByDescending(artifact => artifact.Revision).FirstOrDefault();
+                var publishedWorkspace = published == null ? null :
+                    Newtonsoft.Json.JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(published.InlineText);
+                AssertTrue(publishedWorkspace != null && publishedWorkspace.DataSources.Any(file =>
                     file != null && string.Equals(file.Name, "progressive", StringComparison.OrdinalIgnoreCase)),
                     "admitted optional tool executes once");
                 AssertEqual(4, requests.Count, "unloaded repair, schema read, execution, and final requests");
@@ -1411,7 +1420,7 @@ namespace RNAssistant.Harness
                 var settings = new AppSettings
                 {
                     AgentResponseMode = AgentResponseModes.JsonSchema,
-                    ContextWindowOverrideTokens = 20000,
+                    ContextWindowOverrideTokens = oversized ? 20000 : 22000,
                     MaxTokens = 512
                 };
                 AssertToolPackBudgetFixture(catalog, settings, oversized);
@@ -1434,7 +1443,8 @@ namespace RNAssistant.Harness
                     null,
                     false,
                     null,
-                    CancellationToken.None).GetAwaiter().GetResult())
+                    CancellationToken.None,
+                    payloads: executor.Payloads).GetAwaiter().GetResult())
                 {
                     for (var index = 0; index < optionalTools.Length; index++)
                     {

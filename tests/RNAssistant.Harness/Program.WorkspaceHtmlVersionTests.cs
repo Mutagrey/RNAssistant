@@ -65,6 +65,12 @@ namespace RNAssistant.Harness
                 Directory.Move(imported.RootPath, imported.RootPath + "-offline");
                 var restart = WorkspaceHtmlVersionsFixture(paths);
                 var exact = restart.Resolve(new BrowserResolveRequest { OwnerScope = user, Locator = savedLocator }).Target;
+                using (var content = restart.OpenBrowserContent(exact, CancellationToken.None))
+                {
+                    var assembly = content.AssemblyWorkspaceAsync(CancellationToken.None).GetAwaiter().GetResult();
+                    AssertTrue(assembly != null && assembly.ActiveFileId == imported.EntryPath && assembly.Files.Count > 0,
+                        "saved Workspace version reaches the common assembler after restart and source removal");
+                }
                 AssertEqual(original, restart.Source(new BrowserSourceRequest { OwnerScope = user, Locator = savedLocator,
                     Count = 32000, RequestGeneration = 1 }, exact).Text, "saved source comes only from CAS without live root");
                 var suggestions = restart.SavedBrowserTargets(exact.OwnerScope, exact.Title, 8);

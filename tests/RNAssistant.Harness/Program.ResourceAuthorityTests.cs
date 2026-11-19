@@ -310,7 +310,7 @@ namespace RNAssistant.Harness
                     System.Reflection.BindingFlags.NonPublic);
                 var schema = JObject.Parse((string)ports.GetMethod("ResourceSchema",
                     System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)
-                    .Invoke(null, new object[] { false, true, true, 1000 }));
+                    .Invoke(null, new object[] { false, true, true, 1000, false }));
                 string error;
                 AssertTrue(ToolSchemaSupport.ValidateArguments(new JObject {
                     ["target"] = "pages.pdf", ["representation"] = "text", ["pageIndex"] = 1,

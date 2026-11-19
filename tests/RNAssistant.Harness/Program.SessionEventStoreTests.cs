@@ -3664,11 +3664,12 @@ namespace RNAssistant.Harness
                 AssertTrue(authority.GetRevision(scope, reference) == null, "rejected publication registers no revision");
                 AssertTrue(bytes.SequenceEqual(File.ReadAllBytes(blobPath)), "reference-only publication cannot repair unknown bytes");
 
-                payloads.StoreText(corruptExtraction ? "Extracted text" : "Original bytes", "text/plain");
-                var published = store.DocumentArtifacts.PublishOriginal(session, artifact, original);
-                AssertTrue(published != null, "publication succeeds after explicit source repair");
-                AssertEqual("Original bytes", Encoding.UTF8.GetString(store.DocumentArtifacts.ExportBytes(session, reference)),
-                    "published original is readable");
+                var repairRejected = false;
+                try { payloads.StoreText(corruptExtraction ? "Extracted text" : "Original bytes", "text/plain"); }
+                catch (IOException) { repairRejected = true; }
+                AssertTrue(repairRejected, "supplying known bytes does not authorize an implicit CAS overwrite");
+                AssertTrue(bytes.SequenceEqual(File.ReadAllBytes(blobPath)), "failed repair preserves retained bytes");
+                AssertTrue(authority.GetRevision(scope, reference) == null, "failed repair cannot publish the artifact");
             });
         }
 
@@ -4682,6 +4683,7 @@ namespace RNAssistant.Harness
                 AssertTrue(loaded != null, "metadata projection remains available");
                 AssertTrue(string.IsNullOrWhiteSpace(loaded.Artifacts.Single().InlineText),
                     "hash mismatch does not hydrate corrupted content");
+                var retained = File.ReadAllBytes(blob);
 
                 var repair = new ChatArtifact
                 {
@@ -4691,9 +4693,14 @@ namespace RNAssistant.Harness
                 };
                 loaded.Artifacts.Add(repair);
                 loaded.ActivePlanDocumentArtifactId = repair.Id;
-                store.Save(loaded);
-                AssertEqual("{\"goal\":\"safe\"}", store.Load(loaded.Id).Artifacts
-                    .Single(item => item.Id == repair.Id).InlineText, "known content repairs its corrupted CAS blob");
+                var rejected = false;
+                try { store.Save(loaded); }
+                catch (IOException) { rejected = true; }
+                AssertTrue(rejected, "known content cannot overwrite a corrupt immutable CAS object");
+                AssertTrue(retained.SequenceEqual(File.ReadAllBytes(blob)), "failed save preserves exact corrupt bytes for audit");
+                var after = new ChatStore(paths).Load(loaded.Id);
+                AssertTrue(after.Artifacts.Count == 1 && string.IsNullOrWhiteSpace(after.Artifacts.Single().InlineText),
+                    "failed CAS publication does not report a repaired artifact");
             });
         }
 

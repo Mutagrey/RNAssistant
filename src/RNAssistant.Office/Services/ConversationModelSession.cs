@@ -48,6 +48,9 @@ namespace RNAssistant.Office.Services
         private string _requestStepId;
         private JObject _completionFeedback;
         private LlmRunCache _runCache;
+        private string _browserPageTarget;
+        private string _referencedResourceTarget;
+        private string _referencedResourceError;
 
         private ConversationModelSession(IOfficeApplicationAdapter adapter,
             ContextCompactionService contextCompactionService, AttachmentAnalysisService attachmentAnalysisService,
@@ -78,7 +81,8 @@ namespace RNAssistant.Office.Services
             CancellationToken cancellationToken,
             ResourceAuthorityService authority = null, ChatBlobStore payloads = null,
             Func<SkillCatalogSnapshot> captureSkills = null, long? catalogGeneration = null,
-            IConversationContextStore contextStore = null)
+            IConversationContextStore contextStore = null, string browserPageTarget = null,
+            string referencedResourceTarget = null, string referencedResourceError = null)
         {
             if (authority != null && !catalogGeneration.HasValue || catalogGeneration < 0)
                 throw new ArgumentException("An authority-backed model session requires its captured catalog generation.", nameof(catalogGeneration));
@@ -91,7 +95,10 @@ namespace RNAssistant.Office.Services
                 _settings = settings,
                 _runnableCatalog = runnableCatalog,
                 _skills = skills ?? new SkillDefinition[0],
-                _progress = progress
+                _progress = progress,
+                _browserPageTarget = browserPageTarget,
+                _referencedResourceTarget = referencedResourceTarget,
+                _referencedResourceError = referencedResourceError
             };
             owner._authority = authority;
             owner._catalogGeneration = catalogGeneration;
@@ -176,6 +183,24 @@ namespace RNAssistant.Office.Services
             _settings = settings;
             _context = context == null ? null : JsonConvert.DeserializeObject<DocumentContext>(JsonConvert.SerializeObject(context));
             _packState = null;
+            _lastSnapshot = null;
+        }
+
+        internal void SetBrowserContext(string browserPageTarget,
+            string referencedResourceTarget, string referencedResourceError)
+        {
+            browserPageTarget = string.IsNullOrWhiteSpace(browserPageTarget)
+                ? null : browserPageTarget;
+            referencedResourceTarget = string.IsNullOrWhiteSpace(referencedResourceTarget)
+                ? null : referencedResourceTarget;
+            referencedResourceError = string.IsNullOrWhiteSpace(referencedResourceError)
+                ? null : referencedResourceError;
+            if (_browserPageTarget == browserPageTarget &&
+                _referencedResourceTarget == referencedResourceTarget &&
+                _referencedResourceError == referencedResourceError) return;
+            _browserPageTarget = browserPageTarget;
+            _referencedResourceTarget = referencedResourceTarget;
+            _referencedResourceError = referencedResourceError;
             _lastSnapshot = null;
         }
 
@@ -485,7 +510,9 @@ namespace RNAssistant.Office.Services
             var required = new ConversationPromptComposer().BuildRequiredMessages(_mode, _userText, null,
                 tools, skillDefinitions, null, _settings, _session, null, true, 0,
                 _toolPack.CapabilityContext(skillDefinitions, tools), _completionFeedback, surface,
-                _authority == null ? null : TaskListPublication.Project(_session, resources.Get(TaskListPublication.Scope(_session)), _authority.Revisions, _payloads));
+                _authority == null ? null : TaskListPublication.Project(_session,
+                    resources.Get(TaskListPublication.Scope(_session)), _authority.Revisions, _payloads),
+                _browserPageTarget, _referencedResourceTarget, _referencedResourceError);
             if (packState != null) required.Add(packState);
             var budget = PrepareRequest(tools).MessageBudget(required);
             return _compiler.Compile(frozen, required, facts, _context?.Notes, _runnableCatalog,

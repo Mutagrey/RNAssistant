@@ -341,8 +341,11 @@ namespace RNAssistant.Office
         internal BrowserVersionPage BrowserVersions(BrowserVersionRequest request) { throw new InvalidOperationException("Document versions are not configured by this fixture."); }
         internal BrowserVersionResult BrowserVersionCommand(BrowserVersionCommand request, CancellationToken token) { throw new InvalidOperationException("Document versions are not configured by this fixture."); }
         public SettingsResponse GetSettings() { return new SettingsResponse { Settings = SettingsControlsDto.From(new AppSettings()), HasApiKey = false, HasHistorySecret = false }; }
-        public CasHealthResponse GetCasHealth() { return new CasHealthResponse { Healthy = true, ReachabilityComplete = true, CanGarbageCollect = true }; }
-        public CasGarbageCollectionResponse CollectCasGarbage() { return new CasGarbageCollectionResponse { Completed = true, Health = GetCasHealth() }; }
+        internal Func<CasHealthResponse> CasHealthOverride { get; set; }
+        internal Func<CasGarbageCollectionResponse> CasCollectionOverride { get; set; }
+        internal Func<InitResponse> RuntimeClearOverride { get; set; }
+        public CasHealthResponse GetCasHealth() { return CasHealthOverride?.Invoke() ?? new CasHealthResponse { Healthy = true, ReachabilityComplete = true, CanGarbageCollect = true }; }
+        public CasGarbageCollectionResponse CollectCasGarbage() { return CasCollectionOverride?.Invoke() ?? new CasGarbageCollectionResponse { Completed = true, Health = GetCasHealth() }; }
         public ApplicationBackupResponse CreateApplicationBackup(ApplicationBackupRequest request) { return new ApplicationBackupResponse { Format = CasMaintenanceService.ApplicationBackupFormat, Destination = request.Path }; }
         public ApplicationRestoreResponse RestoreApplicationBackup(ApplicationRestoreRequest request) { return new ApplicationRestoreResponse { Format = CasMaintenanceService.ApplicationBackupFormat, Destination = request.DestinationPath, IndexRebuilt = true, RestartRequired = true }; }
         internal Func<CancellationToken, Task<ModelCatalogResponse>> ModelCatalogWork { get; set; }
@@ -385,7 +388,7 @@ namespace RNAssistant.Office
                         ExecutionKind = ModelDiagnosticExecutionKind.Synthetic, Verdict = ModelDiagnosticVerdict.Inconclusive } } } });
         }
 
-        public InitResponse ClearRuntimeData() { return Initialize(); }
+        public InitResponse ClearRuntimeData() { return RuntimeClearOverride?.Invoke() ?? Initialize(); }
         public ToolLibraryResponse GetTools() { return EmptyToolLibrary(); }
         public Task<ToolLibraryDocumentationResponse> GetToolDocumentationAsync(ToolLibraryDocumentationRequest request, CancellationToken token)
         {

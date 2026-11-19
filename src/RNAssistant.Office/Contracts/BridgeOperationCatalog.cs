@@ -96,8 +96,10 @@ namespace RNAssistant.Office.Contracts
         [BridgeOperationPolicy(true, 300)] BrowserVersionCommand,
         [BridgeOperationPolicy(true, 300)] GetHtmlProjectDefinition,
         [BridgeOperationPolicy(true, 300)] SetHtmlProjectDefinition,
-        GetCasHealth,
-        CollectCasGarbage,
+        // CAS maintenance currently has no cooperative cancellation contract.
+        // A transport cancellation must not imply that GC stopped after dispatch.
+        [BridgeOperationPolicy(false, 300)] GetCasHealth,
+        [BridgeOperationPolicy(false, 300)] CollectCasGarbage,
         [BridgeOperationPolicy(true, 300)] CreateApplicationBackup,
         [BridgeOperationPolicy(true, 300)] RestoreApplicationBackup,
         [BridgeOperationPolicy(true)] ListLegacyChats,
@@ -125,7 +127,8 @@ namespace RNAssistant.Office.Contracts
         CancelPromptMutationUpload,
         GetModelDiagnosticScenarios,
         [BridgeOperationPolicy(true, 180)] RunModelDiagnostic,
-        ClearRuntimeData,
+        // Deletion cannot be cancelled safely after its first filesystem mutation.
+        [BridgeOperationPolicy(false, 300)] ClearRuntimeData,
         GetTools,
         [BridgeOperationPolicy(true, 300)] GetToolDocumentation,
         [BridgeOperationPolicy(true, 300)] SaveTools,

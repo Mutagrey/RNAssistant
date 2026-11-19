@@ -7,9 +7,11 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Agent;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
+using RNAssistant.Core.Tools.Contracts;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
@@ -66,6 +68,21 @@ namespace RNAssistant.Harness
                     File.CreateSymbolicLink(Path.Combine(workspace.RootPath, "linked.txt"), outside);
                 }
                 var provider = new WorkspaceFileResourceProvider(new WorkspaceFileService(paths), workspace);
+                var missingTarget = new ResourceTextSearchRequest { Target = "src/missing.txt", Query = "needle" };
+                var missingError = RuntimeThrows<ResourceRequestException>(() =>
+                    new ResourceTextSearch().Search(missingTarget,
+                        provider.SearchSources(missingTarget, CancellationToken.None), CancellationToken.None));
+                AssertEqual("resource_not_found", missingError.ErrorCode,
+                    "an explicit absent file is a typed failure rather than a successful partial search");
+                var unavailableScope = new ResourceSearchSources { Items = new List<ResourceSearchSource> {
+                    new ResourceSearchSource { Target = "src/unavailable.txt", Open = token =>
+                        throw new ResourceRequestException("File unavailable", "resource_not_found", false) }
+                } };
+                var scoped = new ResourceTextSearchRequest { Scope = "workspace", Query = "needle" };
+                var partial = new ResourceTextSearch().Search(scoped, unavailableScope, CancellationToken.None);
+                AssertTrue(!partial.SourceComplete && partial.IncompleteReasons.Contains("source_unavailable") &&
+                    partial.UnavailableScopes.Contains("src/unavailable.txt"),
+                    "multi-source discovery retains truthful partial coverage without guessing absence");
                 var request = new ResourceTextSearchRequest { Scope = "workspace", Recursive = true, Query = "needle", Limit = 1 };
                 var engine = new ResourceTextSearch();
                 Func<ResourceWithinSearchPage> search = () => engine.Search(request, provider.SearchSources(request, CancellationToken.None), CancellationToken.None);
@@ -192,12 +209,39 @@ namespace RNAssistant.Harness
             AssertTrue(projected.Value<bool>("complete") == false && projected["scanComplete"] == null &&
                 projected["matchesComplete"] == null && projected["sourceComplete"] == null,
                 "model sees one conservative completeness verdict, not repeated runtime flags");
+            AssertTrue(projected.Value<bool>("nextExpired") && projected["next"] == null,
+                "a saved cursor without a live owner is never advertised as usable");
+            var savedSearch = ContinuityResult("saved-search", "core.search", ToolResult.Ok(
+                "Search is incomplete; continue.", "{\"matches\":[],\"scanComplete\":false,\"sourceComplete\":true," +
+                "\"matchesComplete\":false,\"totalMatchesExact\":false,\"totalMatches\":7," +
+                "\"incompleteReasons\":[\"page_limit\"],\"continuation\":{\"afterTarget\":\"a.js\",\"afterLine\":3,\"afterColumn\":2}}"), "user");
+            savedSearch.RunId = "run-old";
+            var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
+                "pack", new SkillCatalogSnapshot(null), null, 1);
+            var restarted = new ModelContextCompiler().Compile(authority, new ChatMessage[0],
+                new[] { savedSearch, new ChatMessage { Role = "user", Content = "Continue after restart.", RunId = "run-new" } },
+                null, new ToolCatalogEntry[0], new AppSettings { ToolResultRole = "user" }, 20000);
+            var restartedResult = restarted.Messages.Single(message => message.Id == savedSearch.Id);
+            ToolResultWireReadResult restartedWire; string restartedError;
+            AssertTrue(ToolResultHistoryReader.TryRead(restartedResult, out restartedWire, out restartedError),
+                "historical search remains a readable Tool Result");
+            AssertTrue(!restartedWire.Result.DataJson.Contains("\"next\":true") &&
+                restartedWire.Result.DataJson.Contains("\"nextExpired\":true"),
+                "a new run receives no promise for a dead handler cursor");
+            var sameRun = new ModelContextCompiler().Compile(authority, new ChatMessage[0],
+                new[] { savedSearch, new ChatMessage { Role = "user", Content = "Continue this run.", RunId = "run-old" } },
+                null, new ToolCatalogEntry[0], new AppSettings { ToolResultRole = "user" }, 20000);
+            var sameRunResult = sameRun.Messages.Single(message => message.Id == savedSearch.Id);
+            ToolResultWireReadResult sameRunWire; string sameRunError;
+            AssertTrue(ToolResultHistoryReader.TryRead(sameRunResult, out sameRunWire, out sameRunError) &&
+                sameRunWire.Result.DataJson.Contains("\"next\":true"),
+                "the latest search in the owning run keeps its live continuation");
             var incompleteSummary = ToolResultSummaryProjection.Summarize("core.search", JObject.Parse(
                 "{\"matches\":[],\"scanComplete\":false,\"sourceComplete\":true,\"matchesComplete\":false,\"totalMatchesExact\":false,\"incompleteReasons\":[\"page_limit\"]}").ToString());
             AssertTrue(incompleteSummary.Complete == false && incompleteSummary.Partial,
                 "incomplete search summary cannot look like a fully searched absence");
             var partialModel = ModelResultProjection.ProjectResourceData("core.search", JObject.Parse(
-                "{\"matches\":[],\"scanComplete\":false,\"sourceComplete\":true,\"matchesComplete\":false,\"totalMatchesExact\":false,\"totalMatches\":7,\"incompleteReasons\":[\"page_limit\"],\"continuation\":{\"afterTarget\":\"a.js\",\"afterLine\":3,\"afterColumn\":2}}"));
+                "{\"matches\":[],\"scanComplete\":false,\"sourceComplete\":true,\"matchesComplete\":false,\"totalMatchesExact\":false,\"totalMatches\":7,\"incompleteReasons\":[\"page_limit\"],\"continuation\":{\"afterTarget\":\"a.js\",\"afterLine\":3,\"afterColumn\":2}}"), true);
             AssertTrue(partialModel.Value<bool>("complete") == false && (int)partialModel["matchesSeen"] == 7 &&
                 partialModel["totalMatches"] == null && partialModel["continuation"] == null && partialModel.Value<bool>("next"),
                 "partial totals are an observed lower bound and cursor identity stays internal");
@@ -246,7 +290,7 @@ namespace RNAssistant.Harness
             var cursorFirst = cursorEngine.SearchModel(cursorRequest, cursorSources, CancellationToken.None);
             AssertTrue(cursorFirst.Continuation != null && cursorFirst.Matches.Single().StartLine == 1,
                 "first page retains an internal exact cursor");
-            var publicFirst = ModelResultProjection.ProjectResourceData("core.search", JObject.FromObject(cursorFirst));
+            var publicFirst = ModelResultProjection.ProjectResourceData("core.search", JObject.FromObject(cursorFirst), true);
             AssertTrue(publicFirst["continuation"] == null && publicFirst.Value<bool>("next"),
                 "model sees next intent, never cursor coordinates");
             cursorRequest.Next = true;

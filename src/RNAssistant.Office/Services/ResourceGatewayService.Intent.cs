@@ -345,6 +345,25 @@ namespace RNAssistant.Office.Services
             provider.EnsureCurrentHtmlReference(session, reference);
         }
 
+        internal ResourceIntentTarget ResolveBrowserDisplayLocator(ChatSession session, string locator)
+        {
+            var provider = _registry.All().OfType<ChatArtifactResourceProvider>().SingleOrDefault();
+            if (provider == null)
+                throw new ResourceRequestException("HTML resource provider is unavailable.",
+                    "RESOURCE_PROVIDER_UNAVAILABLE", false);
+            var descriptor = WithProvider(provider, session,
+                () => provider.ResolveBrowserDisplayLocator(session, locator));
+            var type = IntentType(descriptor);
+            return new ResourceIntentTarget
+            {
+                Target = IntentTarget(descriptor),
+                Type = type,
+                Scope = IntentScope(descriptor, type),
+                Descriptor = descriptor,
+                Reference = descriptor.Reference.Copy()
+            };
+        }
+
         public ResourceIntentTarget ResolveIntentTarget(
             ChatSession session,
             string target, bool allowUniqueBase = false)
@@ -361,7 +380,7 @@ namespace RNAssistant.Office.Services
             if (IsUriLikeIntentTarget(target))
             {
                 throw new ResourceRequestException(
-                    "Resource URIs cannot be used as model targets. Copy one exact semantic target from RUNTIME_CONTEXT or core.find; it never contains ://.",
+                    "Display addresses and URI schemes cannot be used as model targets. Copy one exact semantic target from RUNTIME_CONTEXT or core.find; semantic targets do not start with a URI scheme.",
                     "resource_target_runtime_owned",
                     true);
             }
@@ -638,17 +657,18 @@ namespace RNAssistant.Office.Services
         internal static bool IsUriLikeIntentTarget(string target)
         {
             var value = (target ?? string.Empty).Trim();
-            var separator = value.IndexOf("://", StringComparison.Ordinal);
-            if (separator <= 0) return false;
-            if (!char.IsLetter(value[0])) return false;
-            for (var index = 1; index < separator; index++)
+            var colon = value.IndexOf(':');
+            if (colon <= 0 || !char.IsLetter(value[0])) return false;
+            for (var index = 1; index < colon; index++)
             {
                 var character = value[index];
                 if (!char.IsLetterOrDigit(character) &&
                     character != '+' && character != '-' && character != '.')
                     return false;
             }
-            return true;
+            // Semantic targets use labels such as "document: title" and
+            // "HTML file: index.html". A scheme is followed immediately by data.
+            return colon + 1 >= value.Length || !char.IsWhiteSpace(value[colon + 1]);
         }
 
         private List<ResourceIntentState> EnumerateIntentResources(

@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
@@ -113,6 +114,54 @@ namespace RNAssistant.Harness
                     AssertEqual("canonical sentinel", File.ReadAllText(Path.Combine(directory, "history.jsonl")),
                         "append-only journals are outside log maintenance");
                     AssertEqual("keep-this-model", settings.Load().Model, "clear all does not reset application data");
+                }
+            });
+        }
+        private static void DiagnosticMaintenanceBridgeDoesNotBlockCaller()
+        {
+            WithTempPaths(paths =>
+            {
+                var controller = new AssistantController(paths);
+                using (var bridge = new AssistantWebBridge(controller, null))
+                {
+                    var token = BridgeToken(bridge);
+                    foreach (var operation in new[] { "getCasHealth", "collectCasGarbage", "clearRuntimeData" })
+                    using (var entered = new ManualResetEventSlim())
+                    using (var release = new ManualResetEventSlim())
+                    {
+                        Action hold = () =>
+                        {
+                            entered.Set();
+                            if (!release.Wait(5000)) throw new TimeoutException("Maintenance fixture was not released.");
+                        };
+                        controller.CasHealthOverride = () => {
+                            hold(); return new CasHealthResponse { Healthy = true, ReachabilityComplete = true, CanGarbageCollect = true };
+                        };
+                        controller.CasCollectionOverride = () => {
+                            hold(); return new CasGarbageCollectionResponse { Completed = true,
+                                Health = new CasHealthResponse { Healthy = true, ReachabilityComplete = true, CanGarbageCollect = true } };
+                        };
+                        controller.RuntimeClearOverride = () => { hold(); return controller.Initialize(); };
+                        var request = JsonConvert.SerializeObject(new {
+                            contractVersion = BridgeOperationCatalog.Version, id = Guid.NewGuid().ToString("N"),
+                            type = operation, bridgeToken = token, payload = new { }
+                        });
+                        AssertTrue(!BridgeOperationCatalog.Resolve(operation).Cancellable,
+                            operation + " does not advertise unsupported post-dispatch cancellation");
+                        var elapsed = Stopwatch.StartNew();
+                        var pending = bridge.HandleMessageAsync(request);
+                        elapsed.Stop();
+                        try
+                        {
+                            AssertTrue(elapsed.ElapsedMilliseconds < 1000,
+                                operation + " returns an asynchronous task instead of blocking the WebView caller");
+                            AssertTrue(entered.Wait(3000), operation + " executes on a worker");
+                            AssertTrue(!pending.IsCompleted, operation + " remains in flight while maintenance is held");
+                        }
+                        finally { release.Set(); }
+                        var response = JObject.Parse(pending.GetAwaiter().GetResult());
+                        AssertTrue((bool)response["ok"], operation + " publishes its result after the worker finishes");
+                    }
                 }
             });
         }

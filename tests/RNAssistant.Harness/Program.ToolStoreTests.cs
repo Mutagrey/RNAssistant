@@ -45,7 +45,7 @@ namespace RNAssistant.Harness
                 var source = "const h = await RN.resources.open('sales'); let total = 0; " +
                     "for await (const batch of h.stream()) total += batch.rows.length; return total;";
                 var tool = new ToolCatalogEntry {
-                    Id = "common.count_rows_js", Host = "Common", Executor = "js",
+                    Id = "user.count.rows", Host = "Common", Executor = "js",
                     Name = "Count rows", Description = "Count rows in a selected resource.",
                     Code = source,
                     ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"resources\":{\"type\":\"array\",\"description\":\"Named source bindings\",\"items\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Binding name\"},\"target\":{\"type\":\"string\",\"description\":\"Semantic target\"},\"view\":{\"type\":\"string\",\"description\":\"Resource view\"}},\"required\":[\"name\",\"target\",\"view\"],\"additionalProperties\":false}}},\"required\":[\"resources\"],\"additionalProperties\":false}"

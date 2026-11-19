@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using RNAssistant.Application;
 using RNAssistant.Application.Contracts;
+using RNAssistant.Core.Models;
 using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office.WebView
@@ -19,7 +20,8 @@ namespace RNAssistant.Office.WebView
         private readonly Dictionary<string, byte[]> _assembledHtml = new Dictionary<string, byte[]>(StringComparer.Ordinal);
         private async Task BuildHtmlAsync(CancellationToken token)
         {
-            if (Content.HtmlWorkspace == null) return;
+            var workspace = await Content.AssemblyWorkspaceAsync(token);
+            if (workspace == null) return;
             // Reuse the product assembler in an isolated, still blank world. Authored
             // scripts are strings here; they execute only after the scoped response loads.
             var frame = await Protocol<FrameTreeResponse>("Page.getFrameTree", new { });
@@ -30,7 +32,7 @@ namespace RNAssistant.Office.WebView
                 var script = await Task.Run(() => File.ReadAllText(Path.Combine(_assets, "js", file), Encoding.UTF8), token);
                 await Evaluate<bool>(script + "\n;true");
             }
-            await Evaluate<bool>("globalThis.__rnaWorkspace=" + JsonConvert.SerializeObject(Content.HtmlWorkspace) + ";true");
+            await Evaluate<bool>("globalThis.__rnaWorkspace=" + JsonConvert.SerializeObject(workspace) + ";true");
             var vendors = await Evaluate<PluginVendorRequest[]>("RNAssistantHtmlVendorRuntime.used(__rnaWorkspace.Files).map(function(v){return {id:v.id,version:v.version}})");
             foreach (var vendor in vendors) {
                 token.ThrowIfCancellationRequested();
@@ -40,7 +42,7 @@ namespace RNAssistant.Office.WebView
             }
             await Evaluate<bool>("RNAssistantHtmlWorkspacePreview.ensureVendors(__rnaWorkspace.Files).then(function(){return true})");
             long total = 0;
-            foreach (var file in Content.HtmlWorkspace.Files.Where(file => file.Kind == "html")) {
+            foreach (var file in workspace.Files.Where(file => file.Kind == "html")) {
                 var html = await Evaluate<string>("RNAssistantHtmlWorkspacePreview.build({files:__rnaWorkspace.Files,dataSources:__rnaWorkspace.DataSources,activeFileId:" + JsonConvert.SerializeObject(file.Id) + ",hostBridge:true,nativeHost:true})");
                 token.ThrowIfCancellationRequested();
                 if (html == null || html.Length > 32 * 1024 * 1024) throw new InvalidOperationException("Assembled HTML exceeds 32 MiB.");
@@ -54,7 +56,8 @@ namespace RNAssistant.Office.WebView
         {
             if (_closed || !Ready || _resources == null || Content.Target.Immutable || change.Scope != "document:" + Content.Target.DocumentId) return;
             try { Core.PostWebMessageAsJson(JsonConvert.SerializeObject(new BrowserResourceChangedMessage {
-                Names = Content.HtmlWorkspace.DataSources.Select(source => source.Name).ToArray(), Generation = change.Generation })); } catch { }
+                Names = (Content.HtmlWorkspace?.DataSources ?? new System.Collections.Generic.List<HtmlWorkspaceDataSource>()).Select(source => source.Name).ToArray(),
+                Generation = change.Generation })); } catch { }
         }
         private async void ResourceControl(object sender, Microsoft.Web.WebView2.Core.CoreWebView2WebMessageReceivedEventArgs args)
         {

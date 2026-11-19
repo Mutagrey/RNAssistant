@@ -176,6 +176,12 @@ namespace RNAssistant.Core.Services
             var results = frozenFacts.Where(item => item.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&
                 !string.IsNullOrWhiteSpace(item.ToolCallId)).GroupBy(item => item.ToolCallId, StringComparer.Ordinal)
                 .ToDictionary(group => group.Key, group => group.Last(), StringComparer.Ordinal);
+            var currentRunId = currentUser?.RunId;
+            var liveSearchResultId = string.IsNullOrWhiteSpace(currentRunId) ? null :
+                frozenFacts.LastOrDefault(item => item.RunId == currentRunId &&
+                    item.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&
+                    string.Equals(item.ToolName, "core.search", StringComparison.OrdinalIgnoreCase) &&
+                    !string.IsNullOrWhiteSpace(item.ToolCallId))?.Id;
             var consumed = new HashSet<string>(StringComparer.Ordinal);
             foreach (var fact in frozenFacts)
             {
@@ -533,7 +539,8 @@ namespace RNAssistant.Core.Services
                         if (atom.BodyOmitted) continue;
                         if (projectionSkills == null) projectionSkills = authority.Skills.Skills;
                         atom.Messages[index] = _projection.Project(message, tools, projectionSkills,
-                            parts => atom.BodyParts[message.Id] = parts, skillSurface?.Tools);
+                            parts => atom.BodyParts[message.Id] = parts, skillSurface?.Tools,
+                            liveContinuation: message.Id == liveSearchResultId);
                         foreach (var skill in skillSurface?.Instructions ?? new SkillDefinition[0])
                         {
                             var part = ContextClaimProjection.CompactSelectedSkillRead(atom.Messages[index], skill,

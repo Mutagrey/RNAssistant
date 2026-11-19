@@ -27,12 +27,15 @@ namespace RNAssistant.Office.Services
             bool replayCurrentUserInHistory = false,
             int historyBudgetTokens = 0,
             JObject capabilityCatalog = null, JObject completionFeedback = null, SkillRequestSurface skillSurface = null,
-            TaskListStateProjection taskList = null)
+            TaskListStateProjection taskList = null, string browserPageTarget = null,
+            string referencedResourceTarget = null, string referencedResourceError = null)
         {
             settings = settings ?? new AppSettings();
             mode = ConversationRunPolicy.For(mode).Mode;
             var instruction = BuildInstruction(mode, settings);
-            var runtime = BuildRuntimeContextData(mode, adapter, tools, skills, context, session, settings, capabilityCatalog);
+            var runtime = BuildRuntimeContextData(mode, adapter, tools, skills, context, session,
+                settings, capabilityCatalog, browserPageTarget, referencedResourceTarget,
+                referencedResourceError);
             if (taskList != null) runtime["active_task_list"] = JObject.FromObject(taskList);
             if (completionFeedback != null) runtime["completionFeedback"] = completionFeedback.DeepClone();
             if (skillSurface != null) runtime["loaded_skills"] = new JArray(skillSurface.Instructions.Select(skill => skill.Id));
@@ -119,15 +122,22 @@ namespace RNAssistant.Office.Services
             DocumentContext context,
             ChatSession session,
             AppSettings settings = null,
-            JObject capabilityCatalog = null)
+            JObject capabilityCatalog = null,
+            string browserPageTarget = null,
+            string referencedResourceTarget = null,
+            string referencedResourceError = null)
         {
-            return RuntimeContextPrompt.Render(BuildRuntimeContextData(mode, adapter, tools, skills, context, session, settings, capabilityCatalog),
+            return RuntimeContextPrompt.Render(BuildRuntimeContextData(mode, adapter, tools, skills,
+                    context, session, settings, capabilityCatalog, browserPageTarget,
+                    referencedResourceTarget, referencedResourceError),
                 ConversationInputMessage.HasAgentMessages(session));
         }
 
         internal static JObject BuildRuntimeContextData(string mode, IOfficeApplicationAdapter adapter,
             IReadOnlyList<ToolCatalogEntry> tools, IReadOnlyList<SkillDefinition> skills, DocumentContext context,
-            ChatSession session, AppSettings settings = null, JObject capabilityCatalog = null)
+            ChatSession session, AppSettings settings = null, JObject capabilityCatalog = null,
+            string browserPageTarget = null, string referencedResourceTarget = null,
+            string referencedResourceError = null)
         {
             mode = ConversationRunPolicy.For(mode).Mode;
             var adapterHost = session == null ? SafeAdapterValue(adapter, item => item.HostName) : session.Host;
@@ -172,6 +182,20 @@ namespace RNAssistant.Office.Services
                 ["capabilities"] = capabilityCatalog ?? CapabilityCatalogService.BuildPromptCatalog(tools, skills, tools),
                 ["context_policy"] = "User-selected document observations are compiled separately against current resource authority."
             };
+            if (!string.IsNullOrWhiteSpace(browserPageTarget) ||
+                !string.IsNullOrWhiteSpace(referencedResourceTarget) ||
+                !string.IsNullOrWhiteSpace(referencedResourceError))
+            {
+                var browser = new JObject();
+                if (!string.IsNullOrWhiteSpace(browserPageTarget))
+                    browser["bound_page_target"] = browserPageTarget;
+                if (!string.IsNullOrWhiteSpace(referencedResourceTarget))
+                    browser["referenced_target"] = referencedResourceTarget;
+                if (!string.IsNullOrWhiteSpace(referencedResourceError))
+                    browser["reference_error"] = referencedResourceError;
+                browser["policy"] = "These are runtime-resolved semantic addresses, not read evidence. When the user refers to the visible page or a resource address in the current message, call core.read with the exact target and representation=text before saying its content is unavailable or describing it. Never reinterpret /resources/... or file:/... as a target, path or content.";
+                root["browser"] = browser;
+            }
             var artifactBudget = Math.Max(
                 192,
                 Math.Min(600, ModelContextBudget.InputBudgetTokens(settings) / 20));

@@ -114,7 +114,7 @@ namespace RNAssistant.Harness
 
                 var ports = typeof(WorkspaceConversationService).GetNestedType("WorkspacePorts", BindingFlags.NonPublic);
                 var schema = JObject.Parse((string)ports.GetMethod("ResourceSchema", BindingFlags.Static | BindingFlags.NonPublic)
-                    .Invoke(null, new object[] { false, true, true, 2000 }));
+                    .Invoke(null, new object[] { false, true, true, 2000, false }));
                 string error;
                 AssertTrue(ToolSchemaSupport.ValidateArguments(new JObject { ["target"] = "large.json", ["representation"] = "tree",
                     ["pointer"] = "", ["depth"] = 0 }, schema, false, out error), "workspace schema admits root pointer");

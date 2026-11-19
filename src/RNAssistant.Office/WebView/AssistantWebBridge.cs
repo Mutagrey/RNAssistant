@@ -695,7 +695,7 @@ namespace RNAssistant.Office.WebView
                         responsePayload = BrowserSource(Payload<BrowserSourceRequest>(payload));
                         break;
                     case BridgeOperationId.GetCasHealth:
-                        responsePayload = _controller.GetCasHealth();
+                        responsePayload = await RunBridgeWorkAsync(_controller.GetCasHealth, cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.ListLegacyChats:
                         var legacyChats = Payload<LegacyRecoveryListRequest>(payload);
@@ -778,7 +778,7 @@ namespace RNAssistant.Office.WebView
                         responsePayload = await RunBridgeWorkAsync(() => _controller.SaveDiagnosticLogOptions(logOptions), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.CollectCasGarbage:
-                        responsePayload = _controller.CollectCasGarbage();
+                        responsePayload = await RunBridgeWorkAsync(_controller.CollectCasGarbage, cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.CreateApplicationBackup:
                         var backupRequest = Payload<ApplicationBackupRequest>(payload);
@@ -815,10 +815,17 @@ namespace RNAssistant.Office.WebView
                         responsePayload = await _controller.RunModelDiagnosticAsync(Payload<RunModelDiagnosticRequest>(payload), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.ClearRuntimeData:
-                        _workspaces.EnsureNoSourceWork();
-                        responsePayload = Bootstrap(_controller.ClearRuntimeData());
-                        _workspaces.Reset();
-                        Plugins?.ResetAfterRuntimeDataClear();
+                        // The exclusive bridge binding remains held until all storage owners
+                        // are reset. Never run recursive directory deletion on WebView's STA.
+                        var cleared = await RunBridgeWorkAsync(() =>
+                        {
+                            _workspaces.EnsureNoSourceWork();
+                            var initialized = _controller.ClearRuntimeData();
+                            _workspaces.Reset();
+                            Plugins?.ResetAfterRuntimeDataClear();
+                            return initialized;
+                        }, cancellationToken).ConfigureAwait(false);
+                        responsePayload = Bootstrap(cleared);
                         break;
                     case BridgeOperationId.GetTools:
                         responsePayload = await RunBridgeWorkAsync(() => _controller.GetTools(), cancellationToken).ConfigureAwait(false);

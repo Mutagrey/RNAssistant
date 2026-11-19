@@ -1,7 +1,10 @@
+using RNAssistant.Application;
 using RNAssistant.Core.Llm;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -39,6 +42,7 @@ namespace RNAssistant.Office.Services
                     await RefreshAuthorityAsync(cancellationToken).ConfigureAwait(false);
                     await EnsureModelSessionAsync(cancellationToken).ConfigureAwait(false);
                 }
+                RefreshBrowserContext();
                 var sessionMs = contextTimer.ElapsedMilliseconds - authorityMs;
                 ModelProtocolRequest preparedRequest;
                 try
@@ -121,11 +125,76 @@ namespace RNAssistant.Office.Services
                     fresh.Skills, _input.Attachments, fresh.UpdatedMessages);
                 UseInput(fresh);
             }
+            string referencedTarget, referencedError;
+            ResolveReferencedBrowserTarget(out referencedTarget, out referencedError);
             _modelSession = await ConversationModelSession.CreateAsync(_adapter, _compaction, _attachments, _eventStore,
                 _policy.Mode, _text, _session, _input.Context, _input.Settings, _catalog, _skills,
                 _input.Attachments, _confirmedCommand != null, _progress, cancellationToken,
                 _executor.ResourceAuthority, _executor.Payloads, () => _skillSnapshot, _catalogGeneration,
-                _conversations as IConversationContextStore).ConfigureAwait(false);
+                _conversations as IConversationContextStore,
+                browserPageTarget: CaptureBoundBrowserPageTarget(),
+                referencedResourceTarget: referencedTarget,
+                referencedResourceError: referencedError).ConfigureAwait(false);
+        }
+
+        private void RefreshBrowserContext()
+        {
+            if (_modelSession == null) return;
+            string referencedTarget, referencedError;
+            ResolveReferencedBrowserTarget(out referencedTarget, out referencedError);
+            _modelSession.SetBrowserContext(CaptureBoundBrowserPageTarget(),
+                referencedTarget, referencedError);
+        }
+
+        private string CaptureBoundBrowserPageTarget()
+        {
+            var source = _executor.ExternalBrowserReadSource;
+            if (source == null || string.IsNullOrWhiteSpace(_session?.Id)) return null;
+            var targets = source.TargetsFor(_session.Id);
+            return targets != null && targets.Count == 1 && targets[0] != null
+                ? targets[0].Target : null;
+        }
+
+        private void ResolveReferencedBrowserTarget(out string target, out string error)
+        {
+            target = null;
+            error = null;
+            var text = _text ?? string.Empty;
+            if (text.IndexOf("/resources/", StringComparison.Ordinal) < 0) return;
+
+            var resolved = new List<string>();
+            var found = false;
+            foreach (Match match in Regex.Matches(text,
+                @"/resources/[^\s<>""']+", RegexOptions.CultureInvariant,
+                TimeSpan.FromMilliseconds(100)))
+            {
+                found = true;
+                var locator = match.Value.TrimEnd('.', ',', ';', ':', '!', '?', ')', ']', '}');
+                BrowserLocalLocator parsed;
+                if (!BrowserLocalLocator.TryParse(locator, out parsed) ||
+                    parsed.Kind != BrowserLocatorKind.Resource &&
+                    parsed.Kind != BrowserLocatorKind.ResourceVersion ||
+                    string.IsNullOrWhiteSpace(parsed.RelativePath))
+                {
+                    error = "resource_target_not_found";
+                    continue;
+                }
+                try
+                {
+                    var selected = _executor.ResourceGateway.ResolveBrowserDisplayLocator(
+                        _session, locator);
+                    if (!resolved.Contains(selected.Target, StringComparer.Ordinal))
+                        resolved.Add(selected.Target);
+                }
+                catch (ResourceRequestException ex)
+                {
+                    error = ex.ErrorCode;
+                }
+            }
+            if (!found) return;
+            if (!string.IsNullOrWhiteSpace(error)) return;
+            if (resolved.Count == 1) target = resolved[0];
+            else if (resolved.Count > 1) error = "resource_target_ambiguous";
         }
 
         private async Task<ModelProtocolRequest> PrepareRequestAsync(AgentModelRequest request, CancellationToken cancellationToken)

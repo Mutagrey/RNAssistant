@@ -11,6 +11,21 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.6.17-dev
+
+- Audit/GC CAS и очистка runtime data выполняются на bridge worker, а `Bootstrap`
+  публикуется только после успешного завершения блока очистки. Операции без
+  безопасной кооперативной отмены больше не объявляют себя cancellable и получают
+  увеличенное, но ограниченное ожидание UI.
+- Поиск scope в SQLite-проекции проходит через существующий
+  `JournalIndexAdmission`, после чего gate освобождается до inventory/repair.
+  Повреждённый индекс сохраняет единственный прежний repair path без lock inversion.
+- `core.search` больше не обещает продолжение после смены run или handler: старый
+  результат явно помечается `nextExpired` и требует нового поиска, а живой
+  continuation сохраняется только у последнего поиска текущего run. Уточнены
+  диагностика admission/CAS и ошибки точного поиска; прямой ToolRuntime использует
+  ту же узкую нормализацию singleton-массивов, что и v8 parser.
+
 ### 17.6.16-dev
 
 - NativeHost portable-дистрибутив снова включает `Markdig.dll`: Markdown-файлы

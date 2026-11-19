@@ -8,6 +8,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using RNAssistant.Application;
 using RNAssistant.Application.Contracts;
+using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 
 namespace RNAssistant.Harness
@@ -206,6 +207,9 @@ namespace RNAssistant.Harness
                 using (var content = service.OpenBrowserContent(target, CancellationToken.None)) {
                     var initial = content.InitialUrl(target.DisplayLocator + "?mode=edit#field");
                     AssertTrue(initial.EndsWith("?mode=edit#field", StringComparison.Ordinal), "native entry preserves query and fragment");
+                    var assembly = content.AssemblyWorkspaceAsync(CancellationToken.None).GetAwaiter().GetResult();
+                    AssertTrue(assembly != null && assembly.Files.Any(file => file.Kind == "html"),
+                        "Workspace project Browser content reaches the common vendor assembler");
                     var displayed = new BrowserPageStateDto { Target = target };
                     content.UpdateLocation(displayed, initial);
                     AssertEqual(target.DisplayLocator + "?mode=edit#field", displayed.Url, "display locator and current native member agree");
@@ -237,5 +241,41 @@ namespace RNAssistant.Harness
                 RuntimeThrows<InvalidOperationException>(() => BrowserNetworkPolicy.RequireSupportedRuntime("151.0.0.0"));
             });
         }
+
+        private static void BrowserWorkspaceProjectAssembly()
+        {
+            var target = new BrowserTargetDescriptor { Kind = BrowserTargetKind.WorkspaceHtmlProject, State = BrowserTargetState.Ready,
+                WorkspaceId = "workspace", DisplayLocator = "/projects/workspace/source/index.html" };
+            var files = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["index.html"] = "<main id=\"chart\"></main>",
+                ["app.js"] = "echarts.init(document.getElementById('chart'));",
+                ["site.css"] = "#chart{height:240px}",
+                ["logo.png"] = null
+            };
+            using (var content = new BrowserContentSession(target, files.Keys, "index.html",
+                (path, token) => new MemoryStream(files[path] == null ? new byte[] { 0x89, 0x50, 0x4e, 0x47 } : new UTF8Encoding(false).GetBytes(files[path]), false),
+                () => { }))
+            {
+                var assembly = content.AssemblyWorkspaceAsync(CancellationToken.None).GetAwaiter().GetResult();
+                AssertTrue(assembly != null && assembly.DataSources.Count == 0,
+                    "Workspace project gets a transient assembly view without invented bindings");
+                AssertEqual("index.html", assembly.ActiveFileId, "Workspace entry remains exact");
+                AssertEqual("html,js,css", string.Join(",", assembly.Files.Select(file => file.Kind)), "only text assembly members are loaded");
+                AssertContains(assembly.Files.Single(file => file.Path == "app.js").Content, "echarts.init",
+                    "vendor activation source reaches the common assembler");
+            }
+            var raw = new BrowserTargetDescriptor { Kind = BrowserTargetKind.HtmlResource, State = BrowserTargetState.Ready };
+            using (var rawContent = new BrowserContentSession(raw, new[] { "index.html" }, "index.html",
+                (path, token) => new MemoryStream(Encoding.UTF8.GetBytes("<main>raw</main>"), false), () => { }))
+                AssertTrue(rawContent.AssemblyWorkspaceAsync(CancellationToken.None).GetAwaiter().GetResult() == null,
+                    "source-only raw HTML never enters workspace assembly");
+            var plugin = new BrowserTargetDescriptor { Kind = BrowserTargetKind.PluginSource, State = BrowserTargetState.Ready };
+            using (var pluginContent = new BrowserContentSession(plugin, new[] { "index.html" }, "index.html",
+                (path, token) => new MemoryStream(Encoding.UTF8.GetBytes("<main>plugin</main>"), false), () => { }))
+                AssertTrue(pluginContent.AssemblyWorkspaceAsync(CancellationToken.None).GetAwaiter().GetResult() == null,
+                    "plugin pages keep their package/SDK route instead of the workspace vendor pool");
+        }
+
     }
 }

@@ -1,5 +1,26 @@
 # RNAssistant Harness
 
+## Maintenance and existing-data migration — 2026-11-19
+
+After the bridge/UI and SQLite scope repair, run the focused maintenance cases:
+
+```bash
+dotnet tests/RNAssistant.Harness/bin/Debug/net8.0/RNAssistant.Harness.dll \
+  "diagnostics: CAS maintenance and clear do not block the bridge"
+dotnet tests/RNAssistant.Harness/bin/Debug/net8.0/RNAssistant.Harness.dll \
+  "storage optimization: router scope discovery honors repair admission"
+dotnet tests/RNAssistant.Harness/bin/Debug/net8.0/RNAssistant.Harness.dll \
+  "storage optimization: journal index admission is bounded"
+```
+
+For legacy recovery on macOS, set `TMPDIR=/private/tmp` before the test process so the
+canonical-path guard does not reject `/var` as a reparse point. The full existing-data
+cycle is covered by `legacy recovery:`, `legacy chat import:`, `legacy chat migration:`,
+`legacy plugin import:`, `plugin versions:` and `application backup:`. These are
+host-neutral checks. `application backup:` also imports a legacy plugin registration
+and version catalog before backup v3 and verifies both after restore. Windows/Office/
+DPAPI profile acceptance remains separate.
+
 ## Static chat HTML and isolated Play — 2026-11-19
 
 `local browser: inline executor lifecycle` verifies that completed chat HTML stays a
@@ -22,6 +43,27 @@ copy while preserving source bytes. A Chromium CDP trusted-click probe and the u
 with no outbound request. Playwright is not installed in this workspace; native
 Windows/WebView2 Play qualification remains separate. See
 [RISK_REGISTER](../../docs/stabilization/RISK_REGISTER.md#static-inline-html-link-navigation--open-2026-11-19).
+
+## HTML runtime verification matrix
+
+Use these focused checks instead of a full Harness sweep:
+
+- `node tests/web/html-workspace-echarts.test.js` — pinned ECharts ordering,
+  Workspace assembly, offline resource API and script execution.
+- `node tests/web/html-workspace-export.test.js` — exact `RN.resources`
+  table/text/binary snapshots, JSON-safe escaping, cancellation and stale data.
+- `node tests/web/html-workspace-vendors.test.js` — all bundled vendor carriers and
+  fail-closed admission.
+- `dotnet run --project tests/RNAssistant.Harness -- "local browser: interactive content pins exact local members"`
+  — Workspace/plugin member ownership and navigation guards.
+- `dotnet run --project tests/RNAssistant.Harness -- "local browser: Workspace project assembly includes vendor sources"`
+  — exact Workspace text members reach the common vendor assembler.
+- `dotnet run --project tests/RNAssistant.Harness -- "plugins: vendor resolution is separate from admission"`
+  — plugin vendor identity remains separate from SDK/runtime grants.
+
+Playwright/WebView2 end-to-end visual execution and native Windows qualification remain
+separate. Raw HTML remains source-only; use a Workspace project when preview vendors or
+`RN.resources` bindings are required.
 
 ## Bounded ProjectChat polling — 2026-11-17
 

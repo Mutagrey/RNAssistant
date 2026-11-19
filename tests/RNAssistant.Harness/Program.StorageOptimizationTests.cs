@@ -379,6 +379,34 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void JournalRouterScopeDiscoveryWaitsForRepair()
+        {
+            WithTempPaths(paths =>
+            {
+                var scope = "document:" + DocumentAuthorityId.Create().Id;
+                IConversationStore source = new ConversationJournal(paths, scope);
+                var chat = source.CreateTransient("Word", "scope-test", "Document", "Indexed lookup");
+                source.Commit(chat, new ConversationCommit());
+                var router = new ConversationJournalRouter(paths, (host, key) => scope, StorageProtector.None);
+                var find = typeof(ConversationJournalRouter).GetMethod("FindScope",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                AssertTrue(find != null, "the router has the indexed scope-discovery owner");
+                var intent = Path.Combine(paths.Root, "locks", "index-repair.lck");
+                using (var started = new ManualResetEventSlim())
+                {
+                    Task<string> read;
+                    using (var repair = new FileStream(intent, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
+                    {
+                        read = Task.Run(() => { started.Set(); return (string)find.Invoke(router, new object[] { chat.Id }); });
+                        AssertTrue(started.Wait(3000), "scope discovery worker started");
+                        AssertTrue(!read.Wait(150), "scope discovery cannot bypass an active repair-intent gate");
+                    }
+                    AssertTrue(read.Wait(5000), "scope discovery finishes after the repair gate is released");
+                    AssertEqual(scope, read.Result, "indexed lookup returns the existing exact scope");
+                }
+            });
+        }
+
         private static void StorageJournalDurability()
         {
             foreach (var encrypted in new[] { false, true })

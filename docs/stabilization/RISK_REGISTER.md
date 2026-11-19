@@ -1,5 +1,26 @@
 # Stabilization risk register
 
+<a id="plugin-runtime-shutdown-hang--open-2026-11-19"></a>
+## Plugin Runtime shutdown hang — open 2026-11-19
+
+**P1 / open.** Owner: Plugin application lifetime, `ConversationWorkService` and the
+native `PluginWebViewHost` drain. The host-neutral admitted-run case passes in 2.8
+seconds, including an occupied lease, cancellation before admission, admitted-run
+cancellation, exact run release and repeated `CloseAsync`. The complete `plugins:`
+filter finishes in 32.6 seconds, so the reported greater-than-60-second wait is not a
+host-neutral reproduction.
+
+The unbounded boundary is now localized after run admission: `RunsDrained` hands off to
+`PluginInstance.CloseAsync`, whose final `_gate.WaitAsync()` has no deadline, while
+`PluginWebViewHost.Drained` additionally waits for command runs and transport cleanup.
+The host-neutral command, prepared authority and data-lease cases pass. The remaining
+candidate is native worker/command teardown where a cancellation post or resource
+deferral may outlive window shutdown. No root cause is claimed until Windows x64 /
+Office x64 / WebView2 evidence shows the exact wait. Closing UI must not cancel an
+admitted run early, release the exact run/data lease early, or report success before
+the owner reaches terminal cleanup. Only screen photographs are requested for native
+evidence.
+
 <a id="static-inline-html-link-navigation--open-2026-11-19"></a>
 ## Static inline HTML link navigation — Resolved host-neutral, 2026-11-19
 

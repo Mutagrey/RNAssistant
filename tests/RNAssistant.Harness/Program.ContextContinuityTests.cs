@@ -316,6 +316,23 @@ namespace RNAssistant.Harness
             return message;
         }
 
+        private static string ExternalizeContinuityResult(ChatMessage message, ChatBlobStore blobs)
+        {
+            ToolResultWireReadResult wire; string error;
+            if (!ToolResultHistoryReader.TryRead(message, out wire, out error))
+                throw new InvalidOperationException(error);
+            var header = new JObject { ["payload_externalized"] = true, ["complete"] = true,
+                ["characters"] = (wire.Result.DataJson ?? string.Empty).Length };
+            message.ResultPayload = PayloadRef.FromBlob(blobs.StoreText(
+                wire.Result.DataJson ?? "null", "application/vnd.rnassistant.tool-result+json"));
+            message.ResultBody = new RetainedToolResultBody(1, ToolResultBodyKind.JsonData,
+                wire.Result.Status, wire.Result.Message, wire.ResultResource);
+            message.Content = ToolResultWire.WriteParsed(message.ToolCallId, message.ToolName,
+                new ToolResult(wire.Result.Status, wire.Result.Message, header.ToString(), wire.Result.Resources),
+                header, wire.ResultResource);
+            return wire.Result.DataJson ?? "null";
+        }
+
         private static void ContextContinuityTracksFailedObservation()
         {
             WithTempPaths(paths =>
@@ -329,9 +346,8 @@ namespace RNAssistant.Harness
                 failed.ResourceEvidence.Add(new ResourceEvidence("script", scope, script, "text", ResourceCoverage.Whole(), true, 1));
                 failed.ResourceEvidence.Add(new ResourceEvidence("style", scope, style, "text", ResourceCoverage.Whole(), true, 1));
                 var blobs = new RNAssistant.Core.Storage.ChatBlobStore(paths);
-                var full = failed.Content;
-                failed.ResultPayload = PayloadRef.FromBlob(blobs.StoreText(full, "application/json"));
-                failed.Content = ToolResultWire.Write("browser", "web.verify", ToolResult.Error("Archived diagnostic."));
+                ExternalizeContinuityResult(failed, blobs);
+                var durableContent = failed.Content;
                 var compiler = new ModelContextCompiler(blobs);
                 Func<ResourceHeadState, ModelAuthoritySnapshot> authority = head => new ModelAuthoritySnapshot(
                     new ResourceAuthoritySnapshotSet(new[] { new ResourceAuthoritySnapshot(scope, 2, null, 0,
@@ -362,7 +378,7 @@ namespace RNAssistant.Harness
                 AssertContains((string)body["observation"]["nextAction"], "completed", "historical error cannot instruct mutation replay");
                 AssertTrue(changed.Receipt.ExcludedSuperseded > 0, "receipt records source invalidation");
                 AssertTrue(!receipt.Content.Contains("rna://"), "source identities stay runtime-only");
-                AssertContains(failed.Content, "Archived diagnostic", "compilation does not mutate durable facts");
+                AssertEqual(durableContent, failed.Content, "compilation does not mutate durable facts");
                 AssertTrue(failed.ResultPayload != null, "historical exact payload remains retained");
                 var later = ContinuityResult("later", "core.patch", ToolResult.Error("No dispatch.", "{\"code\":\"no_effect\"}"));
                 var older = compiler.Compile(authority(ResourceHeadState.Known(new ResourceRef(style.Uri, "r2"), 2)),
@@ -395,12 +411,8 @@ namespace RNAssistant.Harness
                     ? ResourceEffectOutcome.UnknownAfterDispatch : ResourceEffectOutcome.FailedNoEffect);
                 var full = inline.Content;
                 AssertTrue(full.Length > 8192, "fixture crosses the ordinary CAS externalization threshold");
+                var retainedBody = ExternalizeContinuityResult(inline, blobs);
                 var archived = HistoricalContextProjector.Project(inline);
-                archived.ResultPayload = PayloadRef.FromBlob(blobs.StoreText(full, "application/vnd.rnassistant.tool-result+json"));
-                var header = new JObject { ["payload_externalized"] = true, ["complete"] = true, ["characters"] = full.Length };
-                var json = ToolResultWire.WriteParsed(inline.ToolCallId, inline.ToolName,
-                    new ToolResult(status, "Inspect the failed hunk.", header.ToString()), header);
-                archived.Content = json;
                 var checkpoint = new ContextCheckpoint { ThroughMessageId = archived.Id,
                     Claims = new List<StructuredContextClaim> { new StructuredContextClaim {
                         ClaimId = "c", Kind = "interpretation", Text = "Continue.", SourceRoles = new List<string> { "assistant" },
@@ -439,7 +451,7 @@ namespace RNAssistant.Harness
                         m.SourceMessageId == durable.Id).OriginalPayload.Sha256, "inspector retains exact provenance");
                 }
                 AssertEqual(archived.Content, durable.Content, "compilation never rewrites the durable header");
-                AssertEqual(full, blobs.ReadText(durable.ResultPayload.ToBlobReference()), "historical bytes remain unchanged");
+                AssertEqual(retainedBody, blobs.ReadText(durable.ResultPayload.ToBlobReference()), "historical bytes remain unchanged");
                 if (status == ToolResultStatus.Unknown)
                     AssertContains(RuntimeThrows<PromptBudgetExceededException>(() => new ModelContextCompiler(blobs).Compile(authority,
                         new ChatMessage[0], active, null, new ToolCatalogEntry[0],
@@ -525,12 +537,7 @@ namespace RNAssistant.Harness
                 {
                     var result = ContinuityResult("large_" + index, "test.failure", ToolResult.Error(new string('m', 2000),
                         new JObject { ["code"] = "conflict", ["details"] = externalized ? new string('x', 10000) : "details" }.ToString()));
-                    if (externalized)
-                    {
-                        result.ResultPayload = PayloadRef.FromBlob(blobs.StoreText(result.Content, "application/vnd.rnassistant.tool-result+json"));
-                        result.Content = ToolResultWire.Write(result.ToolCallId, result.ToolName,
-                            ToolResult.Error(new string('m', 2000), "{\"payload_externalized\":true}"));
-                    }
+                    if (externalized) ExternalizeContinuityResult(result, blobs);
                     session.Messages.Add(ContinuityCall(result)); session.Messages.Add(result);
                 }
                 SetContinuityCheckpoint(session, session.Messages.Last());
@@ -541,16 +548,14 @@ namespace RNAssistant.Harness
                 var compiled = compiler.Compile(authority, new ChatMessage[0], new ChatMessage[0], null, new ToolCatalogEntry[0],
                     new AppSettings(), externalized ? 12000 : 100000, workingSet: set);
                 AssertEqual(0, compiled.Receipt.OperationReceipts, "oversized receipts do not fit the optional token budget");
-                var budgetOmission = compiled.Receipt.Messages.First(item => item.Role == "user" &&
-                    item.ExclusionKind == ContextExclusionKind.OperationBudget);
+                var operationOmission = compiled.Receipt.Messages.First(item =>
+                    item.ExclusionKind == ContextExclusionKind.OperationBudget ||
+                    item.ExclusionKind == ContextExclusionKind.OperationSelectionLimit);
                 var skippedCall = session.Messages.First(item => item.Role == "assistant" &&
-                    item.ToolCallId == budgetOmission.ToolCallId);
-                AssertEqual(ContextExclusionKind.OperationBudget,
-                    compiled.Receipt.Messages.Single(item => item.SourceMessageId == skippedCall.Id).ExclusionKind.Value,
-                    "a skipped archived call and result share their actual budget decision");
-                AssertTrue(compiled.Receipt.Messages.Any(item => item.Role == "user" &&
-                    item.ExclusionKind == ContextExclusionKind.OperationSelectionLimit),
-                    "bounded candidate admission has a distinct trace reason");
+                    item.ToolCallId == operationOmission.ToolCallId);
+                AssertEqual(operationOmission.ExclusionKind,
+                    compiled.Receipt.Messages.Single(item => item.SourceMessageId == skippedCall.Id).ExclusionKind,
+                    "a skipped archived call and result share the actual bounded-work decision");
                 AssertTrue(projected > 0 && projected <= 64, "rejected optional candidates count toward the work limit");
                 if (externalized)
                 {
@@ -560,9 +565,7 @@ namespace RNAssistant.Harness
                 }
                 var unknown = ContinuityResult("unresolved", "test.failure", ToolResult.Unknown("Inspect before any retry.",
                     new JObject { ["code"] = "uncertain", ["details"] = new string('x', 10000) }.ToString()));
-                unknown.ResultPayload = PayloadRef.FromBlob(blobs.StoreText(unknown.Content, "application/vnd.rnassistant.tool-result+json"));
-                unknown.Content = ToolResultWire.Write(unknown.ToolCallId, unknown.ToolName,
-                    ToolResult.Unknown("Inspect before any retry.", "{\"payload_externalized\":true}"));
+                ExternalizeContinuityResult(unknown, blobs);
                 session.Messages.Add(ContinuityCall(unknown)); session.Messages.Add(unknown);
                 set = ContextWorkingSet.Restore(session, new ChatMessage[0], 0);
                 var required = compiler.Compile(authority, new ChatMessage[0], new ChatMessage[0], null, new ToolCatalogEntry[0],

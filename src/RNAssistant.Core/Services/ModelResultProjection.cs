@@ -36,7 +36,8 @@ namespace RNAssistant.Core.Services
             IEnumerable<ToolCatalogEntry> tools = null,
             IEnumerable<SkillDefinition> skills = null,
             Action<List<ContextMessagePresentation>> recordPresentation = null,
-            IEnumerable<ToolCatalogEntry> callableTools = null)
+            IEnumerable<ToolCatalogEntry> callableTools = null,
+            bool liveContinuation = false)
         {
             var projected = HistoricalContextProjector.Project(source);
             if (projected == null) return null;
@@ -73,7 +74,7 @@ namespace RNAssistant.Core.Services
             // Common families have one projection in both hosts. Domain projection
             // runs only for other tools; recovery is rendered once from typed facts.
             var model = IsResourceEvidence(wire.Name) || IsWorkspaceMutation(wire.Name) || _projectData == null
-                ? ProjectData(wire.Name, materialized)
+                ? ProjectData(wire.Name, materialized, liveContinuation)
                 : _projectData(wire.Name, materialized, tools, skills, callableTools);
             var recovery = source.ExecutionProgress?.Recovery;
             if (recovery != null)
@@ -159,12 +160,13 @@ namespace RNAssistant.Core.Services
                 string.Equals(name, "core.tools.read", StringComparison.OrdinalIgnoreCase);
         }
 
-        private static ToolResultMaterialization ProjectData(string name, ToolResultMaterialization source)
+        private static ToolResultMaterialization ProjectData(string name, ToolResultMaterialization source,
+            bool liveContinuation)
         {
             if (!IsResourceEvidence(name) && !IsWorkspaceMutation(name)) return GenericForModel(name, source);
             var data = name == ResourceMutationToolCatalog.Patch ? ProjectPatchResult(source.Data) : IsWorkspaceMutation(name)
                 ? SelectFields(source.Data, "target", "path", "destination", "name", "moduleName", "newModuleName", "componentType", "vbeNormalized", "version", "status", "removed", "removedRevisions", "changed", "restored", "moved", "deleted", "code", "retryable")
-                : ProjectResourceData(name, source.Data);
+                : ProjectResourceData(name, source.Data, liveContinuation);
             if (IsResourceEvidence(name)) SanitizeResourceEnvelope(data, source.Result.Resources);
             var result = new ToolResult(source.Result.Status,
                 SanitizeOperationalText(RemoveRuntimeResourceValues(IsWorkspaceMutation(name)
@@ -232,7 +234,7 @@ namespace RNAssistant.Core.Services
             return result;
         }
 
-        public static JObject ProjectResourceData(string name, JToken data)
+        public static JObject ProjectResourceData(string name, JToken data, bool liveContinuation = false)
         {
             var result = name == "core.find"
                 ? SelectFields(data, "scope", "query", "items", "total", "complete", "availabilityHint", "unavailableScopes", "directory", "code", "retryable")
@@ -302,7 +304,13 @@ namespace RNAssistant.Core.Services
             if (name == "core.search" && result["continuation"] != null)
             {
                 result.Remove("continuation");
-                result["next"] = true;
+                if (liveContinuation)
+                    result["next"] = true;
+                else
+                {
+                    result["nextExpired"] = true;
+                    result["nextAction"] = "The saved continuation belongs to an earlier run or superseded search. Start a fresh core.search with the same semantic query instead of sending next=true.";
+                }
             }
             if (name == "resources.outline" && result["parts"] is JArray)
                 result["parts"] = new JArray(((JArray)result["parts"]).Select(item =>

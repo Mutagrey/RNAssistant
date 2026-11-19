@@ -276,8 +276,9 @@ namespace RNAssistant.Core.Tools
             }
         }
 
-        // Model input only. Do not coerce scalars, source text, nullable/union
-        // values or branch-dependent schemas. The caller validates the whole tree.
+        // Model and direct runtime input only. Do not coerce scalars, source text,
+        // nullable/union values or branch-dependent schemas. Each caller validates
+        // the complete normalized tree against the original captured schema.
         internal static void NormalizeSingletonArrays(JToken value, JObject schema)
         {
             if (value == null || schema == null || schema["anyOf"] != null) return;

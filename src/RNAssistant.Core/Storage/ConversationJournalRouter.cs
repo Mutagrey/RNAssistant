@@ -84,6 +84,10 @@ namespace RNAssistant.Core.Storage
             {
                 try
                 {
+                    // Read the disposable projection under the same cross-process
+                    // sections gate that excludes atomic index replacement by Repair.
+                    // Release it before inventory/repair to avoid lock inversion.
+                    using (JournalIndexAdmission.Enter(_paths, CancellationToken.None))
                     using (var db = JournalIndex.Open(_paths))
                     using (var command = db.CreateCommand())
                     {
