@@ -129,7 +129,7 @@
           if (!Array.isArray(activities)) state.liveActivities = activities = [];
           if (typeof recordActivityTimeline === "function") recordActivityTimeline(activities, activity);
           else activities.push(activity);
-          if (progressChanged) progressChanged(selected); else changed(selected);
+          if (progressChanged) progressChanged(selected, "activity"); else changed(selected);
           return;
         }
         if (field(preview, "unsavedAttempt")) {
@@ -143,7 +143,7 @@
         var accepted = RNAssistantConversationState.modelProgress(existing, preview, field(state, "runId"));
         if (accepted === existing) return;
         state.modelProgress = accepted;
-        if (progressChanged) progressChanged(selected);
+        if (progressChanged) progressChanged(selected, "output");
         else changed(selected);
       } };
   }
@@ -228,7 +228,7 @@
     }
     function read() { return RNAssistantProjectChats.read(target, component); }
     var observer = createRunObserver(component.view, read, accept, readFailed,
-      function () { component.stream(false); });
+      function (snapshot, mode) { component.stream(mode || "output"); });
     var history = component.view.observe({ current: function () { return target; }, read: read, changed: accept,
       failed: readFailed });
     function refresh(options) {

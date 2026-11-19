@@ -18,7 +18,7 @@ function address(value) { return { source: "workspace", workspaceId: value.proje
 function notice(sessionId, runId, cursor) { return { workspaceId: "workspace", sessionId, runId, phase: "session_changed", cursor }; }
 function setup(initial) {
   const view = context.RNAssistantConversationView.get({ children: [], scrollTop: 0, scrollHeight: 100, clientHeight: 100 });
-  const pending = [], accepted = [], errors = [], paints = [];
+  const pending = [], accepted = [], errors = [], paints = [], paintModes = [];
   let owner, observer;
   function select(value) {
     const target = address(value); view.begin(target);
@@ -31,9 +31,9 @@ function setup(initial) {
   observer = context.RNAssistantWorkspaceChat.createRunObserver(view,
     target => new Promise((resolve, reject) => pending.push({ target, resolve, reject })),
     value => { owner.accept(value); accepted.push(value); observer.select(owner.snapshot(), false); },
-    error => errors.push(error), value => paints.push(value));
+    error => errors.push(error), (value, mode) => { paints.push(value); paintModes.push(mode || "output"); });
   observer.select(owner.snapshot(), false);
-  return { view, observer, select, pending, accepted, errors, paints, snapshot: () => owner.snapshot() };
+  return { view, observer, select, pending, accepted, errors, paints, paintModes, snapshot: () => owner.snapshot() };
 }
 (async () => {
   const current = setup(snapshot("chat", "finished-run", "completed", 1));
@@ -50,6 +50,7 @@ function setup(initial) {
     modelProgress: { runId: "queued-run", attemptId: "attempt", sequence: 1, revision: 1, message: "Current answer" } };
   current.observer.acceptProgress(progress);
   assert.equal(current.paints.length, 1);
+  assert.equal(current.paintModes[0], "output", "model progress paints only the output leaf");
   current.observer.acceptProgress(Object.assign({}, progress, { runId: "finished-run", modelProgress: {
     runId: "finished-run", attemptId: "old-attempt", sequence: 99, revision: 99, message: "Obsolete answer" } }));
   current.observer.acceptProgress(Object.assign(notice("chat", "foreign-run", "foreign-cursor"), { workspaceId: "other-workspace" }));
@@ -64,6 +65,7 @@ function setup(initial) {
     phase: "activity", cursor: "cursor-tool", activity: runningTool });
   assert.equal(current.pending.length, 1, "live activity does not add a full snapshot read");
   assert.equal(current.paints.length, 2, "live activity paints the existing run");
+  assert.equal(current.paintModes[1], "activity", "live activity requests a live-only transcript reconcile");
   assert.equal(current.snapshot().state.liveActivities[0].Status, "running");
   assert.equal(context.RNAssistantWorkspaceChat.transcriptData(current.snapshot()).live.activities.length, 1,
     "Workspace transcript borrows the same live activity timeline");
@@ -81,6 +83,7 @@ function setup(initial) {
   current.observer.acceptProgress({ workspaceId: "workspace", sessionId: "chat", runId: "queued-run", phase: "activity",
     cursor: "cursor-late", activity: Object.assign({}, runningTool, { Status: "running" }) });
   assert.equal(current.paints.length, 3, "activity delivered after terminal cannot repaint the completed run");
+  assert.equal(current.paintModes[2], "activity");
   assert.equal(current.pending.length, 3, "late activity starts no read after terminal");
   current.view.dispose();
 

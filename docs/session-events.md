@@ -2366,7 +2366,9 @@ and later bursts share one scheduled animation-frame paint. Ordinary token paint
 update only the current run's output leaf, without serializing/regrouping activities,
 rebuilding transcript units or resource navigation, or detaching history. A changed
 run or transition between thinking, draft and accepted work reconciles the relevant
-projection. Full projection changes still reconcile the transcript, retaining
+projection. An activity-only update reconciles live run units without rebuilding the
+bounded history, including when an output draft is already visible. Full projection
+changes still reconcile the transcript, retaining
 unchanged attached DOM nodes. Background progress coalesces chat-list rendering
 at 100 ms without dropping deltas. A chat change uses the current full projection.
 This changes presentation cost only, not event/CAS persistence or commit barriers.

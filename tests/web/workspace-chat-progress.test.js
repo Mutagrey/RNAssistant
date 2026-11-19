@@ -61,6 +61,19 @@ const { chromium } = require('playwright');
       const attachedLive = activeList.querySelectorAll('article.agent-run').length === 1 &&
         !!activeList.querySelector('article.agent-run.live .agent-stream-step') &&
         activeList.textContent.includes('Формирую ответ.');
+      const liveActivityList = document.createElement('section');
+      const liveActivityChat = { project: { workspaceId: 'workspace' }, sessionId: 'live-activity-with-draft',
+        messages: [], state: { status: 'running', runId: 'activity-run',
+          modelProgress: { RunId: 'activity-run', Message: 'Формирую ответ.' } } };
+      renderWorkspaceFixture(liveActivityList, liveActivityChat);
+      liveActivityChat.state.liveActivities = [{ RunId: 'activity-run', StepId: 'read-step', Kind: 'tool',
+        ToolId: 'core.read', ToolCallId: 'read-live', Title: 'Чтение', Subtitle: 'README.md',
+        Status: 'completed', ResultMessage: 'Источник прочитан.' }];
+      renderLiveWorkspaceFixture(liveActivityList, liveActivityChat);
+      const activityWithDraft = liveActivityList.querySelectorAll('article.agent-run').length === 1 &&
+        !!liveActivityList.querySelector('.agent-tool-card, .agent-transcript-entry') &&
+        liveActivityList.textContent.includes('Формирую ответ.') &&
+        liveActivityList.textContent.includes('Источник прочитан.');
       activeChat.state.executionQueued = true;
       renderWorkspaceFixture(activeList, activeChat);
       const queued = activeList.querySelectorAll('article.agent-run').length === 1 &&
@@ -232,7 +245,7 @@ const { chromium } = require('playwright');
       const settings = state.settings; settings.MaxConsecutiveReflections = 0; renderSettings();
       const zero = document.getElementById('maxConsecutiveReflectionsInput').value === '0';
       return { retained, replaced, updated, reset, finished, scoped, attachedLive, queued, admitted, queuedBeforeModel, cancelledQueue, attachedFinal,
-        stableHistory, stableGrowingGroup,
+        stableHistory, stableGrowingGroup, activityWithDraft,
         oneReflection, cleanClaims, uncleanClaims, reflectionMarkdown, retainedReflection, officeReflectionMarked,
         ordered, lostOwner, terminalStays, acceptedStays, acceptedNotReplaced, zero };
     });

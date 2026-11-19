@@ -1114,21 +1114,24 @@ function reconcileMessageUnits(box, units, liveOnly) {
   return nextCache;
 }
 
-function scheduleLiveStreamRender(fullProjection) {
+function scheduleLiveStreamRender(mode) {
+  mode = mode === true || mode === "full" ? "full" : mode === "activity" ? "activity" : "output";
   if (window.RNAssistantConversationPanel) {
     var component = RNAssistantConversationPanel.office(state.activeChatId);
-    if (component) component.stream(fullProjection);
+    if (component) component.stream(mode);
     return;
   }
   if (!officeTranscriptActive()) return;
   var view = messageView(), commands = chatComposer().capture();
   var run = state.chatRuns && state.chatRuns[state.activeChatId];
-  if (fullProjection || run && (run.runId || "") !== (view.cache.liveRunId || "")) view.cache.fullRenderPending = true;
+  if (mode === "full" || run && (run.runId || "") !== (view.cache.liveRunId || "")) view.cache.fullRenderPending = true;
+  if (mode === "activity") view.cache.activityRenderPending = true;
   view.schedule("stream", function () {
     if (!commands.isCurrent()) return;
     var full = view.cache.fullRenderPending;
-    view.cache.fullRenderPending = false;
-    if (full) renderMessages(); else renderStreamingMessages(true);
+    var activity = view.cache.activityRenderPending;
+    view.cache.fullRenderPending = false; view.cache.activityRenderPending = false;
+    if (full) renderMessages(); else renderStreamingMessages(!activity);
   });
 }
 
@@ -1165,7 +1168,7 @@ function renderConversationTranscript(box, target, data, commands, options, pend
   var view = messageView(box);
   if (!view.canRender()) return;
   var frame = view.begin(target, options), presentation = createMessagePresentation(view, data, commands);
-  view.cache.fullRenderPending = false;
+  view.cache.fullRenderPending = false; view.cache.activityRenderPending = false;
   if (options.fullReset && !frame.changed) resetRenderedMessageUnits(box);
   var pending = typeof pendingUnits === "function" ? pendingUnits(presentation) : pendingUnits || [];
   var units = buildMessageUnits(presentation, actionsSignature, pending);

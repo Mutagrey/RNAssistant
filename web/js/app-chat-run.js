@@ -94,13 +94,13 @@ function applyOfficeChatProgress(progress, progressPending, requestId) {
     if (acceptedStepReasoning) normalizedActivity.__reasoningMessage = acceptedStepReasoning;
     recordChatRunActivityState(progressChatId, normalizedActivity);
     var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.office(progressChatId);
-    if (component) component.stream(true);
+    if (component) component.stream("activity");
     if (state.chatRuns[progressChatId] && state.chatRuns[progressChatId].cancelRequested &&
         typeof updateChatModelStage === "function") updateChatModelStage(progressChatId);
   }
   if (!selected) { scheduleChatProgressRender(); return; }
   if (isChatProgress) {
-    if (typeof scheduleLiveStreamRender === "function") scheduleLiveStreamRender(true);
+    if (typeof scheduleLiveStreamRender === "function") scheduleLiveStreamRender("activity");
     else renderMessages();
   }
   log("[" + (progress.phase || "working") + "] " + (progress.message || "Выполняю..."));
@@ -153,9 +153,9 @@ function updateChatModelStage(chatId) {
   var activity = { Kind: "notice", RunId: run.runId, Status: "running", Title: chatModelStageText(run) };
   recordChatRunActivityState(chatId, activity);
   var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.office(chatId);
-  if (component) component.stream(true);
+  if (component) component.stream("activity");
   if (!publishOfficeChatRun(chatId, run)) return;
-  if (typeof scheduleLiveStreamRender === "function") scheduleLiveStreamRender(true);
+  if (typeof scheduleLiveStreamRender === "function") scheduleLiveStreamRender("activity");
 }
 
 function setChatRunCancelling(chatId, cancelling) {

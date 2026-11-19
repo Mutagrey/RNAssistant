@@ -19,7 +19,7 @@
     var address = Object.freeze(target.source === "workspace"
       ? { source: "workspace", workspaceId: target.workspaceId, sessionId: target.sessionId }
       : { source: "office", sessionId: target.sessionId });
-    var disposed = false, adapter, communication, listeners = new AbortController(), fullPending = false, questionsSignature = null, headerTimer = null;
+    var disposed = false, adapter, communication, listeners = new AbortController(), streamMode = "", questionsSignature = null, headerTimer = null;
     [root].concat(Array.from(root.querySelectorAll("[id]"))).forEach(function (node) {
       var id = node.id; nodes[id] = node; node.dataset.chatNode = id; node.id = prefix + id;
     });
@@ -64,12 +64,15 @@
       restoreDraft: function () { composer.restoreDraft(address, adapter.draft()); renderControls(); },
       notice: function (error) { if (!disposed) { component.error = error ? error.detail || error.message || String(error) : ""; renderControls(); } },
       render: render, controls: renderControls,
-      stream: function (full) {
+      stream: function (mode) {
         if (disposed) return;
-        fullPending = fullPending || full;
+        mode = mode === true || mode === "full" ? "full" : mode === "activity" ? "activity" : "output";
+        if (mode === "full" || !streamMode || mode === "activity" && streamMode === "output") streamMode = mode;
         view.schedule("stream", function () {
-          if (fullPending) { fullPending = false; render(); }
-          else if (!renderStreamingMessages(true, component)) render();
+          var pendingMode = streamMode || "output";
+          streamMode = "";
+          if (pendingMode === "full") render();
+          else if (!renderStreamingMessages(pendingMode === "output", component)) render();
         });
       },
       focus: function () {
@@ -81,9 +84,9 @@
         renderControls();
         if (window.RNAssistantChatInspector) { RNAssistantChatInspector.mount(address.source === "office" ? "office" : "project"); RNAssistantChatInspector.render(); }
       },
-      activate: function () { view.setVisible(true, render); render(); if (adapter.activate) adapter.activate(); },
+      activate: function () { streamMode = ""; view.setVisible(true, render); render(); if (adapter.activate) adapter.activate(); },
       deactivate: function () {
-        view.setVisible(false, render); stopHeaderTimer(); cancelComposerInputResize(node("chatInput"));
+        streamMode = ""; view.setVisible(false, render); stopHeaderTimer(); cancelComposerInputResize(node("chatInput"));
         RNAssistantActionMenu.closeWithin(root);
       },
       layout: function () {

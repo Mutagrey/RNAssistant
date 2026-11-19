@@ -8,4 +8,8 @@
     return paintConversationStream(list, createMessagePresentation(messageView(list),
       RNAssistantWorkspaceChat.transcriptData(chat), null), [], true);
   };
+  window.renderLiveWorkspaceFixture = function (list, chat) {
+    return paintConversationStream(list, createMessagePresentation(messageView(list),
+      RNAssistantWorkspaceChat.transcriptData(chat), null), [], false);
+  };
 }());
