@@ -563,7 +563,9 @@ function appendActivityErrorActions(node, activity, context) {
       runId: activityValue(activity, "RunId", "runId", "") || (message ? messageRunId(message) : ""),
       stepId: activityStepId(activity),
       toolCallId: activityToolCallId(activity),
-      filter: "problems"
+      // Direct diagnostics navigation must show the exact run even when the
+      // retained failure has no separate problem-status event row.
+      filter: "all"
     });
   }));
   node.appendChild(actions);

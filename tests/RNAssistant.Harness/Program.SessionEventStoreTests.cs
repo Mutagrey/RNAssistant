@@ -2591,6 +2591,24 @@ namespace RNAssistant.Harness
 
             events.Add(TrajectoryEvent(25, "ui.projected", started.AddSeconds(24), "run-1", "turn-1", null,
                 new JObject { ["Boundary"] = "late-ui-projection" }));
+            events.Add(TrajectoryEvent(26, SessionEventTypes.SessionCommit, started.AddSeconds(25), "run-4", "turn-4", null,
+                new JObject
+                {
+                    ["Operations"] = new JArray(new JObject
+                    {
+                        ["Type"] = SessionOperationTypes.MessageUpdated,
+                        ["Data"] = new JObject { ["Value"] = new JObject
+                        {
+                            ["Id"] = "diagnostic-4", ["RunId"] = "run-4", ["Role"] = "assistant",
+                            ["Activity"] = new JObject
+                            {
+                                ["Kind"] = "diagnostic", ["RunId"] = "run-4", ["Status"] = "failed",
+                                ["ExecutionStatus"] = "interrupted",
+                                ["ResultMessage"] = "Сохранённые результаты не повторялись автоматически."
+                            }
+                        } }
+                    })
+                }));
             var remainder = query.QueryView(events, new TrajectoryViewQueryRequest
             {
                 View = TrajectoryViews.RunCausal,
@@ -2675,6 +2693,19 @@ namespace RNAssistant.Harness
             }).Rows;
             AssertEqual(0, incompatibleTools.Count,
                 "pre-R37 operation grants neither accepted-call nor completed-result authority");
+
+            var recoveredDiagnostic = query.QueryView(events, new TrajectoryViewQueryRequest
+            {
+                View = TrajectoryViews.RunCausal, RunId = "run-4", PageSize = 200
+            }).Rows.Single(item => item.Kind == SessionOperationTypes.MessageUpdated);
+            AssertEqual("failed", recoveredDiagnostic.Status,
+                "a retained recovery diagnostic remains visible when no kernel checkpoint exists");
+            AssertEqual("Run diagnostic recorded", recoveredDiagnostic.Title,
+                "the recovery diagnostic has a stable journal title");
+            AssertEqual("interrupted", (string)recoveredDiagnostic.Data["executionStatus"],
+                "the journal retains the exact interrupted status");
+            AssertEqual("Сохранённые результаты не повторялись автоматически.", recoveredDiagnostic.Summary,
+                "the journal retains the user-visible recovery reason");
 
             var dto = TrajectoryViewRowDto.From(accepted);
             AssertEqual("attempt-2", dto.ModelAttemptId, "bridge DTO exposes attempt correlation");

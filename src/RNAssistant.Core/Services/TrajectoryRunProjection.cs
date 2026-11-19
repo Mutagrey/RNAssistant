@@ -116,7 +116,9 @@ namespace RNAssistant.Core.Services
             {
                 var operation = operations[operationIndex];
                 var operationType = Text(Property(operation, "Type"));
-                if (!IsCausalOperation(operationType)) continue;
+                var operationData = Property(operation, "Data") as JObject ?? new JObject();
+                if (!IsCausalOperation(operationType) &&
+                    !IsDiagnosticMessageUpdate(operationType, operationData)) continue;
                 if (IsAcceptedCallOperation(operationType))
                 {
                     AddAcceptedCallRows(rows, item, operation, operationIndex);
@@ -395,6 +397,14 @@ namespace RNAssistant.Core.Services
                 IsArtifactOperation(type);
         }
 
+        private static bool IsDiagnosticMessageUpdate(string type, JObject operationData)
+        {
+            if (!Same(type, SessionOperationTypes.MessageUpdated)) return false;
+            var value = Property(operationData, "Value") as JObject;
+            var activity = Property(value, "Activity") as JObject;
+            return Same(Text(Property(activity, "Kind")), "diagnostic");
+        }
+
         private static bool IsAcceptedCallOperation(string type)
         {
             return Same(type, SessionOperationTypes.ToolCallRecorded);
@@ -443,6 +453,9 @@ namespace RNAssistant.Core.Services
             if (Same(type, SessionOperationTypes.AssistantMessageAppended))
                 return Text(Property(value, "ResponseStatus")) ?? "persisted";
             if (Same(type, SessionOperationTypes.ToolResultRecorded)) return "recorded";
+            if (Same(type, SessionOperationTypes.MessageUpdated))
+                return Text(Property(activity, "Status")) ??
+                    Text(Property(activity, "ExecutionStatus")) ?? "recorded";
             if (Same(type, SessionOperationTypes.ArtifactRevisionCreated)) return "persisted";
             if (Same(type, SessionOperationTypes.ArtifactRemove)) return "removed";
             return Text(Property(value, "Status")) ?? Text(Property(data, "Status")) ?? "recorded";
@@ -478,6 +491,7 @@ namespace RNAssistant.Core.Services
             if (Same(type, SessionOperationTypes.RunEnded)) return "Run state ended";
             if (Same(type, SessionOperationTypes.UserMessageAppended)) return "User request persisted";
             if (Same(type, SessionOperationTypes.AssistantMessageAppended)) return "Assistant response persisted";
+            if (Same(type, SessionOperationTypes.MessageUpdated)) return "Run diagnostic recorded";
             if (Same(type, SessionOperationTypes.ToolResultRecorded)) return "Tool result recorded: " + (toolId ?? "unknown");
             if (Same(type, SessionOperationTypes.ToolExecutionStarted)) return "Tool activity started: " + (toolId ?? "unknown");
             if (Same(type, SessionOperationTypes.ToolExecutionFinished)) return "Tool activity finished: " + (toolId ?? "unknown");

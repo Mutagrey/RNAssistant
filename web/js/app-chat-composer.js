@@ -277,7 +277,7 @@ function renderChatRunNotice(component) {
     button.className = "agent-details-link"; button.textContent = "Подробности";
     var chatId = state.activeChatId, runId = run.runId;
     button.addEventListener("click", function () {
-      if (component ? component.isCurrent() : state.activeChatId === chatId) window.openRunJournal(workspace ? { owner: component.contextOwner || "project", workspaceId: component.target.workspaceId, sessionId: component.target.sessionId, runId: runId, filter: "problems" } : { chatId: chatId, runId: runId, filter: "problems" });
+      if (component ? component.isCurrent() : state.activeChatId === chatId) window.openRunJournal(workspace ? { owner: component.contextOwner || "project", workspaceId: component.target.workspaceId, sessionId: component.target.sessionId, runId: runId, filter: "all" } : { chatId: chatId, runId: runId, filter: "all" });
     });
     copy.appendChild(button);
   }

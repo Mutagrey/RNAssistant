@@ -16,6 +16,22 @@ same trusted click, keyboard activation and synthetic activation. Native Play re
 separate and its Windows/WebView2 qualification is still open. See
 [PROGRESS](PROGRESS.md#static-chat-html-and-isolated-interactive-execution--in-review-2026-11-19).
 
+## Recovered run diagnostics — fixed host-neutral, 2026-11-19
+
+Owner: `TrajectoryRunProjection` and Web diagnostics navigation. A run recovered
+after its live owner disappeared retained the interruption message, but the message
+was stored as `MessageUpdated`; the run-causal projection ignored that operation.
+The direct «Причина и детали» action also opened the Problems filter, which could be
+empty even though the exact run and its saved result existed. Diagnostic message
+updates now project as failed run rows, and direct navigation opens the complete
+exact run. Focused Harness and run-journal checks pass.
+
+The Windows event that released the run owner remains unproven from the screenshot;
+process/add-in restart, abnormal termination and another ownership transition remain
+possible. Windows x64 / Office x64 / WebView2 reproduction is still open. Recovery
+must continue to avoid automatic replay or continuation, especially with an open or
+unknown effect.
+
 ## Power Query syntax host — 2026-11-16
 
 Evidence status: the Power Query patch is applied to current `main`; focused JS,

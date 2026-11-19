@@ -353,6 +353,8 @@ function selectTree(key) {
   assert.match(trajectory, /refreshTrajectory\(false, true\)/);
   assert.match(trajectory, /window\.openRunJournal = openRunJournal/);
   assert.match(activity, /Причина и детали/);
+  assert.match(activity, /filter: "all"/,
+    "direct diagnostics navigation keeps the full exact run visible");
   assert.match(agent, /appendAgentRunViewState/);
   assert.equal(/JSON\.parse|fetch\(|XMLHttpRequest|WebSocket|EventSource/.test(source), false);
   console.log("PASS run journal: integration defaults to bounded run-causal and exposes direct failed-activity navigation");
