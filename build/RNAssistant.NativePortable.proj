@@ -25,6 +25,7 @@
     <RequiredFile Include="$(OfficeOutput)RNAssistant.Office.dll" />
     <RequiredFile Include="$(HostsOutput)RNAssistant.OfficeHosts.dll" />
     <RequiredFile Include="$(OfficeOutput)Newtonsoft.Json.dll" />
+    <RequiredFile Include="$(OfficeOutput)Markdig.dll" />
     <RequiredFile Include="$(OfficeOutput)Microsoft.Web.WebView2.Core.dll" />
     <RequiredFile Include="$(OfficeOutput)Microsoft.Web.WebView2.WinForms.dll" />
     <RequiredFile Include="$(WebViewPackage)build\native\$(Architecture)\WebView2Loader.dll" />
@@ -62,6 +63,7 @@
 
     <PortableDoc Include="$(RepoRoot)wrappers\native\README.md" />
     <PortableDoc Include="$(RepoRoot)wrappers\native\Outlook2013_Setup.md" />
+    <PortableDoc Include="$(RepoRoot)vendor\markdig\Markdig-LICENSE.txt" />
     <!-- Finished Office add-ins can be supplied without invoking Office during build-local. -->
     <AddInBinary Include="$(RepoRoot)wrappers\native\binaries\*.xlam;$(RepoRoot)wrappers\native\binaries\*.dotm;$(RepoRoot)wrappers\native\binaries\*.ppam" />
   </ItemGroup>

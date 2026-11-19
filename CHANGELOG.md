@@ -11,6 +11,12 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.6.16-dev
+
+- NativeHost portable-дистрибутив снова включает `Markdig.dll`: Markdown-файлы
+  открываются в установленной сборке, а не завершаются ошибкой загрузки сборки.
+  В комплект также добавлена лицензия Markdig 0.37.0.
+
 ### 17.6.15-dev
 
 - После смены хранилища или удаления выбранного чата Library и Материалы больше
