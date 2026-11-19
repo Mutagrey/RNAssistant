@@ -44,7 +44,7 @@ namespace RNAssistant.Harness
                 if (office)
                 {
                     fork = PrepareTextFork(store, source, 140);
-                    var plan = ChatCloneService.PrepareForkResources(source, fork, store.LoadArtifactBody,
+                    var plan = ChatCloneService.PrepareForkResources(source, fork, ((IConversationArtifactBodyReader)store).LoadArtifactBody,
                         new ResourceForkService(executor.ResourceAuthority, executor.Payloads));
                     executor.MutateChatResources(fork, new ChatResourceMutationIntent(ChatResourceMutationKind.Fork,
                         fork.ForkedThroughMessageId, 139, source: source, fork: plan), () => fork);

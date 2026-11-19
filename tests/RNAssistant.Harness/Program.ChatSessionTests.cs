@@ -66,9 +66,9 @@ namespace RNAssistant.Harness
             WithTempPaths(paths =>
             {
                 var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "resume-input"));
-                var chats = new ChatStore(paths);
                 using (var service = new WorkspaceConversationService(paths))
                 {
+                    var conversations = service.ConversationStore;
                     var session = service.CreateSession(workspace, "Interrupted input");
                     var request = new RNAssistant.Runtime.Contracts.WorkspaceSubmitInputRequest {
                         SessionId = session.Id, RequestId = "resume-once", Message = "Keep this input"
@@ -84,7 +84,7 @@ namespace RNAssistant.Harness
                         Status = ConversationInputStatus.Delivering, DocumentRuntimeKey = workspace.WorkspaceId,
                         CreatedUtc = DateTime.UtcNow
                     };
-                    var journal = new ConversationInputJournal(new ChatEventStoreAdapter(chats));
+                    var journal = new ConversationInputJournal((IEventStore)conversations);
                     var accepted = journal.Append(session, new ConversationInputEvent { Input = input });
                     var pending = service.FindAcceptedInput(workspace, request);
                     AssertEqual(accepted.Sequence, pending.AcceptedSequence, "retry retains the original accepted event");
@@ -95,7 +95,7 @@ namespace RNAssistant.Harness
                     var user = new ChatMessage { Id = input.Id, Role = "user", Content = request.Message,
                         RunId = input.AcceptedRunId };
                     withoutMessage.Messages.Add(user);
-                    chats.Commit(withoutMessage, ConversationCommit.UserInput(user));
+                    conversations.Commit(withoutMessage, ConversationCommit.UserInput(user));
                     AssertTrue(!service.FindAcceptedInput(workspace, request).DeliveryRecorded,
                         "duplicate lookup remains read-only before recovery");
                     var recovered = service.PrepareResume(workspace, session.Id);
@@ -226,7 +226,7 @@ namespace RNAssistant.Harness
                     "copy creates a distinct file identity");
                 var copyScope = new ResourceAuthorityScopeId("file",
                     ResourceUri.Parse(copied.Reference.Uri).Segments.Single());
-                var copyRevision = new ResourceAuthorityStore(paths).GetRevision(copyScope, copied.Reference);
+                var copyRevision = new ResourceJournal(paths).GetRevision(copyScope, copied.Reference);
                 AssertEqual(sourceForCopy.Reference.Revision,
                     copyRevision.Dependencies.Single().Resource.Revision,
                     "copy retains exact source provenance");
@@ -250,7 +250,7 @@ namespace RNAssistant.Harness
                     "external edit survives");
                 var refreshed = files.ReadText(workspace, "dashboard/app.js");
                 AssertTrue(refreshed.Reference.Revision != patched.Reference.Revision, "drift observed as a new revision");
-                var currentAuthority = new ResourceAuthorityStore(paths).CaptureMany(new[] { readEvidence.ScopeId });
+                var currentAuthority = new ResourceJournal(paths).CaptureMany(new[] { readEvidence.ScopeId });
                 AssertEqual(EvidenceState.Superseded,
                     new EvidenceStateReducer().Reduce(readEvidence, currentAuthority).State,
                     "old read evidence is superseded after external drift");
@@ -671,11 +671,11 @@ namespace RNAssistant.Harness
                 var copiedScope = new ResourceAuthorityScopeId("file",
                     ResourceUri.Parse(copied.Reference.Uri).Segments.Single());
                 AssertEqual(selected.Reference.Revision,
-                    new ResourceAuthorityStore(paths).GetRevision(copiedScope, copied.Reference)
+                    new ResourceJournal(paths).GetRevision(copiedScope, copied.Reference)
                         .Dependencies.Single().Resource.Revision,
                     "large copy retains exact source provenance");
                 AssertEqual(ResourceRepresentations.Raw,
-                    new ResourceAuthorityStore(paths).GetRevision(copiedScope, copied.Reference)
+                    new ResourceJournal(paths).GetRevision(copiedScope, copied.Reference)
                         .Dependencies.Single().View,
                     "large copy tracks the retained whole-byte source used for streaming");
                 AssertTrue(files.ReadTextViewCharacters(workspace, "source.txt", 0, 128,
@@ -845,7 +845,7 @@ namespace RNAssistant.Harness
                 AssertEqual("REPLACED", new WorkspaceFileResourceProvider(restarted, workspace)
                     .ReadCharacters("unknown.txt", 2 * 1024 * 1024, 128).Result.Text,
                     "the reconciled large source is readable in a bounded window");
-                AssertEqual(0, new ResourceMutationJournal(paths).Unresolved().Count,
+                AssertEqual(0, new ResourceJournal(paths).Unresolved().Count,
                     "explicit recovery resolves the large patch journal attempt");
 
                 var mismatchPath = Path.Combine(workspace.RootPath, "mismatch.txt");
@@ -905,7 +905,7 @@ namespace RNAssistant.Harness
                 try { files.ReadText(workspace, "ambiguous.txt"); }
                 catch (WorkspaceFileException ex) { externalBinary = ex.Code == "encoding_ambiguous"; }
                 AssertTrue(externalBinary, "external binary edit is reported explicitly");
-                var frozen = new ResourceAuthorityStore(paths).CaptureMany(new[] { oldTextEvidence.ScopeId });
+                var frozen = new ResourceJournal(paths).CaptureMany(new[] { oldTextEvidence.ScopeId });
                 AssertEqual(EvidenceState.Unknown,
                     new EvidenceStateReducer().Reduce(oldTextEvidence, frozen).State,
                     "old text evidence becomes unknown after unrepresentable external edit");
@@ -950,7 +950,7 @@ namespace RNAssistant.Harness
                 AssertEqual(EvidenceState.Current, reducer.Reduce(current.Evidence.Single(), frozen).State,
                     "retained read does not republish the historical head");
 
-                var authority = new ResourceAuthorityStore(paths);
+                var authority = new ResourceJournal(paths);
                 var unpublished = new ResourceRef(created.Reference.Uri, "r_" + Guid.NewGuid().ToString("N"));
                 var scope = exact.Evidence.Single().ScopeId;
                 authority.RegisterRevision(scope, new ResourceRevisionMetadata(unpublished,
@@ -1015,13 +1015,13 @@ namespace RNAssistant.Harness
                 AssertEqual(WorkspaceRecoveryOutcome.UnknownAfterDispatch, reconciled.Outcome,
                     "recovery retains unknown causality");
                 AssertEqual("<h1>created</h1>", reconciled.Current.Text, "recovery observes current bytes without replay");
-                AssertEqual(0, new ResourceMutationJournal(paths).Unresolved().Count,
+                AssertEqual(0, new ResourceJournal(paths).Unresolved().Count,
                     "explicit reconciliation resolves pending attempt");
                 var next = restarted.ReplaceText(workspace, "index.html", reconciled.Current.Reference, "<h1>next</h1>");
                 AssertEqual("<h1>next</h1>", next.Text, "new guarded write allowed after reconciliation");
                 var scope = new ResourceAuthorityScopeId("file",
                     ResourceUri.Parse(next.Reference.Uri).Segments.Single());
-                new ResourceMutationJournal(paths).Prepare(scope, "files.replace",
+                new ResourceJournal(paths).Prepare(scope, "files.replace",
                     next.Reference.Identity, next.Reference.Revision);
                 var preparedOnly = restarted.ReconcileUncertain(workspace, "index.html");
                 AssertEqual(WorkspaceRecoveryOutcome.AbandonedBeforeDispatch, preparedOnly.Outcome,
@@ -1045,6 +1045,7 @@ namespace RNAssistant.Harness
                 var payload = source.Evidence.Payload;
                 var blobPath = Path.Combine(paths.ChatBlobDirectory, payload.Sha256.Substring(0, 2), payload.Sha256 + ".blob");
                 var bytes = File.ReadAllBytes(blobPath);
+                var originalBytes = (byte[])bytes.Clone();
                 bytes[bytes.Length - 1] ^= 1;
                 File.WriteAllBytes(blobPath, bytes);
                 var dispatched = false;
@@ -1058,14 +1059,14 @@ namespace RNAssistant.Harness
                 try { mutate(); }
                 catch (WorkspaceFileException ex) { rejected = ex.Code == "snapshot_unavailable"; }
                 AssertTrue(rejected && !dispatched, operation + " rejects corrupt retained bytes before dispatch");
-                AssertEqual(0, new ResourceMutationJournal(paths).Unresolved().Count,
+                AssertEqual(0, new ResourceJournal(paths).Unresolved().Count,
                     "rejected mutation leaves no prepared attempt");
                 var sourcePath = Path.Combine(workspace.RootPath, "source.txt");
                 AssertEqual(operation != "restore", File.Exists(sourcePath), "refusal preserves source existence");
                 if (operation != "restore") AssertEqual(body, File.ReadAllText(sourcePath), "refusal preserves source bytes");
                 AssertTrue(!File.Exists(Path.Combine(workspace.RootPath, "target.txt")), "refusal creates no move target");
 
-                new ChatBlobStore(paths).StoreText(body, "text/plain; charset=utf-8");
+                File.WriteAllBytes(blobPath, originalBytes);
                 mutate();
                 AssertTrue(dispatched, "explicit retry succeeds after source repair");
                 var currentPath = operation == "move" ? Path.Combine(workspace.RootPath, "target.txt") : sourcePath;
@@ -1088,7 +1089,7 @@ namespace RNAssistant.Harness
                 AssertEqual("files.delete", deleted.AuthorityCommit.Effect.Operation, "delete publishes verified effect");
                 AssertEqual("const ready = true;\n", files.ReadExactText(workspace, "src/app.js", source.Reference).Text,
                     "deleted bytes remain available as an exact historical view");
-                var oldState = new ResourceAuthorityStore(paths).CaptureMany(new[] { accepted.Evidence.ScopeId });
+                var oldState = new ResourceJournal(paths).CaptureMany(new[] { accepted.Evidence.ScopeId });
                 AssertEqual(EvidenceState.Unavailable,
                     new EvidenceStateReducer().Reduce(accepted.Evidence, oldState).State,
                     "delete invalidates the former current read");
@@ -1097,7 +1098,7 @@ namespace RNAssistant.Harness
                 AssertTrue(restored.Reference.Revision != source.Reference.Revision,
                     "restore publishes a new logical revision");
                 AssertEqual(source.Reference.Revision,
-                    new ResourceAuthorityStore(paths).GetRevision(accepted.Evidence.ScopeId, restored.Reference)
+                    new ResourceJournal(paths).GetRevision(accepted.Evidence.ScopeId, restored.Reference)
                         .RestoredFrom.Revision, "restored revision retains exact provenance");
                 var repeated = false;
                 try { files.RestoreDeletedText(workspace, "src/app.js"); }
@@ -1158,13 +1159,13 @@ namespace RNAssistant.Harness
                 AssertEqual(ResourceEffectOutcome.VerifiedChanged, moved.AuthorityCommit.Effect.Outcome,
                     "move publishes verified effect");
                 AssertEqual(created.Reference.Revision,
-                    new ResourceAuthorityStore(paths).GetRevision(accepted.Evidence.ScopeId, moved.Reference).Parent.Revision,
+                    new ResourceJournal(paths).GetRevision(accepted.Evidence.ScopeId, moved.Reference).Parent.Revision,
                     "moved revision retains parent");
                 AssertEqual("const app = 1;\n", files.ReadExactText(workspace, "dst/app.js", created.Reference).Text,
                     "historical view follows moved identity");
                 AssertEqual(moved.Reference.Revision, files.ReadText(workspace, "dst/app.js").Reference.Revision,
                     "target read resolves published head");
-                var currentAuthority = new ResourceAuthorityStore(paths).CaptureMany(new[] { accepted.Evidence.ScopeId });
+                var currentAuthority = new ResourceJournal(paths).CaptureMany(new[] { accepted.Evidence.ScopeId });
                 AssertEqual(EvidenceState.Superseded,
                     new EvidenceStateReducer().Reduce(accepted.Evidence, currentAuthority).State,
                     "old path observation is superseded by move");
@@ -1245,7 +1246,7 @@ namespace RNAssistant.Harness
                 var reader = new WorkspaceFileService(paths);
                 var source = mover.CreateText(workspace, "source.txt", "moved body");
                 var scope = new ResourceAuthorityScopeId("file", ResourceUri.Parse(source.Reference.Uri).Segments.Single());
-                var authority = new ResourceAuthorityStore(paths);
+                var authority = new ResourceJournal(paths);
                 WorkspaceFileObservation moved = null;
                 long movedGeneration = 0;
                 // Deterministically interleave a completed move after path resolution,
@@ -1273,7 +1274,7 @@ namespace RNAssistant.Harness
                 AssertEqual(movedGeneration, snapshot.Generation, operation + ": stale path publishes no authority changes");
                 AssertEqual("target_conflict", (failure as WorkspaceFileException)?.Code,
                     operation + ": changed path binding fails before observation");
-                AssertEqual(0, new ResourceMutationJournal(paths).Unresolved().Count,
+                AssertEqual(0, new ResourceJournal(paths).Unresolved().Count,
                     operation + ": stale read creates no mutation attempts");
 
                 // A fresh owner proves both durable identity and release of the rejected lease.
@@ -1315,10 +1316,10 @@ namespace RNAssistant.Harness
                 WorkspaceFileException failure = null;
                 try { recovery.ReconcileUncertain(workspace, "source.txt"); }
                 catch (WorkspaceFileException ex) { failure = ex; }
-                AssertEqual(1, new ResourceMutationJournal(paths).Unresolved().Count,
+                AssertEqual(1, new ResourceJournal(paths).Unresolved().Count,
                     "stale source path cannot resolve the target's interrupted write");
                 AssertEqual(moved.Reference.Revision,
-                    new ResourceAuthorityStore(paths).Capture(scope).GetHead(new ResourceIdentity(source.Reference.Uri))?.Revision?.Revision,
+                    new ResourceJournal(paths).Capture(scope).GetHead(new ResourceIdentity(source.Reference.Uri))?.Revision?.Revision,
                     "stale recovery cannot publish a missing head for the moved file");
                 AssertEqual("target_conflict", failure?.Code, "recovery checks path binding before inspecting attempts");
                 var restarted = new WorkspaceFileService(paths);
@@ -1326,7 +1327,7 @@ namespace RNAssistant.Harness
                 AssertEqual(WorkspaceRecoveryOutcome.UnknownAfterDispatch, reconciled.Outcome,
                     "explicit recovery keeps unknown causality without replay");
                 AssertEqual("written before interruption", reconciled.Current.Text, "recovery reads the actual target");
-                AssertEqual(0, new ResourceMutationJournal(paths).Unresolved().Count, "correctly addressed recovery resolves once");
+                AssertEqual(0, new ResourceJournal(paths).Unresolved().Count, "correctly addressed recovery resolves once");
             });
         }
 
@@ -1981,7 +1982,7 @@ namespace RNAssistant.Harness
             });
         }
 
-        private sealed class CatalogReadStore : IConversationStore
+        private sealed class CatalogReadStore : IConversationStore, IConversationArtifactBodyReader
         {
             private readonly IConversationStore _inner;
             internal bool ForbidFullLoads;
@@ -2007,7 +2008,8 @@ namespace RNAssistant.Harness
                 if (includeStorageUsage && ForbidStorageUsage) throw new InvalidOperationException("Unexpected CAS size scan.");
                 return _inner.ReadHeader(id, includeStorageUsage);
             }
-            public bool LoadArtifactBody(ChatSession session, string id) { return _inner.LoadArtifactBody(session, id); }
+            public bool LoadArtifactBody(ChatSession session, string id)
+            { return ((IConversationArtifactBodyReader)_inner).LoadArtifactBody(session, id); }
             public ChatSession CreateTransient(string host, string key, string title, string name, string documentAuthorityId = null)
             { return _inner.CreateTransient(host, key, title, name, documentAuthorityId); }
             public void Commit(ChatSession session, ConversationCommit commit) { _inner.Commit(session, commit); }

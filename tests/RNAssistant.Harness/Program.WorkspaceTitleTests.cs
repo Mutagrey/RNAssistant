@@ -57,9 +57,14 @@ namespace RNAssistant.Harness
                                                 : new ConversationToolCall { Name = "core.find", Arguments = new JObject { ["query"] = "missing" } }
                                         }).ToJson()
                                     : number < expectedRequests
-                                        ? ScriptedVerifiedFinish(activeService.ConversationStore.Load(sessionId),
-                                            "Report the resource search.", "Первый ответ.", "Resources inspected.",
-                                            failedRead ? new[] { "core.find" } : new[] { "core.find", "core.find" })
+                                        ? failedRead
+                                            ? ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                                                "Report the resource search.", "Первый ответ.",
+                                                results: new[] { new ConversationResultClaim("Resources inspected.",
+                                                    new[] { "E1" }, ConversationAssessment.Unverified) }, outcome: ConversationOutcome.UnableToComplete)
+                                            : ScriptedVerifiedFinish(activeService.ConversationStore.Load(sessionId),
+                                                "Report the resource search.", "Первый ответ.", "Resources inspected.",
+                                                new[] { "core.find", "core.find" })
                                         : ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                                             "Answer the follow-up from persisted history.", "История читается.",
                                             results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed);
@@ -282,10 +287,12 @@ namespace RNAssistant.Harness
                         AssertTrue(SpinWait.SpinUntil(() =>
                             service.ReadState(workspace, session.Id).Title == "Продажи за октябрь", 10000),
                             "smart title replaces only the auto title");
+                        var notices = string.Join(" | ", titleNotices.Select(value =>
+                            value.Kind + ":" + (value.Summary?.RunId ?? "null") + ":" + (value.Cursor ?? "null")));
                         AssertTrue(SpinWait.SpinUntil(() => titleNotices.Any(value =>
                             value.Kind == "TitleChanged" && !string.IsNullOrWhiteSpace(value.Cursor) &&
                             value.Summary?.RunId == run.Summary.RunId), 3000),
-                            "durable smart title publishes one scoped run/cursor notice");
+                            "durable smart title publishes one scoped run/cursor notice: " + notices);
                         AssertTrue(SpinWait.SpinUntil(() =>
                             !service.ReadState(workspace, session.Id).TitleGenerationPending, 3000),
                             "title generation reaches a terminal state");

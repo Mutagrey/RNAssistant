@@ -67,6 +67,7 @@ namespace RNAssistant.Harness
                 AssertTrue(denied, "diagnostic reference cannot cross workspace authority");
                 var blobs = new ChatBlobStore(paths);
                 var orphan = blobs.StoreText("orphan diagnostic fixture", "text/plain");
+                File.SetLastWriteTimeUtc(blobs.PathFor(orphan.Sha256), DateTime.UtcNow.AddHours(-2));
                 var collected = CasService(paths, new ChatStore(paths), new VbaJournalStore(paths), () => StorageProtector.None).Collect();
                 AssertTrue(collected.Completed && !File.Exists(blobs.PathFor(orphan.Sha256)), "CAS GC collects an unrelated orphan");
                 AssertTrue(png.SequenceEqual(store.ReadDiagnostic(workspace, saved.Reference, WebDiagnosticKind.Screenshot)) &&
@@ -153,7 +154,7 @@ namespace RNAssistant.Harness
                 var terminal = new WorkspaceWebSnapshotStore(paths, files).ReadVerification(workspace, id);
                 AssertEqual(WebVerificationState.Failed, terminal.State, "terminal record is durable");
                 AssertEqual("call", terminal.Origin.ToolCallId, "tool origin is retained");
-                var authority = new ResourceAuthorityStore(paths);
+                var authority = new ResourceJournal(paths);
                 var scope = new ResourceAuthorityScopeId("workspace-web", workspace.WorkspaceId);
                 AssertEqual(pendingRef.Revision, authority.GetRevision(scope, terminal.Reference).Parent.Revision,
                     "terminal publication appends a child of pending");
@@ -167,6 +168,7 @@ namespace RNAssistant.Harness
 
                 var blobs = new ChatBlobStore(paths);
                 var orphan = blobs.StoreText("unpublished-gc-fixture", "text/plain");
+                File.SetLastWriteTimeUtc(blobs.PathFor(orphan.Sha256), DateTime.UtcNow.AddHours(-2));
                 var collector = CasService(paths, new ChatStore(paths), new VbaJournalStore(paths), () => StorageProtector.None);
                 var collected = collector.Collect();
                 AssertTrue(collected.Completed, "canonical authority roots permit a complete GC audit");
@@ -219,7 +221,7 @@ namespace RNAssistant.Harness
                 var payload = PayloadRef.FromBlob(new ChatBlobStore(paths).StoreText(JsonConvert.SerializeObject(new
                 { SchemaVersion = 1, Id = id, WorkspaceId = workspace.WorkspaceId, EntryPath = "index.html",
                     SnapshotSha256 = WorkspaceWebSnapshotStore.Digest(new[] { file }), Files = new[] { file } }), "application/json"));
-                var authority = new ResourceAuthorityStore(paths);
+                var authority = new ResourceJournal(paths);
                 authority.RegisterRevision(scope, new ResourceRevisionMetadata(reference, payload.Sha256, payload));
                 authority.RegisterView(scope, new ResourceRevisionView(reference, "web-project-manifest", payload.Sha256,
                     payload, ResourceCoverage.Whole(), new[] { file.Payload }));

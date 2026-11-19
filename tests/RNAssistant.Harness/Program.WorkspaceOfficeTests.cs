@@ -245,8 +245,53 @@ namespace RNAssistant.Harness
                             result.RunId = "prior-run";
                             AssertTrue(new ModelResultProjection().Project(result).Content.Contains("scopeSha256"),
                                 "the generic workspace projection would expose the Office-only scope field");
-                            session.Messages.AddRange(new[] { original, call, result });
-                            new ChatStore(paths).Commit(session, new ConversationCommit(session.Messages));
+                            var conversations = service.ConversationStore;
+                            Action<string, AgentRunEvent, ChatMessage[], ChatMessage> persist = (stage, fact, appended, toolActivity) => {
+                                try {
+                                    session.LastRun.KernelState = AgentRunState.Apply(session.LastRun.KernelState, fact);
+                                    ConversationRunProjection.Apply(session.LastRun);
+                                    session.Messages.AddRange(appended);
+                                    new ConversationRunCommit(session, fact, appended, toolActivity).Persist(conversations.CommitRun, session);
+                                }
+                                catch (Exception error) { throw new InvalidOperationException("Office result seed " + stage + ": " + error.Message, error); }
+                            };
+                            session.Messages.Add(original);
+                            conversations.Commit(session, ConversationCommit.UserInput(original));
+                            var initial = CheckpointState("prior-run", RunLifecycle.Running, 0, 0);
+                            session.LastRun = new ChatRunRecord { RunId = initial.Summary.RunId, TurnId = initial.Summary.TurnId,
+                                StartedUtc = DateTime.UtcNow, KernelState = initial,
+                                ConversationPolicy = ConversationRunPolicy.For(ChatModes.Agent) };
+                            persist("started", new AgentRunEvent(AgentRunEventKind.Started,
+                                initial.Summary, limits: initial.Limits), new ChatMessage[0], null);
+                            var callContext = new ToolExecutionContext(new ToolCall("prior-call", WordToolIds.ReplaceText,
+                                JsonConvert.SerializeObject(new Dictionary<string, object> { ["find"] = "old", ["replace"] = "new" })),
+                                new ToolPolicySnapshot(WordToolIds.ReplaceText, "fixture", new ToolPolicy(ToolEffect.Read,
+                                    ToolVerification.None, false, false, new[] { "agent" }, 0)),
+                                "prior-run", initial.Summary.TurnId, "prior-step", DateTime.UtcNow, false, 1);
+                            var acceptedSummary = new RunSummary("prior-run", initial.Summary.TurnId, RunLifecycle.Running,
+                                new ToolCounts(), 1, 1, string.Empty, null, null);
+                            persist("accepted", new AgentRunEvent(AgentRunEventKind.ResponseAccepted, acceptedSummary,
+                                response: new AgentResponse(ConversationResponse.ExecuteAction, "Apply the requested replacement.",
+                                    "Replacing.", new[] { callContext.Call })), new[] { call }, null);
+                            var activity = new ChatMessage { Id = "prior-activity", Role = "assistant", Content = "Replacing.",
+                                RunId = "prior-run", RuntimeProjection = true, Activity = new ChatActivity {
+                                    RunId = "prior-run", StepId = callContext.StepId, Kind = "tool", ToolCallId = "prior-call",
+                                    ToolId = WordToolIds.ReplaceText, Status = "running", ExecutionStatus = "executing" } };
+                            persist("tool-started", new AgentRunEvent(AgentRunEventKind.ToolStarted,
+                                acceptedSummary, callContext.StepId, toolContext: callContext), new[] { activity }, activity);
+                            var resultSummary = new RunSummary("prior-run", initial.Summary.TurnId, RunLifecycle.Running,
+                                new ToolCounts(readOk: 1), 1, 1, string.Empty, null, null);
+                            var execution = new ToolExecutionRecord(callContext, ToolExecutionOutcome.Ok,
+                                callContext.StartedUtc.AddMilliseconds(1), "Replaced.", "{\"replacements\":2}",
+                                mayHaveDispatched: true, result: ToolResult.Ok("Replaced.",
+                                    "{\"replacements\":2,\"scopeSha256\":\"private-scope-hash\"}"));
+                            activity.Activity.Status = "completed"; activity.Activity.ExecutionStatus = "completed";
+                            persist("completed", new AgentRunEvent(AgentRunEventKind.ToolCompleted, resultSummary,
+                                callContext.StepId, execution: execution), new[] { result }, activity);
+                            var completedSummary = new RunSummary("prior-run", initial.Summary.TurnId, RunLifecycle.Completed,
+                                new ToolCounts(readOk: 1), 1, 1, "Replaced.", null, null);
+                            persist("finished", new AgentRunEvent(AgentRunEventKind.SummaryChanged, completedSummary),
+                                new ChatMessage[0], null);
                             var rejectedInput = new WorkspaceSubmitInputRequest { SessionId = sessionId,
                                 RequestId = "missing-projection", Message = "Do not send", Mode = ChatModes.Agent };
                             using (var incomplete = new WorkspaceConversationService(paths,
@@ -272,9 +317,10 @@ namespace RNAssistant.Harness
                         AssertTrue(delivered.All(content => content.Contains("replacements")) &&
                             requests.All(request => !request.Contains("scopeSha256") && !request.Contains("private-scope-hash")),
                             "workspace model requests use the Office projection before and after restart");
-                        AssertTrue(new ChatStore(paths).Load(sessionId).Messages.Any(message =>
-                            message.ToolCallId == "prior-call" && message.Content.Contains("scopeSha256")),
-                            "durable Office result keeps diagnostic fields");
+                        using (var durable = new WorkspaceConversationService(paths, officeCapabilities: office))
+                            AssertTrue(durable.ConversationStore.Load(sessionId).Messages.Any(message =>
+                                message.ToolCallId == "prior-call" && message.Content.Contains("scopeSha256")),
+                                "durable Office result keeps diagnostic fields");
                     }
                     finally { listener.Stop(); }
                 }

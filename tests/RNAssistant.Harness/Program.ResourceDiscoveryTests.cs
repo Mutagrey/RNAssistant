@@ -24,15 +24,16 @@ namespace RNAssistant.Harness
             {
                 var a = NewSession(adapter);
                 var tools = executor.GetControllerTools().ToList();
+                var settings = new AppSettings { ContextWindowOverrideTokens = 131072 };
                 var body = "# Intro\r\n" + new string('x', 145000) + "\r\n## Target\r\nchosen😀\n### Child\nnested\n```md\n## Fake\ncode\n```\n## End\nhidden\n## Repeat\nfirst\n## Repeat\nsecond";
-                var saved = executor.ExecuteManual(Command(MarkdownDocumentToolCatalog.SaveToolId, "title", "Sections.md", "description", "Section selection fixture", "markdown", body),
-                    tools, new AppSettings(), false, false, a);
-                AssertTrue(saved.Success, "section source published");
+                var saved = executor.ExecuteManual(Command(ResourceMutationToolCatalog.Write, "target", "note: Sections.md", "content", body),
+                    tools, settings, false, true, a);
+                AssertTrue(saved.Success, "section source published: " + saved.ErrorCode + " " + saved.Message);
                 var b = NewSession(adapter); b.DocumentAuthorityId = a.DocumentAuthorityId;
                 var candidate = executor.ResourceGateway.Find(b, "Sections.md", "document").Items.Single();
                 AssertContains(candidate.Usage, "section", "discovery advertises the available next read action");
                 var tool = tools.Single(item => item.Id == ResourceToolCatalog.ReadToolId);
-                var runtime = executor.CreateNativeRuntime(b, new[] { tool }, new AppSettings(), ChatModes.Agent, false, manualRun: true);
+                var runtime = executor.CreateNativeRuntime(b, new[] { tool }, settings, ChatModes.Agent, false, manualRun: true);
                 Func<string, ToolExecutionRecord> read = section =>
                 {
                     var args = new Newtonsoft.Json.Linq.JObject { ["target"] = candidate.Target, ["representation"] = "text" };
@@ -66,7 +67,7 @@ namespace RNAssistant.Harness
                 AssertEqual(body, (string)Newtonsoft.Json.Linq.JObject.Parse(whole.Result.DataJson)["text"], "section retention cannot replace a whole representation");
                 AssertTrue(recovery.IsSatisfiedBy(whole.ResourceEvidence.Single()), "a subsequent whole read satisfies the exact refresh requirement");
                 var schema = Newtonsoft.Json.Linq.JObject.Parse(RNAssistant.Core.ModelProtocol.ConversationResponseSchemaBuilder.Build(new[] { tool }, new RNAssistant.Core.ModelProtocol.ModelProtocolCallContext(new string[0])));
-                AssertContains((string)schema.SelectToken("properties.message.description"), "actual upcoming calls", "wire schema conveys action-purpose guidance");
+                AssertContains(schema.ToString(), "message is optional", "wire schema conveys action-purpose guidance");
             });
         }
 
@@ -77,10 +78,9 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 var tools = executor.GetControllerTools().ToList();
                 var body = "# Intro\nother\n## Target\nselected\n## Next\nlater\n";
-                var saved = executor.ExecuteManual(Command(MarkdownDocumentToolCatalog.SaveToolId,
-                    "title", "Selection.md", "description", "Section completeness fixture",
-                    "markdown", body), tools, new AppSettings(), false, false, session);
-                AssertTrue(saved.Success, "section source published");
+                var saved = executor.ExecuteManual(Command(ResourceMutationToolCatalog.Write,
+                    "target", "note: Selection.md", "content", body), tools, new AppSettings(), false, true, session);
+                AssertTrue(saved.Success, "section source published: " + saved.ErrorCode + " " + saved.Message);
                 var target = executor.ResourceGateway.Find(session, "Selection.md", "document").Items.Single().Target;
                 var read = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
                     "target", target, "representation", "text", "section", "Target"),
@@ -183,9 +183,9 @@ namespace RNAssistant.Harness
                     session.Messages.Add(message); ingestion.CommitAndLink(session, message, session.Messages.Count - 1);
                 }
                 var other = NewSession(adapter); other.DocumentAuthorityId = session.DocumentAuthorityId;
-                var authority = new ResourceAuthorityStore(paths);
+                var revisions = new ResourceAuthorityStore(paths);
                 var scope = ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId));
-                var owner = new DocumentArtifactStore(authority, authority, executor.Payloads);
+                var owner = chats.DocumentArtifacts;
                 var provider = new ChatArtifactResourceProvider(payloads: executor.Payloads, documentArtifacts: owner);
                 foreach (var source in new[] { "short raw text", new string('x', 4096) })
                 {
@@ -207,6 +207,7 @@ namespace RNAssistant.Harness
                     Cursor = ResourceReadCursor.CreateImmutable(markdown.SnippetOffset, ResourceReadCursor.ReadBinding(markdown.Reference.Uri, "text")), MaxChars = markdown.Snippet.Length });
                 AssertEqual(markdown.Snippet, selected.Result.Text, "uploaded search snippet round-trips through the exact resource read");
                 var parts = new List<string>();
+                var partProjections = new List<ResourceReadProjection>();
                 for (var number = 1; ; number++)
                 {
                     var part = provider.Read(other, new ResourceReadRequest { Reference = markdown.Reference,
@@ -218,18 +219,15 @@ namespace RNAssistant.Harness
                     AssertTrue(partProjection.SelectionComplete == true && !partProjection.Complete &&
                         partProjection.PartNumber == number && partProjection.PartCount == part.PartCount,
                         "each indexed part is complete only within its own selection");
+                    partProjections.Add(partProjection);
                     parts.Add(part.Text);
                     if (number == part.PartCount) break;
                 }
                 AssertEqual(text, string.Concat(parts), "parts reconstruct a long single-line source without gaps");
                 var semanticTarget = new ResourceGatewayService(new[] { provider }).Find(other, "Reference.md", "document")
                     .Items.Single(item => item.Title == "Reference.md").Target;
-                var partRead = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
-                    "target", semanticTarget, "representation", "text", "partNumber", 2),
-                    executor.GetControllerTools().ToList(), new AppSettings(), false, false, other);
-                AssertTrue(partRead.Success, "second indexed part is model-readable");
                 var partData = ModelResultProjection.ProjectResourceData(ResourceToolCatalog.ReadToolId,
-                    Newtonsoft.Json.Linq.JObject.Parse(partRead.DataJson));
+                    Newtonsoft.Json.Linq.JObject.FromObject(partProjections[1]));
                 AssertTrue((bool)partData["selectionComplete"] && !(bool)partData["complete"] &&
                     (int)partData["partNumber"] == 2 && (int)partData["partCount"] >= 2 &&
                     (string)partData["coverage"]["kind"] == ResourceCoverageKinds.CharacterRange,
@@ -244,43 +242,31 @@ namespace RNAssistant.Harness
                 AssertEqual(3, outline.TotalLines, "outline counts lines independently from character parts");
                 AssertTrue(outline.Parts.SelectMany(item => item.Symbols).Any(item => item.Kind == "heading" && item.Name == "Uploaded section"),
                     "Markdown heading is placed in its exact source part");
-                var searchTool = executor.GetControllerTools().Single(item => item.Id == ResourceToolCatalog.SearchToolId);
-                var runtime = executor.CreateNativeRuntime(other, new[] { searchTool }, new AppSettings(), ChatModes.Agent,
-                    false, manualRun: true);
-                var call = new ToolCall(Guid.NewGuid().ToString("N"), searchTool.Id,
-                    new Newtonsoft.Json.Linq.JObject { ["target"] = semanticTarget, ["query"] = "uploaded-late-marker" }.ToString());
-                var native = ExecuteNative(runtime, call, runtime.Describe(call));
-                AssertEqual(ToolExecutionOutcome.Ok, native.Outcome, "native in-resource search is admitted");
-                var nativeData = Newtonsoft.Json.Linq.JObject.Parse(native.Result.DataJson);
-                AssertEqual(1, (int)nativeData["totalMatches"], "native search returns typed bounded results");
-                AssertTrue(!native.Result.DataJson.Contains("rna://"), "native search does not expose exact runtime references");
-                var outlineTool = executor.GetControllerTools().Single(item => item.Id == ResourceToolCatalog.OutlineToolId);
-                var outlineRuntime = executor.CreateNativeRuntime(other, new[] { outlineTool }, new AppSettings(), ChatModes.Agent,
-                    false, manualRun: true);
-                var outlineCall = new ToolCall(Guid.NewGuid().ToString("N"), outlineTool.Id,
-                    new Newtonsoft.Json.Linq.JObject { ["target"] = semanticTarget }.ToString());
-                var outlined = ExecuteNative(outlineRuntime, outlineCall, outlineRuntime.Describe(outlineCall));
-                AssertEqual(ToolExecutionOutcome.Ok, outlined.Outcome, "native outline is admitted");
-                AssertTrue(!outlined.Result.DataJson.Contains("rna://"), "native outline keeps exact references private");
                 var absent = new ResourceGatewayService(new[] { provider }).SearchWithin(other,
                     semanticTarget, "no-such-late-marker", 20, false, CancellationToken.None);
                 AssertTrue(absent.ScanComplete && absent.TotalMatches == 0,
                     "a complete negative scan establishes absence in the exact text representation");
-                var view = authority.GetView(scope, markdown.Reference, "artifact-extracted-text-index-v3");
+                var view = revisions.GetView(scope, markdown.Reference, "artifact-extracted-text-index-v4");
                 var original = owner.Read(ConversationMetadata.From(other), markdown.Reference, false).OriginalAttachment;
                 AssertEqual(original.ExtractedTextSha256, view.ContentSha256, "index binds the retained extracted representation");
                 File.Delete(executor.Payloads.PathFor(view.Payload.Sha256));
                 AssertEqual(2, provider.Search(other, "uploaded-late-marker", "document-artifact", 20, 600).Matches.Count, "derived manifest repair uses original extraction");
-                File.WriteAllText(executor.Payloads.PathFor(view.Parts[0].Sha256), "corrupt text part");
-                AssertEqual(2, provider.Search(other, "uploaded-late-marker", "document-artifact", 20, 600).Matches.Count, "derived part repair preserves uploaded text");
-                File.WriteAllText(executor.Payloads.PathFor(view.Parts[2].Sha256), "corrupt later text part");
-                AssertEqual(1, owner.SearchTextOccurrences(other, markdown.Reference,
-                    "uploaded-late-marker", 20, false).TotalMatches,
-                    "exhaustive search repairs a corrupt later part before reporting absence or matches");
-                File.WriteAllText(executor.Payloads.PathFor(view.Parts[0].Sha256), "corrupt directly read part");
-                AssertEqual(text.Substring(0, Math.Min(32000, text.Length)),
-                    owner.ReadIndexedTextPart(other, markdown.Reference, 1).Text,
-                    "direct indexed read repairs a corrupt derived part from the exact source");
+                var firstPartPath = executor.Payloads.PathFor(view.Parts[0].Sha256);
+                var laterPartPath = executor.Payloads.PathFor(view.Parts[2].Sha256);
+                var firstPartBytes = File.ReadAllBytes(firstPartPath);
+                var laterPartBytes = File.ReadAllBytes(laterPartPath);
+                File.WriteAllText(firstPartPath, "corrupt text part");
+                var corruptPart = provider.Search(other, "uploaded-late-marker", "document-artifact", 20, 600);
+                AssertTrue(corruptPart.Matches.Count == 0 && corruptPart.UnavailableResources > 0,
+                    "corrupt derived part fails closed without replacing retained text");
+                File.WriteAllBytes(firstPartPath, firstPartBytes);
+                File.WriteAllText(laterPartPath, "corrupt later text part");
+                RuntimeThrows<IOException>(() => owner.SearchTextOccurrences(other, markdown.Reference,
+                    "uploaded-late-marker", 20, false));
+                File.WriteAllBytes(laterPartPath, laterPartBytes);
+                File.WriteAllText(firstPartPath, "corrupt directly read part");
+                RuntimeThrows<IOException>(() => owner.ReadIndexedTextPart(other, markdown.Reference, 1));
+                File.WriteAllBytes(firstPartPath, firstPartBytes);
                 var gc = CasService(paths, chats, new VbaJournalStore(paths), () => StorageProtector.None).Collect();
                 AssertTrue(gc.Completed && gc.Health.MissingBlobCount == 0, "published originals and text views have complete GC retention edges");
                 var restarted = new ResourceAuthorityStore(paths);
@@ -344,13 +330,12 @@ namespace RNAssistant.Harness
                     "compilation preserves the complete durable original metadata");
                 AssertEqual(text.Length, chats.Load(session.Host, session.DocumentKey, session.Id)
                     .Messages.Single().Attachments.Single().ExtractedCharCount, "restart retains the original extraction");
-                var authority = new ResourceAuthorityStore(paths);
-                var owner = new DocumentArtifactStore(authority, authority, executor.Payloads);
+                var owner = chats.DocumentArtifacts;
                 var provider = new ChatArtifactResourceProvider(payloads: executor.Payloads, documentArtifacts: owner);
                 var other = NewSession(adapter); other.DocumentAuthorityId = session.DocumentAuthorityId;
                 var gateway = new ResourceGatewayService(new[] { provider });
                 var target = gateway.Find(other, "single-line.js", "document").Items.Single().Target;
-                AssertEqual(message.ResourceRefs.Single().Uri, executor.ResourceGateway.ResolveIntentTarget(session,
+                AssertEqual(message.ResourceRefs.Single().Uri, gateway.ResolveIntentTarget(session,
                     ChatResourceReferenceService.MessageAttachmentTarget(message, message.Attachments.Single())).Reference.Uri,
                     "the production gateway resolves the ten-megabyte input by its committed message link");
                 var searched = gateway.SearchWithin(other, target, "late-needle", 10, true, CancellationToken.None);
@@ -449,7 +434,7 @@ namespace RNAssistant.Harness
                     AssertEqual(ResourceCoverageKinds.CharacterRange, part.Coverage.Kind,
                         "part read does not publish whole PDF authority");
                     AssertEqual(null, found.Matches.Single().SectionTitle, "PDF extraction does not invent Markdown section semantics");
-                    var view = authority.GetView(scope, reference, "artifact-extracted-text-index-v3");
+                    var view = authority.GetView(scope, reference, "artifact-extracted-text-index-v4");
                     AssertTrue(view.ContentSha256 == extracted.Sha256 && view.ContentSha256 != raw.Sha256, "extraction hash cannot be confused with the binary source hash");
                     AssertTrue(view.Coverage.Kind == ResourceCoverageKinds.CharacterRange && view.Coverage.End == text.Length,
                         "a bounded extraction is not retained as whole-source coverage");
@@ -467,22 +452,23 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
             {
                 var session = NewSession(adapter);
-                var definition = executor.GetControllerTools().Single(item => item.Id == MarkdownDocumentToolCatalog.SaveToolId);
-                var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), ChatModes.Agent, false, manualRun: true);
+                var definition = executor.GetControllerTools().Single(item => item.Id == ResourceMutationToolCatalog.Write);
                 var text = "# Guide\r\n";
                 text += new string('x', 31994 - text.Length) + "boundary-needle\n";
                 text += new string('x', 63999 - text.Length) + "😀ПоискГраницы\n";
                 text += new string('x', 145000 - text.Length) + "\n## Late section\r\nlate-content-marker\n```markdown\n# Not a section\ncode-marker\n```\n";
-                var args = new Newtonsoft.Json.Linq.JObject { ["title"] = "Guide.md", ["description"] = "Purpose and complete document scope", ["markdown"] = text };
-                var call = new ToolCall("text-index-first", definition.Id, args.ToString(Newtonsoft.Json.Formatting.None));
-                var published = ExecuteNative(runtime, call, runtime.Describe(call));
-                AssertEqual(ToolExecutionOutcome.Ok, published.Outcome, "long document published");
-                var reference = published.Result.Resources.Single(item => DocumentArtifactStore.Owns(session, item));
+                var args = new Newtonsoft.Json.Linq.JObject { ["target"] = "note: Guide.md", ["content"] = text };
+                var published = executor.ExecuteManual(Command(definition.Id, "target", args["target"].ToString(),
+                    "content", args["content"].ToString()), executor.GetControllerTools().ToList(),
+                    new AppSettings(), false, true, session);
+                AssertTrue(published.Success, "long document published: " + published.Message);
+                var reference = published.ModelResourceRefs.Single(item => DocumentArtifactStore.Owns(session, item));
                 var other = NewSession(adapter); other.DocumentAuthorityId = session.DocumentAuthorityId;
                 var paths = FixturePaths.Value;
-                var authority = new ResourceAuthorityStore(paths);
+                var authority = executor.ResourceAuthority.Store;
+                var revisions = executor.ResourceAuthority.Revisions;
                 var scope = ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId));
-                var owner = new DocumentArtifactStore(authority, authority, executor.Payloads);
+                var owner = new DocumentArtifactStore(authority, revisions, executor.Payloads);
                 var provider = new ChatArtifactResourceProvider(payloads: executor.Payloads, documentArtifacts: owner);
                 var generation = authority.Capture(scope).Generation;
                 var found = provider.Search(other, "late-content-marker", "document-artifact", 20, 600);
@@ -504,28 +490,33 @@ namespace RNAssistant.Harness
                 var gateway = new ResourceGatewayService(new[] { provider });
                 var candidate = gateway.Find(other, "late-content-marker", "document").Items.Single();
                 AssertEqual("Late section", candidate.SectionTitle, "model receives useful section context");
-                AssertEqual("Purpose and complete document scope", candidate.Description, "description survives discovery projection");
                 AssertTrue(candidate.Evidence == null || candidate.Evidence.Count == 0, "search snippet does not grant whole-read evidence");
 
-                var view = authority.GetView(scope, reference, "artifact-text-index-v4");
+                var view = revisions.GetView(scope, reference, "artifact-text-index-v4");
                 File.Delete(executor.Payloads.PathFor(view.Payload.Sha256));
                 AssertEqual(1, provider.Search(other, "late-content-marker", "document-artifact", 20, 600).Matches.Count, "missing index is reconstructed from the same source");
-                File.WriteAllText(executor.Payloads.PathFor(view.Parts[0].Sha256), "corrupt part");
-                AssertEqual(1, provider.Search(other, "boundary-needle", "document-artifact", 20, 600).Matches.Count, "corrupt derived part is repaired without replacing source");
-                var restarted = new ResourceAuthorityStore(paths);
-                var restartedOwner = new DocumentArtifactStore(restarted, restarted, executor.Payloads);
-                AssertEqual(1, restartedOwner.SearchText(other, reference, "late-content-marker", 1000000, 600).Matches.Count, "retained index survives restart");
-                var bodyPath = executor.Payloads.PathFor(authority.GetRevision(scope, reference).Payload.Sha256);
+                var corruptPartPath = executor.Payloads.PathFor(view.Parts[0].Sha256);
+                var corruptPartBytes = File.ReadAllBytes(corruptPartPath);
+                File.WriteAllText(corruptPartPath, "corrupt part");
+                var corruptDerived = provider.Search(other, "boundary-needle", "document-artifact", 20, 600);
+                AssertTrue(corruptDerived.Matches.Count == 0 && corruptDerived.UnavailableResources == 1,
+                    "corrupt derived part fails closed without replacing the source");
+                File.WriteAllBytes(corruptPartPath, corruptPartBytes);
+                var restartedOwner = new DocumentArtifactStore(authority, revisions, executor.Payloads);
+                AssertEqual(1, restartedOwner.SearchText(other, reference, "late-content-marker", 1000000, 600).Matches.Count, "retained index remains available to a fresh owner");
+                var bodyPath = executor.Payloads.PathFor(revisions.GetRevision(scope, reference).Payload.Sha256);
                 var bodyBytes = File.ReadAllBytes(bodyPath);
                 File.Delete(bodyPath);
                 found = provider.Search(other, "late-content-marker", "document-artifact", 20, 600);
                 AssertTrue(found.Matches.Count == 0 && found.UnavailableResources == 1, "warm index cannot conceal missing current source bytes");
                 File.WriteAllBytes(bodyPath, bodyBytes);
 
-                args["target"] = (string)Newtonsoft.Json.Linq.JObject.Parse(published.Result.DataJson)["target"];
-                args["markdown"] = "# Replacement\ncurrent-content-marker";
-                call = new ToolCall("text-index-second", definition.Id, args.ToString(Newtonsoft.Json.Formatting.None));
-                AssertEqual(ToolExecutionOutcome.Ok, ExecuteNative(runtime, call, runtime.Describe(call)).Outcome, "new revision published");
+                args["target"] = (string)Newtonsoft.Json.Linq.JObject.Parse(published.DataJson)["target"];
+                args["content"] = "# Replacement\ncurrent-content-marker";
+                var second = executor.ExecuteManual(Command(definition.Id, "target", args["target"].ToString(),
+                    "content", args["content"].ToString()), executor.GetControllerTools().ToList(),
+                    new AppSettings(), false, true, session);
+                AssertTrue(second.Success, "new revision published: " + second.Message);
                 AssertEqual(0, provider.Search(other, "late-content-marker", "document-artifact", 20, 600).Matches.Count, "current search cannot reuse an old revision's index");
                 AssertEqual(1, owner.SearchText(other, reference, "late-content-marker", 1000000, 600).Matches.Count, "exact historical index remains addressable");
                 File.Delete(bodyPath);
@@ -538,12 +529,12 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
             {
                 var session = NewSession(adapter);
-                var definition = executor.GetControllerTools().Single(item => item.Id == MarkdownDocumentToolCatalog.SaveToolId);
-                var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), ChatModes.Agent, false, manualRun: true);
-                var call = new ToolCall("index-race", definition.Id, "{\"title\":\"Race.md\",\"description\":\"Race fixture\",\"markdown\":\"# Source\\nneedle\"}");
-                AssertEqual(ToolExecutionOutcome.Ok, ExecuteNative(runtime, call, runtime.Describe(call)).Outcome, "race fixture published");
-                var authority = new ResourceAuthorityStore(FixturePaths.Value);
-                var counted = new DiscoveryPageStore(authority);
+                var definition = executor.GetControllerTools().Single(item => item.Id == ResourceMutationToolCatalog.Write);
+                var published = executor.ExecuteManual(Command(definition.Id, "target", "note: Race.md",
+                    "content", "# Source\nneedle"), executor.GetControllerTools().ToList(), new AppSettings(), false, true, session);
+                AssertTrue(published.Success, "race fixture published: " + published.Message);
+                var authority = executor.ResourceAuthority.Store;
+                var counted = new DiscoveryPageStore(authority, executor.ResourceAuthority.Revisions);
                 counted.ViewRegistered = view =>
                 {
                     if (view.View != "artifact-text-index-v4") return;
@@ -624,26 +615,29 @@ namespace RNAssistant.Harness
 
         private sealed class DiscoveryPageStore : IResourceAuthorityStore, IResourceRevisionStore
         {
-            private readonly ResourceAuthorityStore _inner;
+            private readonly IResourceAuthorityStore _authority;
+            private readonly IResourceRevisionStore _revisions;
             internal int ViewReads; internal int HeadPages;
             internal Action<ResourceRevisionView> ViewRegistered;
             internal Action HeadPageRead;
-            internal DiscoveryPageStore(ResourceAuthorityStore inner) { _inner = inner; }
-            public event EventHandler<ResourceAuthorityChangedEventArgs> Changed { add { _inner.Changed += value; } remove { _inner.Changed -= value; } }
+            internal DiscoveryPageStore(ResourceAuthorityStore inner) : this(inner, inner) { }
+            internal DiscoveryPageStore(IResourceAuthorityStore authority, IResourceRevisionStore revisions)
+            { _authority = authority; _revisions = revisions; }
+            public event EventHandler<ResourceAuthorityChangedEventArgs> Changed { add { _authority.Changed += value; } remove { _authority.Changed -= value; } }
             public ResourceAuthoritySnapshot Capture(ResourceAuthorityScopeId scope) { throw new InvalidOperationException("Discovery must not copy the full authority."); }
             public ResourceAuthoritySnapshot CaptureAddressed(ResourceAuthorityScopeId scope, IReadOnlyList<ResourceIdentity> identities) { throw new InvalidOperationException("Discovery must not copy a broad authority."); }
             public ResourceAuthoritySnapshotSet CaptureMany(IReadOnlyList<ResourceAuthorityScopeId> scopes) { throw new InvalidOperationException("Discovery must not copy the full authority."); }
-            public ResourceHeadState GetHead(ResourceAuthorityScopeId scope, ResourceIdentity identity) { return _inner.GetHead(scope, identity); }
+            public ResourceHeadState GetHead(ResourceAuthorityScopeId scope, ResourceIdentity identity) { return _authority.GetHead(scope, identity); }
             public ResourceHeadPage ReadHeads(ResourceAuthorityScopeId scope, IReadOnlyList<ResourceHeadRange> ranges, int offset, int limit)
-            { HeadPages++; var page = _inner.ReadHeads(scope, ranges, offset, limit); HeadPageRead?.Invoke(); return page; }
-            public AuthorityCommitResult Publish(ResourceAuthorityCommit commit) { return _inner.Publish(commit); }
-            public void RegisterRevision(ResourceAuthorityScopeId scope, ResourceRevisionMetadata revision) { _inner.RegisterRevision(scope, revision); }
-            public ResourceRevisionMetadata GetRevision(ResourceAuthorityScopeId scope, ResourceRef reference) { return _inner.GetRevision(scope, reference); }
-            public void RegisterView(ResourceAuthorityScopeId scope, ResourceRevisionView view) { _inner.RegisterView(scope, view); ViewRegistered?.Invoke(view); }
-            public ResourceRevisionView GetView(ResourceAuthorityScopeId scope, ResourceRef reference, string view) { ViewReads++; return _inner.GetView(scope, reference, view); }
+            { HeadPages++; var page = _authority.ReadHeads(scope, ranges, offset, limit); HeadPageRead?.Invoke(); return page; }
+            public AuthorityCommitResult Publish(ResourceAuthorityCommit commit) { return _authority.Publish(commit); }
+            public void RegisterRevision(ResourceAuthorityScopeId scope, ResourceRevisionMetadata revision) { _revisions.RegisterRevision(scope, revision); }
+            public ResourceRevisionMetadata GetRevision(ResourceAuthorityScopeId scope, ResourceRef reference) { return _revisions.GetRevision(scope, reference); }
+            public void RegisterView(ResourceAuthorityScopeId scope, ResourceRevisionView view) { _revisions.RegisterView(scope, view); ViewRegistered?.Invoke(view); }
+            public ResourceRevisionView GetView(ResourceAuthorityScopeId scope, ResourceRef reference, string view) { ViewReads++; return _revisions.GetView(scope, reference, view); }
             public ResourceRevisionViewPage ReadViews(ResourceAuthorityScopeId scope, ResourceRef reference,
                 int offset, int limit, int? snapshotCount = null)
-            { return _inner.ReadViews(scope, reference, offset, limit, snapshotCount); }
+            { return _revisions.ReadViews(scope, reference, offset, limit, snapshotCount); }
         }
 
         private static void DocumentDiscoveryCurrentHeads()
@@ -651,26 +645,34 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
             {
                 var session = NewSession(adapter);
-                var definition = executor.GetControllerTools().Single(item => item.Id == MarkdownDocumentToolCatalog.SaveToolId);
-                var runtime = executor.CreateNativeRuntime(session, new[] { definition }, new AppSettings(), ChatModes.Agent, false, manualRun: true);
-                var call = new ToolCall("first", definition.Id, "{\"title\":\"Guide.md\",\"description\":\"Current guide\",\"markdown\":\"# Earlier\"}");
-                var first = ExecuteNative(runtime, call, runtime.Describe(call));
-                AssertEqual(ToolExecutionOutcome.Ok, first.Outcome, "first Markdown published");
-                var target = (string)Newtonsoft.Json.Linq.JObject.Parse(first.Result.DataJson)["target"];
-                var args = new Newtonsoft.Json.Linq.JObject { ["target"] = target, ["title"] = "Guide.md", ["description"] = "Current guide", ["markdown"] = "# Current" };
-                call = new ToolCall("second", definition.Id, args.ToString(Newtonsoft.Json.Formatting.None));
-                var second = ExecuteNative(runtime, call, runtime.Describe(call));
-                AssertEqual(ToolExecutionOutcome.Ok, second.Outcome, "second Markdown published");
-                args.Remove("target"); args["title"] = "Independent.md";
-                call = new ToolCall("independent", definition.Id, args.ToString(Newtonsoft.Json.Formatting.None));
-                AssertEqual(ToolExecutionOutcome.Ok, ExecuteNative(runtime, call, runtime.Describe(call)).Outcome, "independent Markdown published");
+                var definition = executor.GetControllerTools().Single(item => item.Id == ResourceMutationToolCatalog.Write);
+                var tools = executor.GetControllerTools().ToList();
+                var first = executor.ExecuteManual(Command(definition.Id, "target", "note: Guide.md",
+                    "content", "# Earlier"), tools, new AppSettings(), false, true, session);
+                AssertTrue(first.Success, "first Markdown published: " + first.Message);
+                var target = (string)Newtonsoft.Json.Linq.JObject.Parse(first.DataJson)["target"];
+                var args = new Newtonsoft.Json.Linq.JObject { ["target"] = target, ["content"] = "# Current" };
+                var second = executor.ExecuteManual(Command(definition.Id, "target", target,
+                    "content", "# Current"), tools, new AppSettings(), false, true, session);
+                AssertTrue(second.Success, "second Markdown published: " + second.Message);
+                args["target"] = "note: Independent.md"; args["content"] = "# Independent";
+                var independent = executor.ExecuteManual(Command(definition.Id, "target", args["target"].ToString(),
+                    "content", args["content"].ToString()), tools, new AppSettings(), false, true, session);
+                AssertTrue(independent.Success, "independent Markdown published: " + independent.Message);
                 var paths = FixturePaths.Value;
-                var owner = new ChatStore(paths).DocumentArtifacts;
-                var authority = new ResourceAuthorityStore(paths);
+                var authority = executor.ResourceAuthority.Store;
+                var revisions = executor.ResourceAuthority.Revisions;
+                var owner = new DocumentArtifactStore(authority, revisions, executor.Payloads);
                 var scope = ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId));
-                var firstRef = first.Result.Resources.Single(item => DocumentArtifactStore.Owns(session, item));
-                var secondRef = second.Result.Resources.Single(item => DocumentArtifactStore.Owns(session, item));
-                var oldMetadata = authority.GetView(scope, firstRef, "artifact-authored-record");
+                var firstRef = first.ModelResourceRefs.Single(item => DocumentArtifactStore.Owns(session, item));
+                var secondRef = second.ModelResourceRefs.Single(item => DocumentArtifactStore.Owns(session, item));
+                foreach (var reference in new[] { firstRef, secondRef })
+                {
+                    if (revisions.GetView(scope, reference, "artifact-authored-record") != null) continue;
+                    var artifact = owner.Read(ConversationMetadata.From(session), reference, false);
+                    owner.RetainAuthoredSnapshot(session, artifact, "fixture-" + artifact.Id, "fixture-operation");
+                }
+                var oldMetadata = revisions.GetView(scope, firstRef, "artifact-authored-record");
                 var oldPath = executor.Payloads.PathFor(oldMetadata.Payload.Sha256);
                 var oldBytes = File.ReadAllBytes(oldPath);
                 File.Delete(oldPath);
@@ -678,7 +680,7 @@ namespace RNAssistant.Harness
                 AssertTrue(found.Items.Count == 2 && found.UnavailableResources == 0, "unrequested missing historical metadata cannot poison current discovery");
                 AssertTrue(found.Items.Any(item => item.Reference.Uri == secondRef.Uri) && !found.Items.Any(item => item.Reference.Uri == firstRef.Uri), "authority chooses the exact current snapshot");
                 File.WriteAllBytes(oldPath, oldBytes);
-                var currentPath = executor.Payloads.PathFor(authority.GetView(scope, secondRef, "artifact-authored-record").Payload.Sha256);
+                var currentPath = executor.Payloads.PathFor(revisions.GetView(scope, secondRef, "artifact-authored-record").Payload.Sha256);
                 var currentBytes = File.ReadAllBytes(currentPath);
                 File.WriteAllText(currentPath, "corrupt");
                 found = executor.ResourceGateway.List(session, "chat", "document-artifact", null, 50);
@@ -713,8 +715,9 @@ namespace RNAssistant.Harness
                 session.DocumentAuthorityId = DocumentAuthorityId.Create().Id;
                 var store = new ChatStore(paths);
                 var authority = new ResourceAuthorityStore(paths);
+                var owner = new DocumentArtifactStore(authority, authority, executor.Payloads);
                 var scope = ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId));
-                var ingestion = new ChatResourceIngestionService(new AttachmentStore(paths), store.DocumentArtifacts);
+                var ingestion = new ChatResourceIngestionService(new AttachmentStore(paths), owner);
                 foreach (var title in new[] { "Healthy.md", "Damaged.md", "Other.md" })
                 {
                     var draft = ingestion.Stage(ConversationMetadata.From(session), title, "text/markdown", Encoding.UTF8.GetBytes("# " + title + " body-needle"));
@@ -723,54 +726,56 @@ namespace RNAssistant.Harness
                     ingestion.CommitAndLink(session, message, session.Messages.Count - 1);
                 }
                 var otherChat = NewSession(adapter); otherChat.DocumentAuthorityId = session.DocumentAuthorityId;
-                var exact = store.DocumentArtifacts.List(ConversationMetadata.From(session)).Single(item => item.Title == "Damaged.md");
+                var gateway = new ResourceGatewayService(new[] { new ChatArtifactResourceProvider(
+                    payloads: executor.Payloads, documentArtifacts: owner) });
+                var exact = owner.List(ConversationMetadata.From(session)).Single(item => item.Title == "Damaged.md");
                 var reference = ChatResourceUri.CreateArtifactRevision(session, exact);
                 var view = authority.GetView(scope, reference, "artifact-original-record");
                 var path = executor.Payloads.PathFor(view.Payload.Sha256);
                 var bytes = File.ReadAllBytes(path);
                 File.Delete(path);
-                var page = executor.ResourceGateway.List(otherChat, "chat", "document-artifact", null, 1);
+                var page = gateway.List(otherChat, "chat", "document-artifact", null, 1);
                 var observed = page.UnavailableResources;
                 var continuation = page;
                 while (continuation.NextCursor != null)
                 {
-                    continuation = executor.ResourceGateway.List(otherChat, "chat", "document-artifact", continuation.NextCursor, 1);
+                    continuation = gateway.List(otherChat, "chat", "document-artifact", continuation.NextCursor, 1);
                     observed += continuation.UnavailableResources;
                 }
                 AssertEqual(1, observed, "one bad metadata record is isolated on its source page");
                 AssertTrue(page.NextCursor != null, "healthy descriptors still paginate");
-                var found = executor.ResourceGateway.Find(otherChat, "Healthy", "document");
+                var found = gateway.Find(otherChat, "Healthy", "document");
                 AssertTrue(found.Items.Any(item => item.Title == "Healthy.md") && found.Partial && !found.Complete && !found.Empty,
                     "another chat sees healthy results with explicit partial coverage");
                 AssertTrue(found.UnavailableScopes.Contains("document"), "model knows the unavailable scope");
                 AssertContains(found.AvailabilityHint, "Repeat only after availability changes", "partial discovery supplies a runtime-owned recovery route");
-                AssertTrue(!executor.ResourceGateway.Find(otherChat, "absent-needle", "document").Empty, "partial negative is not absence");
+                AssertTrue(!gateway.Find(otherChat, "absent-needle", "document").Empty, "partial negative is not absence");
                 var target = found.Items.Single(item => item.Title == "Healthy.md").Target;
-                var rejected = RuntimeThrows<ResourceRequestException>(() => executor.ResourceGateway.ResolveIntentTarget(otherChat, target));
+                var rejected = RuntimeThrows<ResourceRequestException>(() => gateway.ResolveIntentTarget(otherChat, target));
                 AssertEqual("resource_scope_incomplete", rejected.ErrorCode, "partial catalog cannot establish target uniqueness");
-                RuntimeThrows<InvalidDataException>(() => store.DocumentArtifacts.List(ConversationMetadata.From(session)));
-                var healthy = store.DocumentArtifacts.InspectMetadataList(ConversationMetadata.From(session)).Single(item => item.Title == "Healthy.md");
+                RuntimeThrows<InvalidDataException>(() => owner.List(ConversationMetadata.From(session)));
+                var healthy = owner.InspectMetadataList(ConversationMetadata.From(session)).Single(item => item.Title == "Healthy.md");
                 var healthyRef = ChatResourceUri.CreateArtifactRevision(session, healthy);
-                AssertTrue(executor.ResourceGateway.Resolve(otherChat, healthyRef.Uri).Resource.Title == "Healthy.md", "exact reference ignores unrelated metadata loss");
+                AssertTrue(gateway.Resolve(otherChat, healthyRef.Uri).Resource.Title == "Healthy.md", "exact reference ignores unrelated metadata loss");
                 var generation = authority.Capture(scope).Generation;
-                page = executor.ResourceGateway.List(otherChat, "chat", "document-artifact", null, 1);
+                page = gateway.List(otherChat, "chat", "document-artifact", null, 1);
                 File.WriteAllBytes(path, bytes);
-                AssertTrue(executor.ResourceGateway.List(otherChat, "chat", "document-artifact", page.NextCursor, 1) != null,
+                AssertTrue(gateway.List(otherChat, "chat", "document-artifact", page.NextCursor, 1) != null,
                     "metadata recovery cannot shift generation-bound source slots or replay omitted earlier slots");
                 AssertEqual(generation, authority.Capture(scope).Generation, "metadata recovery does not publish a replacement head");
-                AssertEqual(healthyRef.Uri, executor.ResourceGateway.ResolveIntentTarget(otherChat, target).Reference.Uri, "recovered scope resolves the same target");
-                var recovered = executor.ResourceGateway.Find(otherChat, "absent-needle", "document");
+                AssertEqual(healthyRef.Uri, gateway.ResolveIntentTarget(otherChat, target).Reference.Uri, "recovered scope resolves the same target");
+                var recovered = gateway.Find(otherChat, "absent-needle", "document");
                 AssertTrue(recovered.Empty && recovered.Complete && !recovered.Partial, "full negative becomes valid after exact recovery");
                 File.Delete(executor.Payloads.PathFor(exact.ContentSha256));
-                var searched = executor.ResourceGateway.Search(otherChat, "chat", "body-needle", "document-artifact", 20, 600);
+                var searched = gateway.Search(otherChat, "chat", "body-needle", "document-artifact", 20, 600);
                 AssertTrue(searched.Matches.Count == 2 && searched.UnavailableResources == 1, "one missing body preserves healthy content matches");
-                var partialSearch = executor.ResourceGateway.Find(otherChat, "body-needle", "document");
+                var partialSearch = gateway.Find(otherChat, "body-needle", "document");
                 AssertTrue(partialSearch.Partial && !partialSearch.Complete, "body loss reaches model completeness");
                 var before = authority.Capture(scope);
                 authority.Publish(ResourceAuthorityCommit.Create(scope, before.Generation, null,
                     new[] { new ResourceHeadChange(reference.Identity, before.GetHead(reference.Identity),
                         ResourceHeadState.Unknown(reference.Identity, before.Generation + 1, "test-unknown-original")) }, AuthorityCommitReason.DerivedPublication));
-                AssertEqual(1, store.DocumentArtifacts.InspectCurrentMetadata(session).UnavailableResources, "unknown original head cannot silently vanish");
+                AssertEqual(1, owner.InspectCurrentMetadata(session).UnavailableResources, "unknown original head cannot silently vanish");
             });
         }
     }

@@ -653,9 +653,6 @@ namespace RNAssistant.Harness
                 typeof(RNAssistant.Office.Contracts.SkillLibraryMutationBatch)
                     .GetProperty("Mutations").PropertyType ==
                     typeof(List<RNAssistant.Office.Contracts.SkillCoreMutationPayload>) &&
-                typeof(RNAssistant.Office.Contracts.InitResponse)
-                    .GetProperty("Skills").PropertyType ==
-                    typeof(RNAssistant.Office.Contracts.SkillLibraryResponse) &&
                 typeof(RNAssistant.Office.Contracts.SendChatResponse)
                     .GetProperty("Skills").PropertyType ==
                     typeof(RNAssistant.Office.Contracts.SkillLibraryResponse),
@@ -722,9 +719,6 @@ namespace RNAssistant.Harness
                 typeof(RNAssistant.Office.Contracts.ToolLibraryMutationBatch)
                     .GetProperty("Mutations").PropertyType ==
                     typeof(List<RNAssistant.Office.Contracts.ToolCoreMutationPayload>) &&
-                typeof(RNAssistant.Office.Contracts.InitResponse)
-                    .GetProperty("Tools").PropertyType ==
-                    typeof(RNAssistant.Office.Contracts.ToolLibraryResponse) &&
                 typeof(RNAssistant.Office.Contracts.SendChatResponse)
                     .GetProperty("Tools").PropertyType ==
                     typeof(RNAssistant.Office.Contracts.ToolLibraryResponse) &&

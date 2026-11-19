@@ -26,7 +26,7 @@ namespace RNAssistant.Harness
             var executor = new OfficeToolExecutor(FakeOfficeAdapter.ForHost(source.Host), new VbaJournalStore(paths),
                 new SkillStore(paths), new ToolStore(paths), () => new AppSettings(), paths: paths,
                 resourceAuthorityStore: resources, resourceMutationJournal: resources, persistResourceFacts: store.Commit);
-            var copies = ChatCloneService.PrepareForkResources(source, child, store.LoadArtifactBody,
+            var copies = ChatCloneService.PrepareForkResources(source, child, ((IConversationArtifactBodyReader)store).LoadArtifactBody,
                 new ResourceForkService(executor.ResourceAuthority, executor.Payloads));
             executor.MutateChatResources(child, new ChatResourceMutationIntent(ChatResourceMutationKind.Fork,
                 child.ForkedThroughMessageId, count - 1, source: source, fork: copies), () => child);
@@ -101,7 +101,7 @@ namespace RNAssistant.Harness
 
                 var durableSource = store.Load(source.Id);
                 var pending = PrepareTextFork(store, durableSource, 2);
-                ChatCloneService.PrepareForkResources(durableSource, pending, store.LoadArtifactBody,
+                ChatCloneService.PrepareForkResources(durableSource, pending, ((IConversationArtifactBodyReader)store).LoadArtifactBody,
                     new ResourceForkService(new ResourceAuthorityService(resources, resources, resources, blobs), blobs));
                 var command = new ConversationCommit();
                 journal.Journal.Fault = point => { if (point == "after_flush") throw new IOException("fork acknowledgement lost"); };

@@ -17,6 +17,7 @@ namespace RNAssistant.Core.ModelProtocol
                 throw new System.ArgumentException("V8 schema requires a complete local sequential-batch context.", nameof(context));
             if (callableTools == null) throw new System.ArgumentNullException(nameof(callableTools));
             var batches = new JArray();
+            var agentBatches = new JArray();
             var singleCalls = new JArray();
             foreach (var tool in callableTools.Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
                 .GroupBy(item => item.Id, System.StringComparer.Ordinal).Select(group => group.First()))
@@ -24,7 +25,8 @@ namespace RNAssistant.Core.ModelProtocol
                 JObject parameters;
                 string error;
                 if (!ToolSchemaSupport.TryParse(tool, out parameters, out error)) continue;
-                var options = !context.AllowsSequentialBatch(tool) ? singleCalls : batches;
+                var options = !context.AllowsSequentialBatch(tool) ? singleCalls :
+                    tool.Policy?.IndependentAgentMessage == true ? agentBatches : batches;
                 options.Add(ClosedObject(new JObject
                 {
                     ["name"] = new JObject { ["type"] = "string", ["const"] = tool.Id },
@@ -34,11 +36,12 @@ namespace RNAssistant.Core.ModelProtocol
             var branches = new JArray();
             var definitions = new JObject();
             // Each argument contract occurs once; only locally authorized calls can share a batch.
-            if (batches.Count > 0 || singleCalls.Count > 0)
+            if (batches.Count > 0 || agentBatches.Count > 0 || singleCalls.Count > 0)
             {
                 var arrays = new JArray();
                 if (singleCalls.Count > 0) arrays.Add(CallArray(singleCalls, 1));
                 if (batches.Count > 0) arrays.Add(CallArray(batches, MaximumToolCalls));
+                if (agentBatches.Count > 0) arrays.Add(CallArray(agentBatches, MaximumToolCalls));
                 var calls = arrays.Count == 1 ? (JObject)arrays[0] : new JObject { ["anyOf"] = arrays };
                 calls["description"] = ModelProtocolWire.ExecuteGuidance;
                 definitions["calls"] = calls;

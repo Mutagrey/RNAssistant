@@ -54,7 +54,7 @@ namespace RNAssistant.Harness
                 IConversationStore store = router;
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths),
                     new ToolStore(paths), () => settings, value => settings = value, paths,
-                    loadArtifactBody: store.LoadArtifactBody, resourceAuthorityStore: resources,
+                    loadArtifactBody: ((IConversationArtifactBodyReader)store).LoadArtifactBody, resourceAuthorityStore: resources,
                     persistResourceFacts: store.Commit, resourceMutationJournal: resources,
                     resourceOrigin: router.MutationOrigin);
                 var session = sessions.CreatePersistentChat("Native tool integration");

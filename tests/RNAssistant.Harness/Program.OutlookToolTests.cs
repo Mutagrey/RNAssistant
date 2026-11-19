@@ -459,8 +459,12 @@ namespace RNAssistant.Harness
                     Cursor = first.NextCursor, MaxRows = 1 }).Result;
                 AssertTrue(next.Complete && next.Table.Rows.Count == 1, "old collection continuation retains removed member");
                 AssertEqual(count, adapter.OutlookCollectionCaptureCount, "old records never fall forward to live folder");
+                AssertTrue(WriteSharedHtmlFixture(executor, session, "<main>mail collection</main>").Success,
+                    "explicit HTML workspace is published for the binding");
+                var workspace = HtmlWorkspaceTargets.Workspace(new ChatStore(FixturePaths.Value).DocumentArtifacts,
+                    session, session.Artifacts.Last(item => item.Kind == ChatArtifactKinds.HtmlWorkspace));
                 var bound = executor.ExecuteManual(Command(HtmlWorkspaceToolCatalog.BindDataToolId,
-                    "name", "mail_collection", "target", candidate.Target, "view", "table"),
+                    "workspace", workspace, "name", "mail_collection", "target", candidate.Target, "view", "table"),
                     tools, new AppSettings(), false, false, session);
                 AssertTrue(bound.Success, "HTML binds the same resource records: " + bound.Message);
                 string error;

@@ -32,7 +32,7 @@ namespace RNAssistant.Harness
                 source = store.Load(source.Id);
 
                 var forged = PrepareTextFork(store, source, 2);
-                ChatCloneService.PrepareForkResources(source, forged, store.LoadArtifactBody,
+                ChatCloneService.PrepareForkResources(source, forged, ((IConversationArtifactBodyReader)store).LoadArtifactBody,
                     new ResourceForkService(new ResourceAuthorityService(resources, resources, resources, blobs), blobs));
                 forged.Artifacts.Add(source.Artifacts.Single(item => item.Id != originalId).CopyMetadata());
                 RuntimeThrows<InvalidDataException>(() => store.Commit(forged, new ConversationCommit()));

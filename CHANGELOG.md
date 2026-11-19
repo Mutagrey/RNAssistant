@@ -11,6 +11,15 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.6.19-dev
+
+- Автоматическое название workspace-чата больше не теряется, когда `TitleChanged`
+  приходит вместе с завершением run: заголовок обновляется после terminal-события,
+  а не откладывается как progress до следующего шага.
+- v8 parser и strict schema больше не принимают `agents.send` с чужим policy или в
+  одном batch с другим инструментом: независимые сообщения допускаются только
+  отдельным batch с exact independent-message authority.
+
 ### 17.6.18-dev
 
 - Материалы показывают первый кадр не более чем за 50 строк и раскрывают уже
@@ -32,6 +41,8 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
   continuation сохраняется только у последнего поиска текущего run. Уточнены
   диагностика admission/CAS и ошибки точного поиска; прямой ToolRuntime использует
   ту же узкую нормализацию singleton-массивов, что и v8 parser.
+- Локальная HTML-область снова показывает одну актуальную голову каждого workspace
+  при resource discovery, не выдавая исторические ревизии за дубли текущих файлов.
 
 ### 17.6.16-dev
 

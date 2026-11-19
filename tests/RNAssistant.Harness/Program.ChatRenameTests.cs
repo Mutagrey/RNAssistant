@@ -100,7 +100,10 @@ namespace RNAssistant.Harness
                     var server = Task.Run(async () => {
                         for (var i = 0; i < 2; i++)
                         {
-                            var context = await listener.GetContextAsync().ConfigureAwait(false);
+                            var contextTask = listener.GetContextAsync();
+                            if (await Task.WhenAny(contextTask, Task.Delay(5000)).ConfigureAwait(false) != contextTask)
+                                throw new TimeoutException("Workspace rename request did not arrive within five seconds.");
+                            var context = await contextTask.ConfigureAwait(false);
                             string request;
                             using (var reader = new StreamReader(context.Request.InputStream))
                                 request = await reader.ReadToEndAsync().ConfigureAwait(false);
@@ -108,7 +111,8 @@ namespace RNAssistant.Harness
                             var content = i == 0
                                 ? ModelProtocolWire.WriteAcceptedCall("Name the current task", null,
                                     new ConversationToolCall { Name = "chat.rename", Arguments = new JObject { ["title"] = "  План анализа  " } })
-                                : ScriptedVerifiedFinish(store.Load(session.Id), "Title updated", "Готово.", "Chat renamed", "chat.rename");
+                                : ScriptedVerifiedFinish(service.GetSession(workspace, session.Id),
+                                    "Title updated", "Готово.", "Chat renamed", "chat.rename");
                             var response = new JObject { ["choices"] = new JArray(new JObject {
                                 ["message"] = new JObject { ["content"] = content } }) }.ToString();
                             var bytes = Encoding.UTF8.GetBytes(response);
@@ -128,7 +132,7 @@ namespace RNAssistant.Harness
                         server.GetAwaiter().GetResult();
                         var state = service.ReadState(workspace, session.Id);
                         AssertEqual("План анализа", state.Title, "workspace projection receives the trimmed title");
-                        AssertTrue(!state.TitleGenerationPending && store.Load(session.Id).TitleAssignedByAgent,
+                        AssertTrue(!state.TitleGenerationPending && service.GetSession(workspace, session.Id).TitleAssignedByAgent,
                             "smart title generation is suppressed after a durable agent rename");
                         AssertEqual(state.Title, service.ListSessions(workspace).Single().Title, "chat catalog follows the same commit");
                     }

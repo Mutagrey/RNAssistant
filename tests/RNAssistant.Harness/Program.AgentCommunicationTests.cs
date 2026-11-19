@@ -174,7 +174,7 @@ namespace RNAssistant.Harness
                 {
                     var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "send-batch"));
                     var chats = new[] { "Sender", "B", "C", "D" }.Select(title => runtime.CreateSession(workspace, title)).ToArray();
-                    var store = new ChatStore(paths);
+                    var conversations = runtime.ConversationStore;
                     var settings = new AppSettings { BaseUrl = "http://127.0.0.1:" + port, Model = "batch-fixture",
                         AgentResponseMode = format, StreamResponses = false, SmartChatTitles = false,
                         AutoCompressContext = false, AutoConfirmToolActions = false };
@@ -195,7 +195,7 @@ namespace RNAssistant.Harness
                                         calls: chats.Skip(1).Select(chat => new ConversationToolCall { Name = AgentCommunicationToolCatalog.Send,
                                             Arguments = new JObject { ["agent_id"] = AgentChatAddress.IdFor(chat.Id),
                                                 ["text"] = "Question for " + chat.Title } })).ToJson()
-                                    : ScriptedVerifiedFinish(store.Load(chats[0].Id), "Questions queued", "Sent", "Three requests queued",
+                                    : ScriptedVerifiedFinish(conversations.Load(chats[0].Id), "Questions queued", "Sent", "Three requests queued",
                                         AgentCommunicationToolCatalog.Send, AgentCommunicationToolCatalog.Send, AgentCommunicationToolCatalog.Send);
                             }
                             else
@@ -216,9 +216,9 @@ namespace RNAssistant.Harness
                             "Workspace send batch drains: sender=" + senderRequests + " peers=" + peerRequests + " server=" + server.Exception);
                         AssertEqual(2, senderRequests, "one batch and one finish in Workspace " + format);
                         AssertEqual(3, peerRequests, "each recipient starts once");
-                        AssertEqual(RunLifecycle.Completed, store.Load(chats[0].Id).LastRun.KernelState.Summary.Lifecycle, "sender completes");
+                        AssertEqual(RunLifecycle.Completed, conversations.Load(chats[0].Id).LastRun.KernelState.Summary.Lifecycle, "sender completes");
                         foreach (var chat in chats.Skip(1))
-                            AssertEqual(1, store.Load(chat.Id).Messages.Count(m => m.Content == "Question for " + chat.Title), "each peer input persists once");
+                            AssertEqual(1, conversations.Load(chat.Id).Messages.Count(m => m.Content == "Question for " + chat.Title), "each peer input persists once");
                     }
                     finally { listener.Stop(); runtime.CloseAsync().Wait(5000); try { server.Wait(1000); } catch (AggregateException) { } }
                 }
@@ -421,10 +421,10 @@ namespace RNAssistant.Harness
                                         Task.Run(async () => { await Task.Delay(50).ConfigureAwait(false); await runtime.CloseAsync().ConfigureAwait(false); });
                                     }).GetAwaiter().GetResult();
                                 AssertTrue(initial.Summary.Lifecycle == RunLifecycle.Waiting,
-                                    "graceful shutdown retains the unresolved wait: summary=" + JsonConvert.SerializeObject(initial.Summary) + " results=" + string.Join(";", new ChatStore(paths).Load(chatId).Messages.Where(m => m.ExecutionProgress != null).Select(m => m.Content)));
+                                    "graceful shutdown retains the unresolved wait: summary=" + JsonConvert.SerializeObject(initial.Summary) + " results=" + string.Join(";", runtime.ConversationStore.Load(chatId).Messages.Where(m => m.ExecutionProgress != null).Select(m => m.Content)));
                             }
                         }
-                        var store = new ChatStore(paths); var saved = store.Load(chatId); var runId = saved.LastRun.RunId;
+                        var store = projects.Conversations.ConversationStore; var saved = store.Load(chatId); var runId = saved.LastRun.RunId;
                         AssertTrue(ConversationInboxService.HasPendingWait(saved), "workspace saves unresolved observation");
                         var callId = saved.LastRun.KernelState.Summary.PendingWait.Context.Call.Id;
                         using (var resumed = new WorkspaceConversationService(paths))
@@ -437,7 +437,7 @@ namespace RNAssistant.Harness
                             AssertTrue(resumed.RunsDrained.Wait(8000), "explicit queue resume completes without queued input");
                             var finished = store.Load(chatId);
                             AssertEqual(runId, finished.LastRun.RunId, "workspace keeps original run id");
-                            AssertEqual(RunLifecycle.Completed, finished.LastRun.KernelState.Summary.Lifecycle, "workspace continuation completed: " + new ConversationInputJournal(EventStore(store)).Read(finished, false).LastOrDefault()?.Change.PauseReason);
+                            AssertEqual(RunLifecycle.Completed, finished.LastRun.KernelState.Summary.Lifecycle, "workspace continuation completed: " + new ConversationInputJournal((IEventStore)store).Read(finished, false).LastOrDefault()?.Change.PauseReason);
                             AssertEqual(1, finished.LastRun.KernelState.Summary.ToolStepsUsed, "restored wait charged once");
                             var result = finished.Messages.Single(m => m.Activity == null && m.ExecutionProgress != null);
                             AssertTrue(result.ExecutionProgress.WaitTimedOut, "old deadline resolves as timeout");
@@ -879,8 +879,8 @@ namespace RNAssistant.Harness
                         RootPath = Path.Combine(paths.Root, "agents") }).SelectedWorkspaceId;
                     var a = application.CreateProjectChat(new ProjectChatRequest { WorkspaceId = workspaceId });
                     var b = application.CreateProjectChat(new ProjectChatRequest { WorkspaceId = workspaceId });
-                    var store = new ChatStore(paths);
-                    var bSession = store.Load(b.SessionId); bSession.Model = "fixture-B"; store.Save(bSession);
+                    var store = application.Conversations.ConversationStore;
+                    var bSession = store.Load(b.SessionId); store.SetModel(bSession, "fixture-B");
                     var bridgeToken = BridgeToken(bridge);
                     listener.Prefixes.Add("http://127.0.0.1:" + port + "/"); listener.Start();
                     var aRequests = 0; var bRequests = 0;

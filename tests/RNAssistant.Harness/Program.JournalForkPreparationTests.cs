@@ -44,7 +44,7 @@ namespace RNAssistant.Harness
                 fork.Messages = ChatCloneService.CloneMessages(source.Messages);
                 var authority = new ResourceAuthorityService(resources, resources, resources, blobs);
                 ChatCloneService.PrepareForkResources(source, fork, (chat, id) => {
-                    reads.Add(id); return store.LoadArtifactBody(chat, id);
+                    reads.Add(id); return ((IConversationArtifactBodyReader)store).LoadArtifactBody(chat, id);
                 }, new ResourceForkService(authority, blobs));
                 return fork;
             };
@@ -73,13 +73,13 @@ namespace RNAssistant.Harness
             finally
             {
                 File.WriteAllBytes(oldPath, oldBytes); File.WriteAllBytes(selectedPath, selectedBytes);
-                AssertTrue(store.LoadArtifactBody(source, selectedId), "fixture restores the exact selected body");
+                AssertTrue(((IConversationArtifactBodyReader)store).LoadArtifactBody(source, selectedId), "fixture restores the exact selected body");
             }
             var revision = source.Revision;
             try
             {
                 source.Revision--;
-                RuntimeThrows<ChatConcurrencyException>(() => store.LoadArtifactBody(source, selectedId));
+                RuntimeThrows<ChatConcurrencyException>(() => ((IConversationArtifactBodyReader)store).LoadArtifactBody(source, selectedId));
             }
             finally { source.Revision = revision; }
         }

@@ -42,7 +42,7 @@ namespace RNAssistant.Core.Storage
     /// persisted as a mutable snapshot. Each Save appends one atomic commit containing typed state
     /// operations; model traffic is appended to the same stream as non-projecting trace events.
     /// </summary>
-    public sealed partial class ChatStore
+    public sealed partial class ChatStore : IConversationArtifactBodyReader
     {
         // Test-only fault injection at durable append boundaries; never a replay hook.
         internal Action<string> AppendFaultPoint { get; set; }

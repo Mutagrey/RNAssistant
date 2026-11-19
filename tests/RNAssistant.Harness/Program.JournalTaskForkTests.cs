@@ -81,7 +81,7 @@ namespace RNAssistant.Harness
                     var message = new ChatMessage { Role = "user", Content = "Retain this task", ResourceRefs = new List<ResourceRef> { ChatResourceUri.CreateArtifactRevision(source, task) } };
                     source.Messages.Add(message); store.Commit(source, ConversationCommit.UserInput(message));
                     var child = PrepareTextFork(store, source, 1);
-                    ChatCloneService.PrepareForkResources(source, child, store.LoadArtifactBody,
+                    ChatCloneService.PrepareForkResources(source, child, ((IConversationArtifactBodyReader)store).LoadArtifactBody,
                         new ResourceForkService(new ResourceAuthorityService(resources, resources, resources, blobs), blobs));
                     var observer = new WorkspaceTaskListObserver(paths, store, blobs, child, resources, resources);
                     journal.Journal.Fault = point => {

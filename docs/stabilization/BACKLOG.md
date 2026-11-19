@@ -32,6 +32,44 @@ creates its explicit HTML workspace before exercising optional schema admission 
 checks the canonical published artifact. R61 was regenerated from the effective host
 catalog; every runtime revision and plumbing-shaped property decision is reviewed.
 
+## Full Harness sweep — triage open 2026-11-19
+
+Owner: Harness fixtures and the corresponding product contracts. The first full
+host-neutral sweep completed as 1296 passed / 222 failed / 1518 total. This is not a
+green baseline. After that sweep, `workspace files:` 20/20, `workspace snapshots:` 3/3
+and `agent communication:` 28/28 pass; a new full total is still required. The fixed
+root-cause slice also covers the five supplied patches, the focused regression filters,
+`resources:` 54/54, `plugins:` 22/22, `architecture:` 7/7 and `journal fork:` 11/11.
+The remaining failures must be triaged by owner; do not relax publication, revision,
+evidence or ownership guards to make stale fixtures pass.
+
+The Workspace file/snapshot fixtures were migrated from the retired
+`ResourceAuthorityStore`/`ResourceMutationJournal` ownership to the shared
+`ResourceJournal`, and old CAS-orphan fixtures now age the synthetic orphan past the
+crash-leftover grace. These are fixture corrections, not relaxed product checks. Agent
+workspace fixtures now read the runtime's conversation store; the parser and strict
+schema enforce independent-message batching in the product.
+
+Known environment and packaging clusters: legacy recovery/import/backup fixtures fail
+on the default `/var` temporary root with the reparse-point guard (rerun under
+`TMPDIR=/private/tmp` per the Harness README), and three `tabular native:` cases report
+the Data Templates package missing or not matching pinned files. Other clusters include
+Workspace file/snapshot recovery, agent Workspace model-wire ownership, VBA/HTML legacy
+ids and publication semantics, and bridge fixtures; each needs a separate fixture or
+product diagnosis. The full sweep is therefore open until a clean rerun is recorded.
+
+## Resource discovery and text-index fixtures — open 2026-11-19
+
+Owner: `ChatArtifactResourceProvider`, `DocumentArtifactStore`, and the related Harness
+fixtures. The focused `resources:` category still has failures concentrated in three
+legacy fixture patterns: document-owned artifacts are created directly without the
+required published metadata/text-index views; historical HTML fixtures expect the old
+implicit workspace target; and the live VBA rename fixture still invokes the retired
+private `vba.module.rename` path. Healthy exact reads must not be weakened to make
+these pass. Keep the `resource_scope_incomplete`, publication-barrier and CAS failures
+strict while each fixture is migrated to the current explicit-workspace and published
+view contracts.
+
 ## JS tool fixture uses an invalid new id — fixed 2026-11-19
 
 The fixture now uses the valid new id `user.count.rows`; the underscore rule remains

@@ -218,7 +218,10 @@ namespace RNAssistant.Harness
                     var id = projects.CreateProjectWorkspace(new RNAssistant.Application.Contracts.ProjectConnectionRequest {
                         RootPath = Path.Combine(paths.Root, "correlated-wire") }).SelectedWorkspaceId;
                     var workspace = new WorkspaceStore(paths).OpenConnected(id);
-                    var root = runtime.CreateSession(workspace, "Parent"); var store = new ChatStore(paths);
+                    var root = runtime.CreateSession(workspace, "Parent");
+                    var store = runtime.ConversationStore;
+                    Func<ChatSession> findChild = () => store.ListHeaders(false).Select(header => store.Load(header.Id))
+                        .SingleOrDefault(item => item.AgentCreation != null);
                     var settings = new AppSettings { BaseUrl = "http://127.0.0.1:" + port, Model = "correlation-model",
                         AgentResponseMode = "json_object", StreamResponses = false, SmartChatTitles = false,
                         AutoCompressContext = false, MaxAgentIterations = 8 };
@@ -235,7 +238,7 @@ namespace RNAssistant.Harness
                                 "real Workspace request keeps peer guidance once in runtime context");
                             foreach (var peer in wire.Where(message => ((string)message["content"] ?? "").StartsWith("[Message from another agent")))
                                 AssertTrue(!((string)peer["content"]).Contains("scope=") && !((string)peer["content"]).Contains("Use agents.wait"), "real peer header stays compact");
-                            var parent = store.Load(root.Id); var child = store.List().SingleOrDefault(item => item.AgentCreation != null);
+                            var parent = store.Load(root.Id); var child = findChild();
                             string response;
                             if (body.Contains("CORRELATED_PARENT"))
                             {
@@ -248,9 +251,7 @@ namespace RNAssistant.Harness
                                     message.ExecutionProgress?.Outcome == ToolExecutionOutcome.Ok &&
                                     (message.Content ?? "").Contains(assignment ? "ResolutionsReady" : "RepliesReady")))
                                 {
-                                    var sent = new ChatEventStoreAdapter(store).Read(ConversationMetadata.From(parent), SessionEventReadMode.RequireCompleteAgentCommunicationJournal)
-                                        .Where(item => item.Type == SessionEventTypes.AgentCommunicationChanged)
-                                        .Select(item => item.Data.ToObject<AgentCommunicationEvent>()).Single(item => item.State == AgentDeliveryState.Prepared);
+                                    var sent = child.Messages.Single(message => message.AgentCommunication?.Sender != null).AgentCommunication;
                                     response = ModelProtocolWire.WriteAcceptedCall("Wait for the exact response", null, new ConversationToolCall {
                                         Name = AgentCommunicationToolCatalog.Wait, Arguments = new JObject { ["requests"] = new JArray(sent.MessageId),
                                             ["timeout_seconds"] = 10, ["until"] = assignment ? "completion" : "reply" } });

@@ -71,7 +71,7 @@ namespace RNAssistant.Harness
                                 ? new ConversationResponse(ConversationResponse.ExecuteAction, "Create the requested file.",
                                     "Создаю файл.", calls: new[] { new ConversationToolCall { Name = "core.write",
                                         Arguments = new JObject { ["target"] = "once.txt", ["content"] = "ONCE" } } }).ToJson()
-                                : ScriptedVerifiedFinish(new ChatStore(paths).Load(chat.SessionId),
+                                : ScriptedVerifiedFinish(service.Conversations.GetSession(workspace, chat.SessionId),
                                     "Report the verified write.", "Файл создан.", "File created.", "core.write");
                             var bytes = Encoding.UTF8.GetBytes(new JObject { ["choices"] = new JArray(new JObject {
                                 ["message"] = new JObject { ["content"] = content } }) }.ToString(Formatting.None));
@@ -176,7 +176,7 @@ namespace RNAssistant.Harness
                         }
                         release.Set();
                         AssertTrue(server.Wait(5000) && service.Conversations.RunsDrained.Wait(5000), "all owned work drains");
-                        var durable = new ChatStore(paths).Load(chat.SessionId);
+                        var durable = service.Conversations.GetSession(workspace, chat.SessionId);
                         AssertEqual(ending == "complete" ? RunLifecycle.Completed : RunLifecycle.Cancelled,
                             durable.LastRun.KernelState.Summary.Lifecycle, "kernel records the actual terminal lifecycle: " + ending);
                         AssertEqual(ending == "deny" ? "confirmation_denied" : ending == "complete" ? "model_finish" : "cancelled",
@@ -198,7 +198,7 @@ namespace RNAssistant.Harness
                                 try { reopened.ControlProjectChatAsync(request, false, settings, () => "", CancellationToken.None).GetAwaiter().GetResult(); }
                                 catch (InvalidOperationException) { refused = true; }
                                 reopened.Conversations.RunsDrained.GetAwaiter().GetResult();
-                                AssertTrue(refused && new ChatStore(paths).Load(chat.SessionId).Revision == revision,
+                                AssertTrue(refused && reopened.Conversations.GetSession(workspace, chat.SessionId).Revision == revision,
                                     "retry after restart cannot consume an old confirmation or replay its effect");
                             }
                             var fixture = Environment.GetEnvironmentVariable("RNA_WORKSPACE_APPROVAL_FIXTURE");

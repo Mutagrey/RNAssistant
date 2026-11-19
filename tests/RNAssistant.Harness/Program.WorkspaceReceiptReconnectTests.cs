@@ -28,8 +28,8 @@ namespace RNAssistant.Harness
                     var other = service.CreateProjectChat(new ProjectChatRequest { WorkspaceId = workspaceId });
                     var workspace = new WorkspaceStore(paths).OpenConnected(workspaceId);
                     var session = service.Conversations.GetSession(workspace, chat.SessionId);
-                    var store = new ChatStore(paths);
-                    var journal = new ConversationInputJournal(new ChatEventStoreAdapter(store));
+                    var conversations = service.Conversations.ConversationStore;
+                    var journal = new ConversationInputJournal((IEventStore)conversations);
                     var input = new ConversationInput { Id = Guid.NewGuid().ToString("N"), OperationId = "lost-reply",
                         AcceptedRunId = Guid.NewGuid().ToString("N"), RequestFingerprint = "fixture-intent",
                         Revision = 1, Text = "Received input", Delivery = InputDelivery.Queue,
@@ -40,7 +40,7 @@ namespace RNAssistant.Harness
                     var accepted = WorkspaceBridgeCall(bridge, BridgeToken(bridge), "getProjectChat", query);
                     AssertTrue((bool)accepted["ok"] && !(bool)accepted["payload"]["inputReceipt"]["DeliveryRecorded"],
                         "admission alone does not acknowledge delivery");
-                    AssertEqual(revision, store.Load(session.Id).Revision, "receipt lookup does not reconcile or run input");
+                    AssertEqual(revision, conversations.Load(session.Id).Revision, "receipt lookup does not reconcile or run input");
                     query.ReceiptRequestId = "not-accepted";
                     var unknown = WorkspaceBridgeCall(bridge, BridgeToken(bridge), "getProjectChat", query);
                     AssertTrue((bool)unknown["ok"] && unknown["payload"]["inputReceipt"] == null, "unknown ID has no invented receipt");
@@ -49,7 +49,7 @@ namespace RNAssistant.Harness
                         "another chat cannot acknowledge the original input");
                     query.SessionId = session.Id;
                     var user = new ChatMessage { Id = input.Id, Role = "user", Content = input.Text, RunId = input.AcceptedRunId };
-                    session.Messages.Add(user); store.Commit(session, ConversationCommit.UserInput(user));
+                    session.Messages.Add(user); conversations.Commit(session, ConversationCommit.UserInput(user));
                     input.Status = ConversationInputStatus.Applied; input.Revision++;
                     journal.Append(session, new ConversationInputEvent { Input = input });
                     revision = session.Revision;
@@ -63,7 +63,7 @@ namespace RNAssistant.Harness
                             "the original accepted identity is preserved");
                         AssertTrue(JToken.DeepEquals(receipt, WorkspaceBridgeCall(newBridge, BridgeToken(newBridge), "getProjectChat", query)["payload"]["inputReceipt"]),
                             "repeat lookup is stable");
-                        AssertEqual(revision, store.Load(session.Id).Revision, "read-only reconnect appends no events and starts no model");
+                        AssertEqual(revision, conversations.Load(session.Id).Revision, "read-only reconnect appends no events and starts no model");
                         query.ReceiptRequestId = new string('x', 129);
                         AssertTrue(!(bool)WorkspaceBridgeCall(newBridge, BridgeToken(newBridge), "getProjectChat", query)["ok"], "query identity is bounded");
                         var fixture = Environment.GetEnvironmentVariable("RNA_WORKSPACE_RECONNECT_FIXTURE");

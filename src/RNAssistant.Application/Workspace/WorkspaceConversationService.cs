@@ -278,8 +278,11 @@ namespace RNAssistant.Runtime
                 .Select(artifact => { var copy = artifact.CopyMetadata(); copy.InlineText = artifact.InlineText; return copy; })
                 .ToList();
             ArtifactWorkingSet.CopySharedForFork(source, fork);
-            TaskListPublication.PrepareFork(source, fork, store.LoadArtifactBody);
-            ContextCompactionRuntime.PrepareFork(source, fork, store.LoadArtifactBody);
+            var artifactBodies = store as IConversationArtifactBodyReader;
+            if (artifactBodies == null)
+                throw new InvalidOperationException("Conversation storage does not provide artifact-body reads.");
+            TaskListPublication.PrepareFork(source, fork, artifactBodies.LoadArtifactBody);
+            ContextCompactionRuntime.PrepareFork(source, fork, artifactBodies.LoadArtifactBody);
             var retainedReferences = new HashSet<string>(fork.Messages
                 .SelectMany(message => message.ResourceModelReferences ?? new List<ModelResourceReference>())
                 .Select(reference => reference.ExactKey), StringComparer.Ordinal);

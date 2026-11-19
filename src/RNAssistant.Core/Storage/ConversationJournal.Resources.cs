@@ -18,7 +18,7 @@ namespace RNAssistant.Core.Storage
             return new DocumentArtifactStore(resources, resources, _bodies);
         }
 
-        bool IConversationStore.LoadArtifactBody(ChatSession session, string artifactId)
+        bool IConversationArtifactBodyReader.LoadArtifactBody(ChatSession session, string artifactId)
         {
             if (session == null || string.IsNullOrWhiteSpace(artifactId)) return false;
             using (RuntimeStorageActivity.Acquire(_paths))

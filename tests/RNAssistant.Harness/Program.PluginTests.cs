@@ -1278,17 +1278,72 @@ namespace RNAssistant.Harness
                     var session = service.Conversations.GetSession(workspace, chat.SessionId);
                     var runId = Guid.NewGuid().ToString("N");
                     var call = new ToolCall("unfinished-write", "files.replace_text", "{\"relativePath\":\"keep.txt\"}");
-                    var policy = new ToolPolicySnapshot(call.Name, "fixture", true, true);
+                    var policy = new ToolPolicySnapshot(call.Name, "fixture",
+                        new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, true, false, new[] { ChatModes.Agent }));
                     var user = new ChatMessage { Role = "user", RunId = runId, Content = "Change the file" };
                     session.Messages.Add(user);
+                    var store = service.Conversations.ConversationStore;
+                    store.Commit(session, ConversationCommit.UserInput(user));
+                    var limits = new AgentRunLimits(10, 10);
                     session.LastRun = new ChatRunRecord { RunId = runId, TurnId = runId, Status = "running",
                         StartedUtc = DateTime.UtcNow, ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion,
+                        ConversationPolicy = ConversationRunPolicy.For(ChatModes.Agent),
                         KernelState = new AgentRunState(new RunSummary(runId, runId, RunLifecycle.Running,
-                            new ToolCounts(readOk: 1), 2, 1, "", null, null), new AgentRunLimits(10, 10),
-                            possibleEffect ? new ToolExecutionContext(call, policy, runId, runId,
-                                "unfinished-step", DateTime.UtcNow, true, 9) : null) };
-                    var store = new ChatStore(paths);
-                    store.Commit(session, ConversationCommit.UserInput(user));
+                            new ToolCounts(), 0, 0, "", null, null), limits) };
+                    Action<ChatSession, AgentRunEvent, ChatMessage[], ChatMessage> persist = (target, fact, appended, activity) =>
+                    {
+                        target.LastRun.KernelState = AgentRunState.Apply(target.LastRun.KernelState, fact);
+                        ConversationRunProjection.Apply(target.LastRun);
+                        target.Messages.AddRange(appended);
+                        new ConversationRunCommit(target, fact, appended, activity).Persist(store.CommitRun, target);
+                    };
+                    persist(session, new AgentRunEvent(AgentRunEventKind.Started, session.LastRun.KernelState.Summary,
+                        limits: limits), new ChatMessage[0], null);
+
+                    var readCall = JournalReadCall("fixture-read", runId, "read-step");
+                    var readSummary = new RunSummary(runId, runId, RunLifecycle.Running, new ToolCounts(), 1, 0, "", null, null);
+                    persist(session, new AgentRunEvent(AgentRunEventKind.ResponseAccepted, readSummary,
+                        response: new AgentResponse(ConversationResponse.ExecuteAction, "Read current source.", "",
+                            new[] { new ToolCall("fixture-read", "core.read", "{\"target\":\"keep.txt\"}") })),
+                        new[] { readCall }, null);
+                    var readContext = new ToolExecutionContext(new ToolCall("fixture-read", "core.read", "{\"target\":\"keep.txt\"}"),
+                        new ToolPolicySnapshot("core.read", "read-v1", new ToolPolicy(ToolEffect.Read, ToolVerification.None,
+                            false, true, new[] { ChatModes.Agent })), runId, runId, "read-step", DateTime.UtcNow, false, 1);
+                    var readActivity = new ChatMessage { Role = "assistant", Content = "Reading", RunId = runId,
+                        ExcludeFromModelContext = true, Activity = new ChatActivity { Kind = "tool", RunId = runId,
+                            ToolCallId = "fixture-read", ToolId = "core.read", StepId = "read-step" } };
+                    persist(session, new AgentRunEvent(AgentRunEventKind.ToolStarted, readSummary, toolContext: readContext),
+                        new[] { readActivity }, readActivity);
+                    var readExecution = new ToolExecutionRecord(readContext, ToolExecutionOutcome.Ok, DateTime.UtcNow,
+                        "Read finished.", result: ToolResult.Ok("Read finished."));
+                    var completedRead = new RunSummary(runId, runId, RunLifecycle.Running,
+                        new ToolCounts(readOk: 1), 1, 1, "", null, null);
+                    readActivity.Content = "Read finished";
+                    readActivity.ExecutionProgress = ToolExecutionProgress.Capture(readExecution);
+                    persist(session, new AgentRunEvent(AgentRunEventKind.ToolCompleted, completedRead, execution: readExecution),
+                        new ChatMessage[0], readActivity);
+
+                    if (possibleEffect)
+                    {
+                        var writeCall = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall {
+                            Id = call.Id, Name = call.Name, Arguments = new Dictionary<string, object> { ["relativePath"] = "keep.txt" } },
+                            "", "Attempt the write.", null, ToolResultRoles.User,
+                            new AcceptedToolCallOrigin("unfinished-step", "unfinished-attempt", 0, 1));
+                        writeCall.RunId = runId;
+                        var writeAccepted = new RunSummary(runId, runId, RunLifecycle.Running,
+                            new ToolCounts(readOk: 1), 1, 1, "", null, null);
+                        persist(session, new AgentRunEvent(AgentRunEventKind.ResponseAccepted, writeAccepted,
+                            response: new AgentResponse(ConversationResponse.ExecuteAction, "Attempt the write.", "",
+                                new[] { call })), new[] { writeCall }, null);
+                        var runningState = new AgentRunState(new RunSummary(runId, runId, RunLifecycle.Running,
+                            new ToolCounts(readOk: 1), 2, 1, "", null, null), limits,
+                            new ToolExecutionContext(call, policy, runId, runId, "unfinished-step", DateTime.UtcNow, false, 9));
+                        var writeActivity = new ChatMessage { Role = "assistant", Content = "Writing", RunId = runId,
+                            ExcludeFromModelContext = true, Activity = new ChatActivity { Kind = "tool", RunId = runId,
+                                ToolCallId = call.Id, ToolId = call.Name, StepId = "unfinished-step" } };
+                        persist(session, new AgentRunEvent(AgentRunEventKind.ToolStarted, runningState.Summary,
+                            toolContext: runningState.InFlightTool), new[] { writeActivity }, writeActivity);
+                    }
                     File.WriteAllText(Path.Combine(root, "keep.txt"), "unchanged");
                     var revision = session.Revision;
                     var leaseDirectory = Path.Combine(paths.WorkspaceDirectory, "run-leases");
@@ -1334,14 +1389,57 @@ namespace RNAssistant.Harness
                             File.WriteAllText(fixture, new JObject { ["owned"] = owned, ["recovered"] = envelope }.ToString(Formatting.Indented));
                         }
                     }
-                    durable.LastRun.Status = "awaitingconfirmation";
-                    durable.LastRun.KernelState = new AgentRunState(new RunSummary(runId, runId, RunLifecycle.AwaitingConfirmation,
-                        new ToolCounts(), 1, 0, "Confirm the edit", null,
-                        new PendingConfirmation("pending-recovery", call, policy, "pending-step", 1)), new AgentRunLimits(10, 10));
-                    store.Commit(durable, new ConversationCommit());
-                    var pending = service.ProjectChat(request);
+                    var pendingChat = service.CreateProjectChat(new ProjectChatRequest { WorkspaceId = workspaceId });
+                    var pendingSession = service.Conversations.GetSession(workspace, pendingChat.SessionId);
+                    var pendingRunId = Guid.NewGuid().ToString("N");
+                    var pendingUser = new ChatMessage { Role = "user", RunId = pendingRunId, Content = "Confirm the edit" };
+                    pendingSession.Messages.Add(pendingUser);
+                    store.Commit(pendingSession, ConversationCommit.UserInput(pendingUser));
+                    var pendingLimits = new AgentRunLimits(10, 10);
+                    pendingSession.LastRun = new ChatRunRecord { RunId = pendingRunId, TurnId = pendingRunId,
+                        Status = "running", StartedUtc = DateTime.UtcNow,
+                        ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion,
+                        ConversationPolicy = ConversationRunPolicy.For(ChatModes.Agent),
+                        KernelState = new AgentRunState(new RunSummary(pendingRunId, pendingRunId, RunLifecycle.Running,
+                            new ToolCounts(), 0, 0, "", null, null), pendingLimits) };
+                    persist(pendingSession, new AgentRunEvent(AgentRunEventKind.Started,
+                        pendingSession.LastRun.KernelState.Summary, limits: pendingLimits), new ChatMessage[0], null);
+                    var pendingCall = new ToolCall("pending-write", "core.write", "{\"target\":\"once.txt\",\"content\":\"ONCE\"}");
+                    var pendingPolicy = new ToolPolicySnapshot(pendingCall.Name, "fixture",
+                        new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, true, false, new[] { ChatModes.Agent }));
+                    var pendingCallMessage = ConversationRunProjection.CreateToolCallMessage(new AgentToolCall {
+                        Id = pendingCall.Id, Name = pendingCall.Name, Arguments = new Dictionary<string, object> {
+                            ["target"] = "once.txt", ["content"] = "ONCE" } },
+                        "", "Confirm the edit.", null, ToolResultRoles.User,
+                        new AcceptedToolCallOrigin("pending-step", "pending-attempt", 0, 1));
+                    pendingCallMessage.RunId = pendingRunId;
+                    var pendingAccepted = new RunSummary(pendingRunId, pendingRunId, RunLifecycle.Running,
+                        new ToolCounts(), 1, 0, "", null, null);
+                    persist(pendingSession, new AgentRunEvent(AgentRunEventKind.ResponseAccepted, pendingAccepted,
+                        response: new AgentResponse(ConversationResponse.ExecuteAction, "Confirm the edit.", "",
+                            new[] { pendingCall })), new[] { pendingCallMessage }, null);
+                    var pendingContext = new ToolExecutionContext(pendingCall, pendingPolicy, pendingRunId, pendingRunId,
+                        "pending-step", DateTime.UtcNow, false, 1);
+                    var pendingActivity = new ChatMessage { Role = "assistant", Content = "Preparing the edit",
+                        RunId = pendingRunId, ExcludeFromModelContext = true,
+                        Activity = new ChatActivity { Kind = "tool", RunId = pendingRunId,
+                            ToolCallId = pendingCall.Id, ToolId = pendingCall.Name, StepId = "pending-step" } };
+                    persist(pendingSession, new AgentRunEvent(AgentRunEventKind.ToolStarted,
+                        pendingAccepted, toolContext: pendingContext), new[] { pendingActivity }, pendingActivity);
+                    var awaiting = new ToolExecutionRecord(pendingContext, ToolExecutionOutcome.AwaitingConfirmation,
+                        DateTime.UtcNow, "Confirm the edit.", mayHaveDispatched: false,
+                        pendingId: "pending-recovery", toolStepsConsumed: 1,
+                        evidence: new ToolExecutionEvidence(ToolDispatchEvidence.NotDispatched, ToolEffectEvidence.None));
+                    var awaitingSummary = new RunSummary(pendingRunId, pendingRunId,
+                        RunLifecycle.AwaitingConfirmation, new ToolCounts(), 1, 1,
+                        "Confirm the edit", "confirmation_required", new PendingConfirmation(awaiting));
+                    persist(pendingSession, new AgentRunEvent(AgentRunEventKind.ToolCompleted,
+                        awaitingSummary, execution: awaiting), new ChatMessage[0], pendingActivity);
+                    var pendingRequest = new ProjectChatRequest { WorkspaceId = workspaceId,
+                        SessionId = pendingChat.SessionId };
+                    var pending = service.ProjectChat(pendingRequest);
                     AssertEqual("pending-recovery", pending.PendingId, "a pending approval keeps its explicit resolution route");
-                    AssertEqual(durable.Revision, pending.State.Revision, "pending approval is not an abandoned run");
+                    AssertEqual(pendingSession.Revision, pending.State.Revision, "pending approval is not an abandoned run");
                 }
             });
         }

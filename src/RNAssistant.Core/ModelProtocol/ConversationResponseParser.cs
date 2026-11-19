@@ -29,6 +29,26 @@ namespace RNAssistant.Core.ModelProtocol
             // Batching is opt-in from local authority. External or unresolved
             // effects must not be in this set; call identity belongs to runtime.
             var calls = parsed.Response.ToolCalls;
+            if (calls.Count > 1)
+            {
+                var independentMessages = 0;
+                var otherCalls = 0;
+                var resolved = true;
+                foreach (var call in calls)
+                {
+                    ToolCatalogEntry batchTool;
+                    if (!knownTools.TryGetValue(call.Name, out batchTool)) { resolved = false; break; }
+                    if (string.Equals(call.Name, AgentCommunicationToolCatalog.Send, StringComparison.Ordinal) &&
+                        batchTool.Policy?.IndependentAgentMessage != true)
+                        return ConversationResponseParseResult.Fail(ConversationResponseError.InvalidBatch,
+                            ModelProtocolWire.BatchGuidance + "The agent send tool requires its exact independent-message policy in a batch.");
+                    if (batchTool.Policy?.IndependentAgentMessage == true) independentMessages++;
+                    else otherCalls++;
+                }
+                if (resolved && independentMessages > 0 && otherCalls > 0)
+                    return ConversationResponseParseResult.Fail(ConversationResponseError.InvalidBatch,
+                        ModelProtocolWire.BatchGuidance + "Independent agent messages cannot be mixed with other tools in one batch.");
+            }
             var validatedCalls = new List<ConversationToolCall>();
             foreach (var call in calls)
             {

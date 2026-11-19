@@ -166,7 +166,7 @@ namespace RNAssistant.Office
             var session = LoadArtifactViewerSession(request.ChatId);
             return new RunChangesService(
                 artifact => RunChangesService.ReadRetainedSource(session, artifact,
-                    _conversationStore.LoadArtifactBody, _toolExecutor.ResourceGateway),
+                    _conversationRouter.LoadArtifactBody, _toolExecutor.ResourceGateway),
                 query => _vbaJournalStore.QueryMutations(session.Host, session.DocumentKey, query),
                 id => _vbaJournalStore.GetMutationDetail(session.Host, session.DocumentKey, id,
                     RunChangesService.MaximumSourceCharacters), _toolExecutor.ResourceGateway.Authority)
@@ -178,7 +178,7 @@ namespace RNAssistant.Office
             if (request == null) throw new ArgumentNullException(nameof(request));
             var session = LoadArtifactViewerSession(request.ChatId);
             var changes = new RunChangesService(
-                artifact => RunChangesService.ReadRetainedSource(session, artifact, _conversationStore.LoadArtifactBody, _toolExecutor.ResourceGateway),
+                artifact => RunChangesService.ReadRetainedSource(session, artifact, _conversationRouter.LoadArtifactBody, _toolExecutor.ResourceGateway),
                 query => _vbaJournalStore.QueryMutations(session.Host, session.DocumentKey, query),
                 id => _vbaJournalStore.GetMutationDetail(session.Host, session.DocumentKey, id, RunChangesService.MaximumSourceCharacters),
                 _toolExecutor.ResourceGateway.Authority);

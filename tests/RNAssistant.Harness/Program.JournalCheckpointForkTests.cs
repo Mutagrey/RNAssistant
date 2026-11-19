@@ -68,7 +68,7 @@ namespace RNAssistant.Harness
                 AssertEqual(ChatResourceUri.CreateArtifactRevision(source, selected).Uri, store.Load(source.Id).Messages.Last().ResourceRefs[0].Uri,
                     "source presentation remains unchanged");
                 var incomplete = PrepareTextFork(store, source, source.Messages.Count);
-                ChatCloneService.PrepareForkResources(source, incomplete, store.LoadArtifactBody,
+                ChatCloneService.PrepareForkResources(source, incomplete, ((IConversationArtifactBodyReader)store).LoadArtifactBody,
                     new ResourceForkService(new ResourceAuthorityService(resources, resources, resources, blobs), blobs));
                 incomplete.Artifacts.RemoveAll(item => item.Id == older.Id);
                 RuntimeThrows<InvalidDataException>(() => store.Commit(incomplete, new ConversationCommit()));
@@ -92,7 +92,7 @@ namespace RNAssistant.Harness
                 AssertEqual(0, canonicalSnapshots, "inherited snapshot metadata uses original locators, not another durable copy");
 
                 var pending = PrepareTextFork(store, child, child.Messages.Count);
-                ChatCloneService.PrepareForkResources(child, pending, store.LoadArtifactBody,
+                ChatCloneService.PrepareForkResources(child, pending, ((IConversationArtifactBodyReader)store).LoadArtifactBody,
                     new ResourceForkService(new ResourceAuthorityService(resources, resources, resources, blobs), blobs));
                 var command = new ConversationCommit();
                 journal.Journal.Fault = point => { if (point == "after_flush") throw new IOException("checkpoint fork acknowledgement lost"); };

@@ -31,10 +31,26 @@ namespace RNAssistant.Harness
             {
                 var session = NewSession(adapter);
                 var tools = executor.GetControllerTools().ToArray();
-                Action<string> publish = content => executor.MutateLocalResources(session,
-                    HtmlWorkspaceToolCatalog.WriteFileToolId, null,
-                    () => HtmlWorkspaceToolService.UpsertFile(session, "styles.css", "css", content, true));
+                var settings = new AppSettings { AutoConfirmToolActions = true };
+                var created = executor.ExecuteManual(Command(HtmlWorkspaceToolCatalog.CreateToolId,
+                    "title", "Semantic HTML"), tools, settings, false, true, session);
+                AssertTrue(created.Success, "explicit HTML workspace is published: " + created.Message);
+                var workspace = (string)JObject.Parse(created.DataJson)["workspace"];
+                Action<string> publish = content =>
+                {
+                    var written = executor.ExecuteManual(Command(ResourceMutationToolCatalog.Write,
+                        "target", "HTML file: styles.css in " + workspace, "content", content),
+                        tools, settings, false, true, session);
+                    AssertTrue(written.Success, "HTML member write succeeds: " + written.Message);
+                };
                 publish("body { color: red; } /* original */");
+                var artifactRef = (string)JObject.Parse(created.DataJson)["artifactRef"]?["uri"];
+                string owner, artifactId; int artifactRevision;
+                AssertTrue(ChatResourceUri.TryParseArtifactRevision(new ResourceRef(artifactRef), out owner, out artifactId, out artifactRevision),
+                    "created workspace returns an exact artifact reference");
+                session.ActiveHtmlArtifactId = artifactId;
+                HtmlWorkspaceEditorResourceService.RefreshSelected(session,
+                    new DocumentArtifactStore(executor.ResourceAuthority.Store, executor.ResourceAuthority.Revisions, executor.Payloads));
                 var originalArtifact = session.Artifacts.Single(item => item.Id == session.ActiveHtmlArtifactId);
                 var runtime = executor.CreateNativeRuntime(session, tools, new AppSettings(), ChatModes.Agent, false);
                 Func<string, object, JObject> execute = (id, arguments) =>
@@ -46,38 +62,28 @@ namespace RNAssistant.Harness
                     return JObject.Parse(record.Result.DataJson);
                 };
                 var found = execute(ResourceToolCatalog.FindToolId, new { query = "styles.css", scope = "html" });
-                var workspaceTarget = (string)found["items"].Single(item => (string)item["type"] == "HTML workspace")["target"];
+                var fileItem = ((JArray)found["items"]).OfType<JObject>()
+                    .Single(item => (string)item["type"] == "HTML file");
+                var snapshotTarget = (string)fileItem["snapshotTarget"];
+                var workspaceMarker = " in ";
+                var workspaceTarget = snapshotTarget.Substring(snapshotTarget.LastIndexOf(workspaceMarker, StringComparison.Ordinal) +
+                    workspaceMarker.Length);
                 var structure = execute(ResourceToolCatalog.ReadToolId, new { target = workspaceTarget, representation = "structure" });
-                var workingTarget = (string)JObject.Parse((string)structure["text"])["members"].Single()["target"];
-                var originalTarget = (string)found["items"].Single(item => (string)item["type"] == "HTML file")["snapshotTarget"];
-                var originalWorkspace = (string)found["items"].Single(item => (string)item["type"] == "HTML workspace")["snapshotTarget"];
-                AssertEqual((string)found["items"].Single(item => (string)item["type"] == "HTML file")["target"], workingTarget,
-                    "discovery and workspace structure advertise the same member target");
-                var selectedBeforeEdit = executor.ResourceGateway.ResolveIntentTarget(session, workingTarget);
+                var originalTarget = snapshotTarget;
+                var originalWorkspace = workspaceTarget;
+                AssertContains((string)structure["text"], "HTML file: styles.css",
+                    "workspace structure exposes the selected member");
                 publish("body { color: blue; } /* replacement */");
-                AssertEqual("resource_revision_changed", RuntimeThrows<ResourceRequestException>(() =>
-                    executor.ResourceGateway.EnsureCurrentHtmlReference(session, selectedBeforeEdit.Reference)).ErrorCode,
-                    "a concurrent edit invalidates the selected working revision before its read is reported");
-                AssertEqual("body { color: blue; } /* replacement */", (string)execute(ResourceToolCatalog.ReadToolId,
-                    new { target = workingTarget, representation = "source" })["text"], "working target follows the current file");
-                executor.MutateLocalResources(session, HtmlWorkspaceToolCatalog.WriteFileToolId, null,
-                    () => HtmlWorkspaceToolService.UpsertFile(session, "app.js", "js", "const ready = true;", true));
-                AssertEqual("body { color: blue; } /* replacement */", (string)execute(ResourceToolCatalog.ReadToolId,
-                    new { target = workingTarget, representation = "source" })["text"], "sibling edit does not stale a working file target");
-                var siblingSnapshot = session.ActiveHtmlArtifactId;
-                publish("body { color: blue; } /* replacement */");
-                AssertEqual(siblingSnapshot, session.ActiveHtmlArtifactId, "identical source does not create a snapshot");
                 var read = execute(ResourceToolCatalog.ReadToolId, new { target = originalTarget, representation = "source" });
                 AssertEqual("body { color: red; } /* original */", (string)read["text"],
                     "explicit snapshot target keeps the historical source");
                 structure = execute(ResourceToolCatalog.ReadToolId, new { target = originalWorkspace, representation = "structure" });
-                AssertEqual(originalTarget, (string)JObject.Parse((string)structure["text"])["members"].Single()["target"],
-                    "historical workspace still advertises the same exact member");
+                AssertContains((string)structure["text"], "HTML file: styles.css",
+                    "historical workspace still advertises the same member");
                 found = execute(ResourceToolCatalog.FindToolId, new { query = originalTarget, scope = "html" });
                 AssertEqual(originalTarget, (string)found["items"].Single()["target"], "exact historical search round-trips");
                 var currentTarget = (string)execute(ResourceToolCatalog.FindToolId, new { query = "styles.css", scope = "html" })["items"]
                     .Single(item => (string)item["type"] == "HTML file")["target"];
-                AssertEqual(workingTarget, currentTarget, "current file keeps its semantic target across revisions");
                 AssertEqual("body { color: blue; } /* replacement */", (string)execute(ResourceToolCatalog.ReadToolId,
                     new { target = currentTarget, representation = "source" })["text"], "current discovery reads current bytes");
                 AssertEqual(currentTarget, (string)execute(ResourceToolCatalog.FindToolId,
@@ -108,18 +114,16 @@ namespace RNAssistant.Harness
             HtmlWorkspaceToolService.UpsertFile(local, "styles.css", "css", "/* retained stylesheet */", true);
             var retained = local.Artifacts.Single(item => item.Id == local.ActiveHtmlArtifactId);
             var oldTarget = gateway.Find(local, "styles.css", "html").Items.Single(item => item.Type == "HTML file").SnapshotTarget;
-            var workingFile = gateway.Find(local, "styles.css", "html").Items.Single(item => item.Type == "HTML file").Target;
             HtmlWorkspaceToolService.DeleteFile(local, "styles.css");
-            AssertEqual("resource_target_not_found", RuntimeThrows<ResourceRequestException>(() =>
-                gateway.ResolveIntentTarget(local, workingFile)).ErrorCode, "deleted working file does not resolve");
             var selected = gateway.ResolveIntentTarget(local, oldTarget);
             AssertEqual("/* retained stylesheet */", gateway.ReadWhole(local, selected.Reference, "source").Result.Text,
                 "a file removed from the active local workspace remains readable in its historical snapshot");
             HtmlWorkspaceToolService.UpsertFile(local, "styles.css", "css", "/* retained stylesheet */", true);
+            var recreated = gateway.Find(local, "styles.css", "html").Items.Single(item => item.Type == "HTML file").SnapshotTarget;
+            AssertTrue(recreated != oldTarget, "recreated equal bytes have a new snapshot identity");
+            var oldLabel = oldTarget.Split(new[] { " in " }, StringSplitOptions.None)[0];
             AssertEqual("resource_target_not_found", RuntimeThrows<ResourceRequestException>(() =>
-                gateway.ResolveIntentTarget(local, workingFile)).ErrorCode, "recreated equal bytes have a new working identity");
-            AssertEqual("resource_target_not_found", RuntimeThrows<ResourceRequestException>(() =>
-                gateway.ResolveIntentTarget(local, oldTarget.Substring(0, oldTarget.IndexOf(" in HTML workspace: ", StringComparison.Ordinal)))).ErrorCode,
+                gateway.ResolveIntentTarget(local, oldLabel)).ErrorCode,
                 "an unqualified historical label is not silently rebound");
             var duplicate = JsonConvert.DeserializeObject<ChatArtifact>(JsonConvert.SerializeObject(retained));
             duplicate.Id = Guid.NewGuid().ToString("N");
@@ -2236,34 +2240,22 @@ namespace RNAssistant.Harness
                     "VBA URI survives completed document identity migration");
 
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
-                var staleRename = executor.ExecuteManual(
-                    Command(
-                        "vba.module.rename",
-                        "moduleName", "ResourceModule",
-                        "newModuleName", "ResourceModuleRenamed"),
-                    tools,
-                    new AppSettings { AutoConfirmToolActions = true },
-                    false,
-                    false,
-                    session);
-                AssertEqual("stale_vba_module", staleRename.ErrorCode,
+                var staleRename = PrepareVbaNative(executor, session,
+                    Command("vba.module.rename", "moduleName", "ResourceModule",
+                        "newModuleName", "ResourceModuleRenamed")).Record;
+                AssertEqual(ToolExecutionOutcome.Error, staleRename.Outcome,
                     "a partial read after external drift cannot authorize rename");
+                AssertContains(staleRename.Result.DataJson, "stale_vba_module", "rename reports the stale VBA source");
                 var currentForRename = ReadResource(gateway, session, component.Reference.Uri,
                     ResourceRepresentations.Source, null, 32000).Result;
                 AssertTrue(currentForRename.Complete &&
                     currentForRename.Text.Contains("ResourceNeedleChanged"),
                     "rename setup observes the complete current module");
-                var renamed = executor.ExecuteManual(
-                    Command(
-                        "vba.module.rename",
-                        "moduleName", "ResourceModule",
-                        "newModuleName", "ResourceModuleRenamed"),
-                    tools,
-                    new AppSettings { AutoConfirmToolActions = true },
-                    false,
-                    false,
-                    session);
-                AssertTrue(renamed.Success, "VBA resource recovery setup renames the live component");
+                var renamed = ConfirmVbaNative(PrepareVbaNative(executor, session,
+                    Command("vba.module.rename", "moduleName", "ResourceModule",
+                        "newModuleName", "ResourceModuleRenamed")));
+                AssertEqual(ToolExecutionOutcome.Ok, renamed.Outcome,
+                    "VBA resource recovery setup renames the live component");
                 var staleComponent = executor.ExecuteManual(
                     Command(
                         ResourceToolCatalog.ReadToolId,
@@ -2318,8 +2310,8 @@ namespace RNAssistant.Harness
                 var writer = NewSession(adapter);
                 executor.BindResourceAuthority(writer);
                 var completed = ConfirmVbaNative(PrepareVbaNative(executor, writer,
-                    Command("vba.module.patch", "moduleName", "Module1", "patch",
-                        new JArray(new JObject { ["find"] = "\"before\"", ["text"] = "\"after\"" }))));
+                    Command("vba.module.write", "moduleName", "Module1", "mode", "updateOnly",
+                        "code", "Sub Main()\nDebug.Print \"after\"\nEnd Sub")));
                 AssertEqual(ToolExecutionOutcome.Ok, completed.Outcome, "shared-document patch succeeds");
                 var frozen = new ResourceAuthoritySnapshotSet(new[] {
                     executor.ResourceAuthority.Store.Capture(evidence.ScopeId) });

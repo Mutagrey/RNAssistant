@@ -64,7 +64,7 @@ namespace RNAssistant.Harness
                     ResourceRefs = new List<ResourceRef> { derived, saved, latest } };
                 source.Messages.Add(message); store.Commit(source, ConversationCommit.UserInput(message));
                 var child = PrepareTextFork(store, source, source.Messages.Count);
-                var plan = ChatCloneService.PrepareForkResources(source, child, store.LoadArtifactBody,
+                var plan = ChatCloneService.PrepareForkResources(source, child, ((IConversationArtifactBodyReader)store).LoadArtifactBody,
                     new ResourceForkService(executor.ResourceAuthority, executor.Payloads));
                 var childDerived = ForkedDefinition(child, derived); var childScope = executor.ResourceAuthority.Scope(child, false);
                 AssertEqual(0L, resources.Capture(childScope).Generation, "preparation retains copies without publishing heads");
@@ -135,7 +135,7 @@ namespace RNAssistant.Harness
                 var message = new ChatMessage { Role = "user", Content = "Copy supplied data" };
                 source.Messages.Add(message); store.Commit(source, ConversationCommit.UserInput(message));
                 var child = PrepareTextFork(store, source, 1);
-                var plan = ChatCloneService.PrepareForkResources(source, child, store.LoadArtifactBody,
+                var plan = ChatCloneService.PrepareForkResources(source, child, ((IConversationArtifactBodyReader)store).LoadArtifactBody,
                     new ResourceForkService(executor.ResourceAuthority, executor.Payloads));
                 var command = new ConversationCommit();
                 var once = true;

@@ -146,7 +146,11 @@ namespace RNAssistant.Harness
                         var id = projects.CreateProjectWorkspace(new RNAssistant.Application.Contracts.ProjectConnectionRequest {
                             RootPath = Path.Combine(paths.Root, "spawn-wire") }).SelectedWorkspaceId;
                         var workspace = workspaces.OpenConnected(id);
-                        var root = runtime.CreateSession(workspace, "Parent"); var store = new ChatStore(paths);
+                        var root = runtime.CreateSession(workspace, "Parent");
+                        var conversations = runtime.ConversationStore;
+                        Func<RNAssistant.Core.Models.ChatSession> findChild = () => conversations.ListHeaders(false)
+                            .Select(header => conversations.Load(header.Id))
+                            .FirstOrDefault(item => item?.AgentCreation != null);
                         var settings = new AppSettings { BaseUrl = "http://127.0.0.1:" + port, Model = "spawn-model",
                             AgentResponseMode = "json_object", StreamResponses = false, SmartChatTitles = false,
                             AutoCompressContext = false, MaxAgentIterations = 4, AutoConfirmToolActions = true };
@@ -157,7 +161,6 @@ namespace RNAssistant.Harness
                             {
                                 var request = await listener.GetContextAsync().ConfigureAwait(false);
                                 string body; using (var reader = new StreamReader(request.Request.InputStream)) body = await reader.ReadToEndAsync().ConfigureAwait(false);
-                                var chat = store.List().FirstOrDefault(item => item.AgentCreation != null);
                                 var childRequest = body.Contains("SPAWN_CHILD_START") && !body.Contains("SPAWN_PARENT_START");
                                 string response;
                                 if (childRequest)
@@ -171,7 +174,7 @@ namespace RNAssistant.Harness
                                         calls: new[] { new ConversationToolCall { Name = AgentCommunicationToolCatalog.Spawn,
                                             Arguments = new JObject { ["title"] = "Peer", ["initial_message"] = "SPAWN_CHILD_START" } } }).ToJson();
                                 else
-                                    response = ScriptedVerifiedFinish(store.Load(root.Id), "Participant created", "Peer invited", "Created and queued only", AgentCommunicationToolCatalog.Spawn);
+                                    response = ScriptedVerifiedFinish(conversations.Load(root.Id), "Participant created", "Peer invited", "Created and queued only", AgentCommunicationToolCatalog.Spawn);
                                 await SteeringReply(request, response).ConfigureAwait(false);
                             }
                         });
@@ -182,7 +185,7 @@ namespace RNAssistant.Harness
                             AssertTrue(run.Wait(15000) && runtime.RunsDrained.Wait(10000) && server.Wait(5000),
                                 "parent and child run through the common production kernel without views");
                             AssertEqual(1, children, "one child execution");
-                            var child = store.List().Single(item => item.AgentCreation != null);
+                            var child = findChild();
                             AssertTrue(!child.LastRun.ConversationPolicy.AutoConfirmsToolActions, "peer input cannot inherit broader global auto approval");
                             AssertEqual(1, child.Messages.Count(item => item.Content == "SPAWN_CHILD_START"), "one durable initial input");
                             AssertTrue(child.LastRun.KernelState.Summary.Lifecycle == RNAssistant.Core.Agent.RunLifecycle.Completed,

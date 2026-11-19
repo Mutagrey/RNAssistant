@@ -6,7 +6,8 @@ using RNAssistant.Core.Services;
 
 namespace RNAssistant.Core.Storage
 {
-    public sealed class ChatConversationStoreAdapter : IConversationStore, IConversationContextStore
+    public sealed class ChatConversationStoreAdapter : IConversationStore, IConversationContextStore,
+        IConversationArtifactBodyReader
     {
         private readonly ChatStore _store;
 

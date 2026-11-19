@@ -74,6 +74,15 @@ namespace RNAssistant.Office.Contracts
         public int Waiting { get; set; }
     }
 
+    // Native window hosts observe pane readiness through this typed contract.
+    // WebView controls remain an implementation detail of the Office pane.
+    public interface IAssistantWindowPane
+    {
+        HostWindowActivity WindowActivity { get; }
+        bool CanShutdownWindow { get; }
+        bool CanSwitchWindow { get; }
+    }
+
     // One host/session. No HWNDs, Office targets or model authority cross this boundary.
     public interface IAssistantWindowHost
     {

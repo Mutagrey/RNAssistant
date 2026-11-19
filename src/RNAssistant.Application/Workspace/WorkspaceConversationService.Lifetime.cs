@@ -116,7 +116,11 @@ namespace RNAssistant.Runtime
         private static bool IsTerminalRunEvent(WorkspaceRunEvent value)
         {
             var lifecycle = value?.Summary?.Lifecycle;
-            return lifecycle == RunLifecycle.Completed || lifecycle == RunLifecycle.Cancelled || lifecycle == RunLifecycle.Failed;
+            // TitleChanged reuses the completed run summary as metadata context but
+            // can arrive after the operation scope has closed. It is not the run's
+            // terminal projection and must still reach the observer.
+            return !string.Equals(value?.Kind, "TitleChanged", StringComparison.Ordinal) &&
+                (lifecycle == RunLifecycle.Completed || lifecycle == RunLifecycle.Cancelled || lifecycle == RunLifecycle.Failed);
         }
 
         private static void Report(

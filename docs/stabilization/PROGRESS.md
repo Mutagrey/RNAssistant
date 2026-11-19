@@ -7,10 +7,15 @@
 1. **P1 release evidence:** Windows x64 / Office x64 / WebView2, DPAPI/storage-v2,
    native Browser network/worker/input и смешанный backup остаются вне
    host-neutral проверок. Локальный Chromium/Harness результат не закрывает эти gates.
-2. **P1 test evidence:** полный Harness не является текущим green baseline. Семь
-   ранее зафиксированных focused-сбоев и cancellation case 2026-11-19 проходят,
-   включая R61 после регенерации baseline. Полный sweep текущего HEAD ещё не
-   выполнен, поэтому green baseline не заявляется. Детали — в
+2. **P1 test evidence:** первый полный Harness 2026-11-19 завершён как 1296/1518
+   passed, 222 failed; green baseline не заявляется. После него точечно исправлены
+   `workspace files:` 20/20, `workspace snapshots:` 3/3 и `agent communication:`
+   28/28; полный пересчёт ещё нужен. Пять патчей, ранее зафиксированные focused-сбои,
+   cancellation case, R61, `architecture:` 7/7 и `journal fork:` 11/11 проходят.
+   Остаток sweep требует разбора: default `/var` temporary root даёт legacy
+   reparse-отказы, отсутствует/не совпадает пакет Data Templates, а заметная часть
+   suite использует устаревшие retired ids/ownership/publication fixtures.
+   Fail-closed guards не ослабляются. Детали — в
    [BACKLOG](BACKLOG.md#harness-regression-sweep--focused-recheck-2026-11-19).
 
 Важно: `17.6.8` replacement preview ещё не имеет Windows/Office visual acceptance;
@@ -51,13 +56,23 @@ target/CAS publication failures remain fail-closed but carry owner-specific
 diagnostics. Historical `core.search` projection no longer promises a continuation
 after its owning run or handler has been superseded: it reports `nextExpired` and asks
 for a fresh semantic search. The latest search in the owning run retains `next=true`.
+Workspace titles now treat `TitleChanged` as its own terminal-adjacent event instead of
+deferring it with progress, and the resume/Office-history fixtures write through the
+service-owned conversation store using typed run commits rather than a second `ChatStore`.
+The model parser and strict schema now both reject an agent message mixed with another
+tool or a spoofed `agents.send` policy without the independent-message grant.
 
 Checks: the five patchset scenarios, all seven previously failing focused Harness cases,
 the cancellation case, R61 inventory, optional schema admission, request schema modes,
-storage CAS (16/16), catalog publication and focused text search pass. Two older CAS
-fixtures were aligned with the canonical create-only rule: known bytes never repair or
-overwrite retained corruption. Full Harness and Windows/Office/WebView2 qualification
-remain open.
+text search (6/6), context continuity (18/18), tool pack (12/12), storage CAS (16/16),
+catalog publication, focused VBA/JSON resource streaming, `resources:` 54/54,
+`plugins:` 22/22, `architecture:` 7/7 and `journal fork:` 11/11 pass. Two older CAS fixtures
+were aligned with the canonical create-only rule: known bytes never repair or overwrite
+retained corruption. The broader `resources:` category still has stale mixed fixtures
+for unpublished document metadata/text-index views and the retired private VBA rename
+path; each remains open rather than relaxed. Full Harness and Windows/Office/WebView2
+qualification remain open. Local HTML discovery now lists the latest local head per
+logical workspace instead of exposing every retained revision as a duplicate member.
 
 ## Retired Office chat rebind — In Review, 2026-11-19
 

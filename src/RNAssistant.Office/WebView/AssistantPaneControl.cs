@@ -19,7 +19,7 @@ using RNAssistant.Office.Services;
 
 namespace RNAssistant.Office.WebView
 {
-    public sealed class AssistantPaneControl : UserControl
+    public sealed class AssistantPaneControl : UserControl, IAssistantWindowPane
     {
         private AssistantController _controller;
         private readonly object _resourceRequestSync = new object();

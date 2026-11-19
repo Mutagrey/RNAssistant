@@ -234,7 +234,7 @@ namespace RNAssistant.Office
                 {
                     _attachmentStore.CloneMessageAttachments(message);
                 }
-                var forkResources = ChatCloneService.PrepareForkResources(source, fork, _conversationStore.LoadArtifactBody,
+                var forkResources = ChatCloneService.PrepareForkResources(source, fork, _conversationRouter.LoadArtifactBody,
                     new ResourceForkService(_toolExecutor.ResourceAuthority, _toolExecutor.Payloads));
                 NormalizeContext(fork.Context, fork);
                 // Cloning above is unpublished preparation. The first durable fork

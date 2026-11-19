@@ -18,9 +18,6 @@ namespace RNAssistant.Core.Persistence
         // Addressed metadata; presentation may request fresh advisory CAS sizes.
         ChatSessionHeader ReadHeader(string sessionId, bool includeStorageUsage = false);
         ChatOverview ReadOverview(ChatSession scope, string sessionId, bool metadataOnly = false);
-        // Explicit artifact preparation on an already loaded, revision-fenced chat.
-        // Does not reload its transcript or substitute a newer resource revision.
-        bool LoadArtifactBody(ChatSession session, string artifactId);
         void Commit(ChatSession session, ConversationCommit commit);
         void CommitRun(ConversationRunCommit commit);
         void SetTitle(ChatSession session, string title);
@@ -58,6 +55,15 @@ namespace RNAssistant.Core.Persistence
     {
         ContextWorkingSet RestoreWorkingSet(ChatSession session, int recentResults,
             int workingBudget, CancellationToken token = default(CancellationToken));
+    }
+
+    // Artifact-body preparation is a separate storage read port. Conversation
+    // consumers do not gain artifact/CAS internals through IConversationStore.
+    public interface IConversationArtifactBodyReader
+    {
+        // Loads only on an already loaded, revision-fenced chat. It does not
+        // reload the transcript or substitute a newer resource revision.
+        bool LoadArtifactBody(ChatSession session, string artifactId);
     }
 
     // A read address and observed revision, not a partial writable session or

@@ -9,7 +9,6 @@ using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Diagnostics;
 using RNAssistant.Office.Services;
-using RNAssistant.Office.WebView;
 
 namespace RNAssistant.OfficeHosts.Windows
 {
@@ -168,7 +167,7 @@ namespace RNAssistant.OfficeHosts.Windows
                         throw new InvalidOperationException("Окно сейчас недоступно для перемещения.");
                     if (request.Command == HostWindowCommand.Shutdown || request.Command == HostWindowCommand.SwitchDocument)
                     {
-                        var pane = _session.PanelControl as AssistantPaneControl;
+                        var pane = _session.PanelControl as IAssistantWindowPane;
                         var canClose = request.Command == HostWindowCommand.Shutdown
                             ? pane != null && pane.CanShutdownWindow
                             : pane != null && pane.CanSwitchWindow;
@@ -398,7 +397,7 @@ namespace RNAssistant.OfficeHosts.Windows
             if (_companion.Visible && (DateTime.UtcNow - _lastActivity).TotalMilliseconds >= 900)
             {
                 _lastActivity = DateTime.UtcNow;
-                var pane = _session.PanelControl as AssistantPaneControl;
+                var pane = _session.PanelControl as IAssistantWindowPane;
                 _companion.SetStatus(pane == null ? new HostWindowActivity() : pane.WindowActivity, _diagnostic);
             }
         }
