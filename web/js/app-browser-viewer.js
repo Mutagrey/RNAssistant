@@ -33,13 +33,14 @@
         last = key; if (options.onLayout) options.onLayout();
       }
     }
-    function layout() { if (!disposed && !queued) queued = requestAnimationFrame(place); }
+    function layout() { if (!disposed && active && !queued) queued = requestAnimationFrame(place); }
     var observer = new ResizeObserver(layout); observer.observe(anchor);
     window.addEventListener("pagehide", function (event) {
       if (!event.persisted) { cancelAnimationFrame(queued); observer.disconnect(); listeners.abort(); }
     }, { signal: listeners.signal });
     window.addEventListener("resize", layout, { signal: listeners.signal });
     document.addEventListener("scroll", function (event) {
+      if (!active) return;
       var target = event.target;
       // A chat/tree scroll does not move this placeholder. Only follow scrolling
       // ancestors that can actually change the anchor bounds.
@@ -53,7 +54,7 @@
     }, { signal: listeners.signal });
     return { element: anchor, surface: surface, layout: layout,
       activate: function () { active = true; layout(); },
-      deactivate: function () { active = false; surface.hidden = true; surface.inert = true; last = ""; if (options.onLayout) options.onLayout(); },
+      deactivate: function () { active = false; cancelAnimationFrame(queued); queued = 0; surface.hidden = true; surface.inert = true; last = ""; if (options.onLayout) options.onLayout(); },
       destroy: function () { if (disposed) return; disposed = true; cancelAnimationFrame(queued); observer.disconnect(); listeners.abort(); surface.remove(); anchor.remove(); }
     };
   }

@@ -19,32 +19,49 @@
     address.setAttribute("role", "combobox"); address.setAttribute("aria-autocomplete", "list"); address.setAttribute("aria-controls", completion.id);
     var suggestions = [], selectedSuggestion = -1, completionGeneration = 0, suggestTimer = 0;
     function overlayChanged() { document.dispatchEvent(new CustomEvent("rnassistant:overlay-change")); }
-    function closeCompletion() { if (suggestTimer) { clearTimeout(suggestTimer); suggestTimer = 0; }
+    function invalidateCompletion() {
+      if (suggestTimer) { clearTimeout(suggestTimer); suggestTimer = 0; }
       completionGeneration++; suggestions = []; selectedSuggestion = -1;
-      var changed = !completion.hidden; completion.hidden = true; completion.replaceChildren();
-      address.setAttribute("aria-expanded", "false"); address.removeAttribute("aria-activedescendant"); if (changed) overlayChanged(); }
+      address.removeAttribute("aria-activedescendant");
+      if (!completion.hidden) { completion.setAttribute("aria-busy", "true");
+        Array.from(completion.children).forEach(function (item) { item.disabled = true; }); }
+    }
+    function closeCompletion() { invalidateCompletion();
+      var changed = !completion.hidden; completion.hidden = true; completion.replaceChildren(); completion.removeAttribute("aria-busy");
+      address.setAttribute("aria-expanded", "false"); if (changed) overlayChanged(); }
     function selectSuggestion(index) { selectedSuggestion = index;
       Array.from(completion.children).forEach(function (item, i) { item.setAttribute("aria-selected", String(index === i)); });
       if (completion.children[index]) address.setAttribute("aria-activedescendant", completion.children[index].id); }
-    function showCompletion(items, epoch, owner) {
-      if (epoch !== completionGeneration || owner !== presentation || document.activeElement !== address || !completion.isConnected) return;
-      suggestions = (items || []).slice(0, 20);
-      completion.replaceChildren();
+    function showCompletion(items, epoch, owner, documentRevision, documentAddress) {
+      if (epoch !== completionGeneration || !presentation || presentation.addressLocked || presentation.documentRevision !== documentRevision ||
+          presentation.address !== documentAddress || document.activeElement !== address || !completion.isConnected) return;
+      var seen = new Set();
+      suggestions = (items || []).filter(function (item) {
+        if (!item) return false;
+        if (item.disabledReason && !["None", "NativeUnavailable", "ProjectDefinitionRequired"].includes(item.disabledReason)) return false;
+        if (seen.has(item.displayLocator)) return false;
+        seen.add(item.displayLocator); return true;
+      }).slice(0, 20);
+      completion.replaceChildren(); completion.scrollTop = 0; completion.removeAttribute("aria-busy");
       suggestions.forEach(function (item, index) {
         var option = document.createElement("button"); option.type = "button"; option.setAttribute("role", "option"); option.id = completion.id + "-" + index;
         option.textContent = (item.title || item.displayLocator) + " · " + item.displayLocator; option.title = item.sourceLabel || "";
         option.onpointerdown = function (event) { event.preventDefault(); };
-        option.onclick = function () { var locator = item.displayLocator; closeCompletion(); invoke(function () { return owner.navigate(locator); }); };
+        option.onclick = function () { if (!presentation || presentation.addressLocked ||
+          presentation.documentRevision !== documentRevision || presentation.address !== documentAddress) return;
+          var locator = item.displayLocator; closeCompletion(); invoke(function () { return owner.navigate(locator); }); };
         completion.appendChild(option);
       });
       var changed = completion.hidden !== !suggestions.length; completion.hidden = !suggestions.length;
       address.setAttribute("aria-expanded", String(!!suggestions.length)); if (changed) overlayChanged();
     }
     function requestSuggestions(prefix, immediate) {
-      closeCompletion(); var epoch = completionGeneration, owner = presentation;
-      if (!owner || !owner.suggest) return;
+      var owner = presentation;
+      if (!owner || !owner.suggest || owner.addressLocked) { closeCompletion(); return; }
+      invalidateCompletion(); var epoch = completionGeneration;
+      var documentRevision = owner.documentRevision, documentAddress = owner.address;
       var local = typeof owner.localSuggest === "function" ? owner.localSuggest(prefix) : [];
-      if (local && local.length) showCompletion(local, epoch, owner);
+      if (local && local.length) showCompletion(local, epoch, owner, documentRevision, documentAddress);
       // Focus is a history affordance. Show known pages immediately; a catalog
       // query starts only after the user actually types.
       if (immediate) return;
@@ -52,8 +69,9 @@
         suggestTimer = 0;
         owner.suggest(prefix, epoch).then(function (result) {
           if (!result || result.requestGeneration !== epoch) return;
-          showCompletion(result.items || [], epoch, owner);
-        }, function () {});
+          showCompletion(result.items || [], epoch, owner, documentRevision, documentAddress);
+        }, function () { if (epoch === completionGeneration && presentation && presentation.documentRevision === documentRevision &&
+          presentation.address === documentAddress) closeCompletion(); });
       }
       suggestTimer = setTimeout(query, 120);
     }
@@ -103,13 +121,15 @@
     function leaveWindow() { expand(false); }
     function expand(value) {
       if (!value) closeCompletion();
-      var wasFocused = toolbar.classList.contains("is-address-focused");
       toolbar.classList.toggle("is-address-focused", value); tools.setAttribute("aria-expanded", String(value));
       document.removeEventListener("pointerdown", outsidePointer, true); window.removeEventListener("blur", leaveWindow);
       if (value) { document.addEventListener("pointerdown", outsidePointer, true); window.addEventListener("blur", leaveWindow); }
-      if (wasFocused !== !!value) overlayChanged();
     }
-    address.onfocus = function () { expand(true); address.select(); requestSuggestions("", true); };
+    address.onfocus = function () {
+      address.select();
+      if (presentation && presentation.addressLocked) return;
+      expand(true); requestSuggestions("", true);
+    };
     toolbar.addEventListener("focusout", function (event) { if (!toolbar.contains(event.relatedTarget) && !inOwnMenu(event.relatedTarget)) expand(false); });
     toolbar.addEventListener("keydown", function (event) {
       if (event.target === address && (event.key === "ArrowDown" || event.key === "ArrowUp") && suggestions.length) {
@@ -118,7 +138,7 @@
       if (event.key === "Escape" && !toolbar.querySelector('[aria-haspopup][aria-expanded="true"]')) {
         expand(false); address.value = currentAddress(); reload.focus(); event.stopPropagation();
       }
-      if (event.key === "Enter" && event.target === address && presentation && presentation.navigate && address.value.trim()) {
+      if (event.key === "Enter" && event.target === address && presentation && presentation.navigate && !presentation.addressLocked && address.value.trim()) {
         var value = selectedSuggestion >= 0 ? suggestions[selectedSuggestion].displayLocator : address.value.trim();
         event.preventDefault(); expand(false); var owner = presentation; invoke(function () { return navigateAddress(owner, value); });
       }
@@ -133,7 +153,8 @@
     function currentAddress() { return presentation && presentation.address || currentLabel && (currentLabel.address || currentLabel.path || currentLabel.title) || options.address || ""; }
     function updateAddress() {
       if (document.activeElement !== address) address.value = currentAddress();
-      address.title = currentAddress(); address.readOnly = !(presentation && presentation.navigate);
+      var locked = !!(presentation && (presentation.addressLocked || !presentation.navigate));
+      address.title = currentAddress(); address.readOnly = locked; address.setAttribute("aria-readonly", String(locked));
     }
     function storage() { return currentLabel && currentLabel.storage || options.storage; }
     function infoEntries() {
@@ -159,10 +180,10 @@
     }
     var modes = null, modeButtons = {};
     function setDocument(value, onModeChange) {
-      if (document.activeElement !== address || presentation && value.address !== presentation.address) closeCompletion();
+      var previous = presentation, documentChanged = !previous || value.documentRevision !== previous.documentRevision;
+      if (document.activeElement !== address || documentChanged || previous &&
+          (value.address !== previous.address || value.addressLocked !== previous.addressLocked)) closeCompletion();
       presentation = value; modeChange = onModeChange;
-      address.readOnly = !!value.addressLocked;
-      address.setAttribute("aria-readonly", String(!!value.addressLocked));
       if (discuss) discuss.hidden = value.allowDiscuss === false;
       if (value.supportedModes && value.supportedModes.length && !modes) {
         modes = document.createElement("div"); modes.className = "view-switch"; modes.setAttribute("role", "group"); modes.setAttribute("aria-label", "Представление страницы");

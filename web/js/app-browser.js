@@ -231,8 +231,8 @@
         });
       });
     }
-    var nativeSize = new ResizeObserver(function () { layoutNative(); }); nativeSize.observe(viewport);
-    var stopOverlayWatch = watchOverlayLayout(layoutNative);
+    var nativeSize = new ResizeObserver(function () { if (active) layoutNative(); }); nativeSize.observe(viewport);
+    var stopOverlayWatch = watchOverlayLayout(function (force) { if (active) layoutNative(force); });
     var comparison = null;
     var pageFind = RNAssistantBrowserFind.create({ root: shell.workspace, content: content, command: command, layout: layoutNative,
       isCurrent: function () { return active && !disposed && selectedMode === 'preview'; },
@@ -279,6 +279,7 @@
       status: function (message) { surface.waiting(label(), message); }
     });
     var versionView = function (change) {
+      clearHomeSuggestions();
       var value = current && current.target, changed = change.target;
       if (value && (value.pluginId ? value.pluginId === changed.pluginId : value.logicalId ? value.documentId === changed.documentId && value.logicalId === changed.logicalId :
         value.kind === changed.kind && value.workspaceId === changed.workspaceId)) {
@@ -408,8 +409,9 @@
       pending.forEach(function (task) { if (task.requestId) cancelBridgeRequest(task.requestId).catch(function () {}); }); pending.clear();
     }
     function scopeKey(scope) { return scope ? [scope.kind, scope.scopeId, scope.chatId || ""].join("\n") : ""; }
-    function localSuggestions(prefix) {
-      var scope = current && current.ownerScope || target.ownerScope, key = scopeKey(scope), seen = new Set();
+    function clearHomeSuggestions() { homeSuggestionCache = []; homeSuggestionScope = ""; }
+    function localSuggestions(prefix, scopeOverride) {
+      var scope = scopeOverride || current && current.ownerScope || target.ownerScope, key = scopeKey(scope), seen = new Set();
       var needle = String(prefix || "").toLocaleLowerCase();
       if (homeSuggestionScope !== key) { homeSuggestionCache = []; homeSuggestionScope = key; }
       var cached = homeSuggestionCache.filter(function (entry) {
@@ -423,11 +425,11 @@
       var scope = current && current.ownerScope || target.ownerScope;
       var result = await request("queryNavigationSuggestions", { ownerScope: scope, prefix: prefix, requestGeneration: epoch, limit: 12 });
       var seen = new Set();
-      return { requestGeneration: result.requestGeneration, items: (result.items || []).concat(localSuggestions(prefix))
+      return { requestGeneration: result.requestGeneration, items: (result.items || []).concat(localSuggestions(prefix, scope))
         .filter(function (entry) { if (!RNAssistantBrowserTarget.preferenceLocator(entry.displayLocator) || seen.has(entry.displayLocator)) return false; seen.add(entry.displayLocator); return true; }).slice(0, 20) };
     }
     function createHome(parent) {
-      var query = "", epoch = 0, shown = false, dead = false, entries = [], loading = false, error = "", view;
+      var query = "", epoch = 0, shown = false, dead = false, entries = [], loading = false, error = "", searchTimer = 0, view;
       function model() {
         var scope = current.ownerScope, recent = RNAssistantDockWorkspace.recentNavigation(scope, query, 8), seen = new Set();
         function rows(items) { return items.filter(function (entry) { if (seen.has(entry.displayLocator)) return false; seen.add(entry.displayLocator); return true; }).map(function (entry) {
@@ -441,28 +443,35 @@
           empty: "Нет локальных страниц. Откройте HTML из материалов или добавьте проект.", note: RNAssistantDockWorkspace.recentNavigationNotice() };
       }
       async function refresh() {
+        if (!current) return;
+        if (searchTimer) { clearTimeout(searchTimer); searchTimer = 0; }
         var serial = ++epoch; loading = true; error = ""; view.update(model());
+        var scope = current.ownerScope, requestedScope = scopeKey(scope);
         try {
-          var result = await request("queryNavigationSuggestions", { ownerScope: current.ownerScope, prefix: query, requestGeneration: serial, limit: 12 });
-          if (dead || !shown || serial !== epoch || result.requestGeneration !== serial) return;
+          var result = await request("queryNavigationSuggestions", { ownerScope: scope, prefix: query, requestGeneration: serial, limit: 12 });
+          if (dead || !shown || !current || serial !== epoch || scopeKey(current.ownerScope) !== requestedScope || result.requestGeneration !== serial) return;
           entries = (result.items || []).filter(function (entry) { return !!RNAssistantBrowserTarget.preferenceLocator(entry.displayLocator); }).slice(0, 12);
-          if (!query) { homeSuggestionCache = entries.slice(); homeSuggestionScope = scopeKey(current.ownerScope); }
+          if (!query) { homeSuggestionCache = entries.slice(); homeSuggestionScope = requestedScope; }
         } catch (failure) { if (!dead && shown && serial === epoch) error = failure.detail || failure.message; }
-        finally { if (!dead && shown && serial === epoch) { loading = false; view.update(model()); } }
+        finally { if (!dead && shown && current && serial === epoch) { loading = false; view.update(model()); } }
       }
       view = RNAssistantStartSurface.mount(parent, model(), {
-        onSearch: function (value) { query = value.slice(0, 256); entries = []; refresh(); },
-        onSelect: function (payload) { if (payload.clear) { RNAssistantDockWorkspace.clearRecentNavigation(); view.update(model()); }
+        onSearch: function (value) { query = value.slice(0, 256); entries = []; loading = true; epoch++; view.update(model());
+          if (searchTimer) clearTimeout(searchTimer); searchTimer = setTimeout(function () { searchTimer = 0; refresh(); }, 120); },
+        onSelect: function (payload) { if (!payload.clear && searchTimer) { clearTimeout(searchTimer); searchTimer = 0; }
+          if (payload.clear) { RNAssistantDockWorkspace.clearRecentNavigation(); view.update(model()); }
           else return command("Navigate", { locator: payload.locator }); }
       });
       return { activate: function () { if (shown || dead) return; shown = true; refresh(); },
-        deactivate: function () { shown = false; epoch++; }, dispose: function () { dead = true; epoch++; view.dispose(); } };
+        deactivate: function () { shown = false; epoch++; if (searchTimer) { clearTimeout(searchTimer); searchTimer = 0; } },
+        dispose: function () { dead = true; epoch++; if (searchTimer) { clearTimeout(searchTimer); searchTimer = 0; } view.dispose(); } };
     }
     function presentation() {
       var inline = !!(current && current.target && current.target.kind === "InlineHtml");
       surface.setDocument({ address: current && current.url || target.locator,
         addressLocked: inline,
         allowDiscuss: !inline,
+        documentRevision: current && current.documentGeneration || 0,
         mode: selectedMode, loading: !!current && current.status === "Starting",
         supportedModes: current && current.status !== "Home" ? (inline ? ["preview"] : ["preview", "source"]) : [],
         canGoBack: current && current.canGoBack, canGoForward: current && current.canGoForward,
@@ -540,6 +549,7 @@
         loading.hidden = true; loading.textContent = "";
         stopReads(); fail(value.message || "Страница закрыта вместе с исходным контекстом."); return; }
       if (targetGeneration !== value.documentGeneration) { stopReads(); sourcePage = null; RNAssistantViewerRegistry.unmount(source); source.replaceChildren();
+        clearHomeSuggestions();
         fileNavigation.reset();
         RNAssistantDockWorkspace.updateTarget({ view: "browser", browserTabId: target.browserTabId, ownerScope: value.ownerScope, chatBound: value.chatBound,
           locator: value.url, title: value.title || "Browser" });
@@ -599,6 +609,7 @@
       bridgeReady: function () { if (active && !disposed && !session && !opening) open().catch(fail); },
       pluginImported: function (pluginId) {
         if (disposed || !pluginId) return;
+        clearHomeSuggestions();
         var value = current && current.target, locator = RNAssistantBrowserTarget.preferenceLocator(current && current.url || target.locator);
         var parts = locator && locator.split("/"), matches = value && value.pluginId ? value.pluginId === pluginId
           : parts && parts[1] === "plugins" && decodeURIComponent(parts[2]) === pluginId;
@@ -616,6 +627,7 @@
         if (!value || value.immutable || value.kind !== "HtmlWorkspace" || notice.scope !== "document:" + value.documentId ||
             !Number.isSafeInteger(notice.generation) || notice.generation <= authorityRevision) return;
         authorityRevision = notice.generation; sourceInvalidated = true; if (active) refreshSource();
+        clearHomeSuggestions();
       },
       route: function () { return { view: "browser", browserTabId: target.browserTabId, ownerScope: current && current.ownerScope || target.ownerScope, chatBound: current ? current.chatBound : target.chatBound, locator: current && current.url || target.locator, title: current && current.title || target.title }; },
       activate: function () { if (disposed || active) return; active = true; renderer.activate(); if (session) { if (targetInvalidated) reloadInvalidated(); else { render(); if (current) annotationHost.update(current); if (sourceInvalidated) refreshSource(); else versionControls.refresh(); } } else open().catch(fail); },

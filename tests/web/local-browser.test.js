@@ -64,6 +64,7 @@ const {withPreviewPage} = require('./preview-session');
     assert.equal(await root.getByRole('button',{name:'Копировать адрес',exact:true}).count(),0,'exact address copy control is removed');
     await address.blur();
     await address.fill('old');await address.fill('new');
+    await page.evaluate(()=>{const value=localProbe.pages.get('tab-one');value.title='Обновлено';value.revision++;RNAssistantBrowser.apply(structuredClone(value));});
     await page.evaluate(() => {localProbe.pending.splice(0).reverse().forEach(resolve=>resolve());});
     await root.locator('.preview-surface-completion').getByRole('option').filter({hasText:'new'}).waitFor();
     assert.equal(await root.locator('.preview-surface-completion').getByRole('option').count(),1,'stale completion cannot replace latest query');
