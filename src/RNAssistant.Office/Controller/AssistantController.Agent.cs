@@ -118,9 +118,7 @@ namespace RNAssistant.Office
                 _activeRuns.UpdateIdentity(session, runId);
 
                 var firstRunMessageIndex = session.Messages == null ? 0 : session.Messages.Count;
-                var runProgress = CreateControllerRunProgress(
-                    session, runId, firstRunMessageIndex,
-                    progress, chatStateChanged);
+                var runProgress = CreateControllerRunProgress(session, runId, progress, chatStateChanged);
 
                 settings.ToolResultRole = PendingToolResultRole(session, pending.Command, settings.ToolResultRole);
                 var tools = _toolCatalog.GetFreshConversationTools().Where(tool => tool.Enabled).ToList();
@@ -235,7 +233,7 @@ namespace RNAssistant.Office
                 _activeRuns.UpdateIdentity(session, runId);
                 trace = RunCausalTrace.Begin(_eventStore, session);
                 var firstMessage = session.Messages.Count;
-                var runProgress = CreateControllerRunProgress(session, runId, firstMessage, progress, changed);
+                var runProgress = CreateControllerRunProgress(session, runId, progress, changed);
                 var completion = await _conversationRunService.ResumeWaitAsync(session,
                     new ConversationRunInput(settings, context, tools, skills, ConversationInputMessage.Latest(session)?.Attachments),
                     runProgress, RegisterPendingAgentTool, cancellation.Token).ConfigureAwait(false);

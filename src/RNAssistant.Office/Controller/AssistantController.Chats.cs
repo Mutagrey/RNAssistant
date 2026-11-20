@@ -287,6 +287,7 @@ namespace RNAssistant.Office
                 currentSession =>
                 {
                     ChatHistoryEditService.ValidateUserMessageEdit(currentSession, id, index, text);
+                    _inbox.ReleaseEmptyPauseForEditedTurn(currentSession);
                     var edit = _toolExecutor.MutateChatResources(currentSession,
                         new ChatResourceMutationIntent(ChatResourceMutationKind.Edit, id, index, text),
                         () => _chatHistoryEditService.RewriteUserMessage(currentSession, sessionId, id, index, text));

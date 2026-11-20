@@ -25,6 +25,7 @@ namespace RNAssistant.MockDemo
         {
             var options = DemoOptions.Parse(args);
             if ((args ?? new string[0]).Contains("--confirmation-input-test")) return await RunConfirmationInputTestsAsync().ConfigureAwait(false);
+            if ((args ?? new string[0]).Contains("--native-tool-recovery-test")) return await RunNativeToolRecoveryTestAsync().ConfigureAwait(false);
             if ((args ?? new string[0]).Contains("--resource-workflow-test")) return await RunResourceWorkflowTestAsync().ConfigureAwait(false);
             if (options.UnifiedAgentTest) return await RunUnifiedAgentTestAsync().ConfigureAwait(false);
             SettingsService.ConfigureDemoDefaults(options.BaseUrl, "mock-strict");

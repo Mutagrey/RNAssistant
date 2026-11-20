@@ -3,12 +3,15 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office;
 using RNAssistant.Harness;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Tools;
 
 namespace RNAssistant.MockDemo
 {
@@ -20,6 +23,79 @@ namespace RNAssistant.MockDemo
                 OperationId = Guid.NewGuid().ToString("N"), Text = text, Delivery = InputDelivery.Queue }, null, null);
             await controller.InboxWorkersDrained.ConfigureAwait(false);
             return controller.GetChatState(chatId);
+        }
+
+        private static async Task<int> RunNativeToolRecoveryTestAsync()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "RNAssistant.NativeToolRecovery." + Guid.NewGuid().ToString("N"));
+            try
+            {
+                var paths = AppDataPaths.CreateForRoot(root);
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                new SettingsService(paths).Save(new AppSettings { AutoCompressContext = false, SmartChatTitles = false,
+                    ContextWindowOverrideTokens = 65536, MaxAgentFormatRetries = 0 });
+                var calls = 0;
+                var finishOnly = false;
+                using (var controller = new AssistantController(adapter, paths, (settings, messages, token) =>
+                {
+                    calls++;
+                    string response;
+                    if (!finishOnly && calls <= 2)
+                    {
+                        var call = calls == 1 ? new ConversationToolCall { Name = "core.tools.read",
+                            Arguments = new JObject { ["id"] = ExcelReadToolIds.Inspect } } :
+                            new ConversationToolCall { Name = ExcelReadToolIds.Inspect,
+                                Arguments = new JObject { ["kind"] = "workbook" } };
+                        response = ModelProtocolWire.WriteAcceptedCall("Inspect the workbook.", null, call);
+                    }
+                    else
+                    {
+                        var results = finishOnly ? new ConversationResultClaim[0] : new[] {
+                            new ConversationResultClaim("Workbook inspected.", ModelReferenceProjection.Delivered(messages.ToArray()),
+                                ConversationAssessment.Satisfied) };
+                        response = ModelProtocolWire.WriteAcceptedDecision("finish", "Report the result.", "Done.",
+                            outcome: ConversationOutcome.Completed, results: results);
+                    }
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
+                }))
+                {
+                    var id = controller.Initialize().ActiveChatId;
+                    var publishedResults = 0;
+                    controller.SubmitChatInput(new SubmitChatInputPayload { ChatId = id,
+                        OperationId = "native-tool-recovery", Text = "Inspect the workbook.", Delivery = InputDelivery.Queue },
+                        (run, phase, message, activity) =>
+                        {
+                            if (phase != "tool_result") return;
+                            publishedResults++;
+                            activity.Title = "Changed in progress callback";
+                        }, null);
+                    await controller.InboxWorkersDrained.ConfigureAwait(false);
+                    var state = controller.GetChatState(id);
+                    var toolRunPassed = calls == 3 && state.RunViewState?.Lifecycle == RunViewLifecycles.Completed &&
+                        state.RunViewState.SuccessfulReads == 2 && publishedResults == 2 &&
+                        state.Messages.Count(item => item.Activity?.ToolCallId != null &&
+                            item.Activity.Status == "completed" && item.Activity.Title != "Changed in progress callback") == 2;
+                    if (!toolRunPassed)
+                        Console.Error.WriteLine("Tool run failed: " + string.Join(" | ", state.Messages.Select(item => item.Content)));
+
+                    if (!controller.StopChatInbox(id).Paused) throw new Exception("The empty inbox was not paused.");
+                    ChatCreationSessions(paths, adapter, out var store);
+                    var transcript = store.Load(id).Messages;
+                    var original = transcript.FindIndex(message => message.Role == "user");
+                    var messageId = transcript[original].Id;
+                    finishOnly = true;
+                    var callsBeforeEdit = calls;
+                    var edited = await controller.EditMessageAsync("Use the revised request.", messageId, original, id);
+                    if (calls != callsBeforeEdit + 1 || edited.RunViewState?.Lifecycle != RunViewLifecycles.Completed ||
+                        edited.Inbox.Paused || !edited.Messages.Any(item => item.Id == messageId && item.Content == "Use the revised request."))
+                        throw new Exception("Editing an idle chat did not start a new run after an empty queue pause.");
+                    if (!toolRunPassed) return 1;
+                    Console.WriteLine("PASS native Office tool run and edit after an empty queue pause");
+                    return 0;
+                }
+            }
+            catch (Exception error) { Console.Error.WriteLine(error); return 1; }
+            finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
         }
 
         private static async Task<int> RunUnifiedAgentTestAsync()

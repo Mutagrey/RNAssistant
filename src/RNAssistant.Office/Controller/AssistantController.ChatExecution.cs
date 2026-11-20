@@ -36,8 +36,11 @@ namespace RNAssistant.Office
             {
                 var message = session.Messages[index];
                 if (message == null) continue;
+                var position = sequence++;
+                // Preserve the run identity and activity already assigned by their owner.
+                if (message.RunId != null) continue;
                 message.RunId = runId;
-                message.Sequence = sequence++;
+                message.Sequence = position;
                 if (message.Activity != null)
                 {
                     AnnotateActivity(message.Activity, runId, message.Sequence);
@@ -54,19 +57,6 @@ namespace RNAssistant.Office
             {
                 AnnotateActivity(child, runId, sequence);
             }
-        }
-
-        private void PersistRunCheckpoint(ChatSession session, string runId, string phase, int firstMessageIndex)
-        {
-            if (!string.Equals(phase, "tool_running", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(phase, "tool_result", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(phase, "waiting_agents", StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-            if (session.LastRun == null || session.LastRun.KernelState == null)
-                SaveSessionChanges(session, session.Messages.Skip(firstMessageIndex));
-            _activeRuns.UpdateIdentity(session, runId);
         }
 
         private ConversationRunHandle StartControllerRun(
@@ -105,7 +95,6 @@ namespace RNAssistant.Office
         private Action<string, string, ChatActivity> CreateControllerRunProgress(
             ChatSession session,
             string runId,
-            int firstMessageIndex,
             Action<string, string, ChatActivity> progress,
             Action<ChatStateResponse> chatStateChanged)
         {
@@ -128,20 +117,21 @@ namespace RNAssistant.Office
                     session.LastRun.CurrentAction = string.IsNullOrWhiteSpace(message)
                         ? session.LastRun.CurrentAction : message;
                 }
-                if (activity != null) AnnotateActivity(activity, runId, null);
-                if (string.Equals(phase, "tool_running", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(phase, "tool_result", StringComparison.OrdinalIgnoreCase))
-                {
-                    AnnotateRunMessages(session, firstMessageIndex, runId);
-                }
-                PersistRunCheckpoint(session, runId, phase, firstMessageIndex);
-                if (string.Equals(phase, "tool_result", StringComparison.OrdinalIgnoreCase))
+                var toolResult = phase == "tool_result";
+                if (phase == "tool_running" || toolResult || phase == "waiting_agents")
+                    _activeRuns.UpdateIdentity(session, runId);
+                if (toolResult)
                 {
                     // Kernel persistence precedes this callback. Publish the complete
                     // revisioned projection before the next model step.
                     ReportExternalChatState(chatStateChanged, session, includeCatalog: false);
                 }
-                ReportExternalProgress(progress, phase, message, activity);
+                if (progress != null)
+                {
+                    var view = activity?.CopyForContext();
+                    if (view != null && view.RunId == null) AnnotateActivity(view, runId, null);
+                    ReportExternalProgress(progress, phase, message, view);
+                }
             };
         }
 
@@ -544,9 +534,7 @@ namespace RNAssistant.Office
                     throw;
                 }
 
-                var runProgress = CreateControllerRunProgress(
-                    session, runId, firstRunMessageIndex,
-                    progress, chatStateChanged);
+                var runProgress = CreateControllerRunProgress(session, runId, progress, chatStateChanged);
 
                 ChatTurnResult completion;
                 try

@@ -727,6 +727,18 @@ namespace RNAssistant.Application.Conversations
                 }
         }
 
+        internal void ReleaseEmptyPauseForEditedTurn(ChatSession session)
+        {
+            var box = Get(session);
+            lock (box.Sync)
+            {
+                if (!box.Paused) return;
+                if (box.Inputs.Any(IsPending))
+                    throw new InvalidOperationException("Перед повторным запуском возобновите очередь или удалите ожидающие сообщения.");
+                Write(box, null, false, null);
+            }
+        }
+
         internal void Resume(ChatSession session)
         {
             bool created;

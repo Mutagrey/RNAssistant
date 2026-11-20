@@ -2042,6 +2042,8 @@ A commit names appended/updated messages, including the stamped run-view project
 and released media. Storage serializes those messages and preserves paired batch
 ordering without diffing every message body. Omitting a new message fails before
 append. Initial/user admission is saved before the first kernel fact.
+Office progress publishes a detached activity. The kernel's exact tool event owns
+changes to the retained tool activity.
 
 `ConversationRunCommit.Persist` submits once and applies the confirmed cursor and
 derived state to the caller without replacing its messages. A returning handler
@@ -2534,6 +2536,11 @@ cleared in that input's own durable intake event. Replay rejects
 one operation ID assigned to multiple inputs or changes to an
 input's immutable request fingerprint, run/question IDs or runtime target across
 transitions; neither Office nor workspace may acknowledge that history as accepted.
+
+Editing and rerunning in Office records the release of an empty queue's pause
+before changing history. With retained input, an edit can start after explicit
+queue resume or removal of the retained input.
+
 An Office immediate steer is admitted through the shared Application inbox only
 for the exact running kernel run. A steer while a tool confirmation is pending
 also stores the exact pending ID. The inbox refuses a stale run/pending target;
