@@ -104,10 +104,12 @@ namespace RNAssistant.Office.Services
             return result;
         }
 
-        private sealed class BoundOfficeResource : IReadOnlyToolHandler
+        private sealed class BoundOfficeResource : IReadOnlyToolHandler, IToolContinuationOwner
         {
             private readonly IReadOnlyToolHandler _inner;
             internal BoundOfficeResource(IReadOnlyToolHandler inner) { _inner = inner; }
+            public bool OwnsResult(string runId, string callId) => (_inner as IToolContinuationOwner)?.OwnsResult(runId, callId) == true;
+            public bool CanContinue(IDictionary<string, object> arguments) => (_inner as IToolContinuationOwner)?.CanContinue(arguments) == true;
             public Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken token)
             {
                 object value;

@@ -24,7 +24,8 @@ namespace RNAssistant.Core.Tools
         Replan,
         RefreshRequired,
         RetryLater,
-        ChangeRequired
+        ChangeRequired,
+        FreshContinuation
     }
 
     [Newtonsoft.Json.JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
@@ -33,6 +34,12 @@ namespace RNAssistant.Core.Tools
         None,
         Whole,
         RelevantLines
+    }
+
+    public interface IToolContinuationOwner
+    {
+        bool OwnsResult(string runId, string callId);
+        bool CanContinue(IDictionary<string, object> arguments);
     }
 
     public sealed class ToolRecoveryContract

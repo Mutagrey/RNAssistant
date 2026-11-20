@@ -9,6 +9,7 @@ namespace RNAssistant.Core.Tools
     // complete typed policy. A typed contract cannot match an untyped snapshot.
     public sealed class ToolPolicySnapshot
     {
+        [JsonIgnore] internal bool HasLiveContinuation { get; set; }
         public string ToolId { get; private set; }
         public string Revision { get; private set; }
         public bool MayHaveSideEffects { get; private set; }
@@ -69,6 +70,8 @@ namespace RNAssistant.Core.Tools
         public bool IndependentLocalRead { get; private set; }
         public bool OpaqueAction { get; private set; }
         public bool OpaqueActionCompleted { get; private set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool ManualVerificationRequired { get; private set; }
         public EvidenceEligibility EvidenceEligibility { get; private set; }
         public DateTime? CompletedUtc { get; private set; }
         public string AdmissionRevision { get; private set; }
@@ -80,7 +83,7 @@ namespace RNAssistant.Core.Tools
             string resultFingerprint = null, bool independentLocalRead = false, string admissionRevision = null,
             DateTime? completedUtc = null, bool opaqueAction = false, EvidenceEligibility evidenceEligibility = EvidenceEligibility.None,
             bool opaqueActionCompleted = false, bool waitTimedOut = false,
-            RNAssistant.Core.Models.ToolOperationReference operation = null)
+            RNAssistant.Core.Models.ToolOperationReference operation = null, bool manualVerificationRequired = false)
         {
             Outcome = outcome; Recovery = recovery; ResultFingerprint = resultFingerprint;
             CompletedUtc = completedUtc;
@@ -90,6 +93,7 @@ namespace RNAssistant.Core.Tools
             OpaqueAction = opaqueAction;
             if (opaqueActionCompleted && (!opaqueAction || outcome != ToolExecutionOutcome.Unknown))
                 throw new ArgumentException("Normal opaque completion must retain unknown effect health.");
+            ManualVerificationRequired = outcome == ToolExecutionOutcome.Unknown && manualVerificationRequired;
             OpaqueActionCompleted = opaqueActionCompleted;
             AdmissionRevision = admissionRevision;
             if (waitTimedOut && (outcome != ToolExecutionOutcome.Ok || recovery != null ||
@@ -120,7 +124,8 @@ namespace RNAssistant.Core.Tools
                     record.Outcome == ToolExecutionOutcome.Unknown && record.Evidence.InvocationCompleted,
                 record.WaitTimedOut, record.ResourceEvidence.Select(item => item.OperationObservation?.Operation)
                     .FirstOrDefault(item => item != null && item.RunId == record.Context.RunId &&
-                        item.CallId == record.Context.Call.Id && item.CallSignature == AgentProgressTracker.Signature(record.Context.Call)));
+                        item.CallId == record.Context.Call.Id && item.CallSignature == AgentProgressTracker.Signature(record.Context.Call)),
+                record.Context.Policy.Policy?.ManualVerificationAfterUnknown == true);
         }
     }
 

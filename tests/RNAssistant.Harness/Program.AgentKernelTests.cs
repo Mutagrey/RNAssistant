@@ -876,6 +876,33 @@ namespace RNAssistant.Harness
             AssertEqual("repeated_unknown_tool_call", reason, "uncertain effect remains protected");
         }
 
+        private static async Task KernelBrowserManualVerification()
+        {
+            foreach (var outcome in new[] { ConversationOutcome.Partial, ConversationOutcome.UnableToComplete })
+            {
+                var tool = RNAssistant.Office.Tools.ExternalBrowserToolHandler.Catalog().Single(entry =>
+                    entry.Id == RNAssistant.Office.Tools.ExternalBrowserToolHandler.Click);
+                var partial = new AgentResponseDraft(ConversationResponse.FinishAction, "Manual verification is required.",
+                    "Подтверждение клика потеряно. Проверьте страницу вручную.", results: outcome == ConversationOutcome.Partial
+                        ? new[] { new ConversationResultClaim("Исходное состояние страницы прочитано, результат клика неизвестен.",
+                            new[] { "call_1" }, ConversationAssessment.PartiallySatisfied) }
+                        : new[] { new ConversationResultClaim("Результат клика неизвестен.", new[] { "call_2" },
+                            ConversationAssessment.Unverified) }, outcome: outcome);
+                var claimedSuccess = new AgentResponseDraft(ConversationResponse.FinishAction, "Claimed success after click.",
+                    "Готово.", results: new[] { new ConversationResultClaim("Страница прочитана.", new[] { "call_1" },
+                        ConversationAssessment.Satisfied) }, outcome: ConversationOutcome.Completed);
+                var fixture = new KernelFixture(KernelResponse(KernelCall("read")), KernelResponse(KernelCall(tool.Id)), claimedSuccess, partial);
+                fixture.Tools.Policies[tool.Id] = new ToolPolicySnapshot(tool.Id, "browser", tool.Policy);
+                fixture.Tools.OnExecute = (context, token) => Task.FromResult(InspectedKernelRecord(context,
+                    context.Call.Name == tool.Id ? ToolExecutionOutcome.Unknown : ToolExecutionOutcome.Ok));
+                var run = await fixture.RunAsync(limits: new AgentRunLimits(4, 3));
+                AssertEqual(RunLifecycle.Completed, run.Summary.Lifecycle, "manual finish admitted");
+                AssertEqual(ExecutionHealth.Unknown, run.Summary.ExecutionHealth, "manual finish preserves uncertain effect");
+                AssertEqual(2, fixture.Tools.Calls.Count, "one read and one click despite lost acknowledgement");
+                AssertTrue(fixture.Model.Requests[3].CompletionFeedback != null, "unsupported completed claim rejected first");
+            }
+        }
+
         private static async Task KernelOpaqueUnknownFinishesWithoutImpossibleInspection()
         {
             var f = new KernelFixture(KernelResponse(KernelCall("external")), KernelResponse());

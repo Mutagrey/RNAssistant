@@ -51,7 +51,7 @@ namespace RNAssistant.Office.Tools
                     "Read-back must prove the requested state change; dispatch alone is unknown. All held input releases in finally. Unqualified native isolation/input is refused, never replaced with synthetic DOM events.",
                     JsonConvert.SerializeObject(new { type = "object", properties, required, additionalProperties = false }));
                 yield return ControllerToolCatalogEntry.CreateTypedProjection(descriptor,
-                    new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, true, false, new[] { "agent" }, 1), BindingFor(id), scope: "session", mutatesLocalState: true);
+                    new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, true, false, new[] { "agent" }, 1, manualVerificationAfterUnknown: true), BindingFor(id), scope: "session", mutatesLocalState: true);
             }
         }
         private static BrowserActionRequest InputRequest(ToolHandlerContext context, string name, string locator)

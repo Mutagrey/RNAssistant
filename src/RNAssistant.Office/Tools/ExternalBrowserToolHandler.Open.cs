@@ -20,7 +20,7 @@ namespace RNAssistant.Office.Tools
                 "A result confirms the visible Dock tab only; execution/read/input availability is explicit. Unknown opens must not be retried; close the tab manually first.",
                 "{\"type\":\"object\",\"properties\":{\"target\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":512,\"description\":\"Exact Browser source semantic target returned by core.find in this run.\"}},\"required\":[\"target\"],\"additionalProperties\":false}");
             return ControllerToolCatalogEntry.CreateTypedProjection(descriptor,
-                new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, true, false, new[] { "agent" }, 1),
+                new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, true, false, new[] { "agent" }, 1, manualVerificationAfterUnknown: true),
                 BindingFor(Open), scope: "session", mutatesLocalState: true);
         }
         private ToolPreparationResult PrepareOpen(ToolHandlerContext context, CancellationToken token)

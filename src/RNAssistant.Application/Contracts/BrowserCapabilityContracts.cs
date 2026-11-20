@@ -14,11 +14,12 @@ namespace RNAssistant.Application.Contracts
         BrowserCapabilitySet ForOwner(BrowserOwnerScope owner, ChatSession session, AppSettings settings,
             string runId, Action<string, IReadOnlyList<ChatAttachment>> captureMedia,
             IResourceAuthorityStore authority, IResourceRevisionStore revisions,
-            IResourceMutationJournal mutations, ChatBlobStore payloads);
+            IResourceMutationJournal mutations, ChatBlobStore payloads, Func<ToolExecutionContext, ResourceMutationOrigin> origin = null);
     }
 
     public sealed class BrowserCapabilitySet
     {
+        public IToolMutationObserver MutationObserver { get; set; }
         public IReadOnlyList<WorkspaceToolContribution> Tools { get; set; }
         public IReadOnlyToolHandler ResourceFind { get; set; }
         public IReadOnlyToolHandler ResourceRead { get; set; }

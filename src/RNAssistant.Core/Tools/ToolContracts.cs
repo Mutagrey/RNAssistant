@@ -62,6 +62,8 @@ namespace RNAssistant.Core.Tools
         [JsonProperty(Required = Required.Always)]
         public ToolExecutionClass ExecutionClass { get; private set; }
         public bool ExecutesCode { get; private set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool ManualVerificationAfterUnknown { get; private set; }
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
         public EvidenceEligibility EvidenceEligibility { get; private set; }
         [JsonIgnore]
@@ -74,7 +76,7 @@ namespace RNAssistant.Core.Tools
         public ToolPolicy(ToolEffect effect, ToolVerification verification, bool requiresConfirmation,
             bool independentLocalRead, IEnumerable<string> allowedModes, int riskLevel = 0, bool executesCode = false,
             EvidenceEligibility evidenceEligibility = EvidenceEligibility.Eligible, bool independentAgentMessage = false,
-            bool allowSequentialBatch = false)
+            bool allowSequentialBatch = false, bool manualVerificationAfterUnknown = false)
         {
             if (!Enum.IsDefined(typeof(ToolEffect), effect)) throw new ArgumentOutOfRangeException(nameof(effect));
             if (!Enum.IsDefined(typeof(ToolVerification), verification)) throw new ArgumentOutOfRangeException(nameof(verification));
@@ -91,6 +93,8 @@ namespace RNAssistant.Core.Tools
             if (modes.Length == 0 || modes.Any(mode => mode != "agent" && mode != "plan" && mode != "chat"))
                 throw new ArgumentException("Explicit supported conversation modes are required.", nameof(allowedModes));
             if (!Enum.IsDefined(typeof(EvidenceEligibility), evidenceEligibility)) throw new ArgumentOutOfRangeException(nameof(evidenceEligibility));
+            if (manualVerificationAfterUnknown && effect == ToolEffect.Read) throw new ArgumentException("Manual verification requires a mutation.");
+            ManualVerificationAfterUnknown = manualVerificationAfterUnknown;
             EvidenceEligibility = evidenceEligibility;
             Effect = effect;
             Verification = verification;
@@ -117,7 +121,7 @@ namespace RNAssistant.Core.Tools
             return other != null && Effect == other.Effect && Verification == other.Verification &&
                 RequiresConfirmation == other.RequiresConfirmation && IndependentLocalRead == other.IndependentLocalRead &&
                 IndependentAgentMessage == other.IndependentAgentMessage && AllowSequentialBatch == other.AllowSequentialBatch &&
-                EvidenceEligibility == other.EvidenceEligibility && RiskLevel == other.RiskLevel && ExecutesCode == other.ExecutesCode && ExecutionClass == other.ExecutionClass &&
+                ManualVerificationAfterUnknown == other.ManualVerificationAfterUnknown && EvidenceEligibility == other.EvidenceEligibility && RiskLevel == other.RiskLevel && ExecutesCode == other.ExecutesCode && ExecutionClass == other.ExecutionClass &&
                 AllowedModes.SequenceEqual(other.AllowedModes, StringComparer.Ordinal);
         }
     }

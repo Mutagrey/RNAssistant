@@ -138,6 +138,12 @@ namespace RNAssistant.Harness
                 AssertTrue(source.Blocked, "lost terminal evidence blocks further native mutations");
                 AssertEqual(BrowserActionEffect.Unknown, presented.Value, "channel loss never paints success");
                 AssertEqual(0, journal.Unresolved().Count, "unknown is a terminal fact, not a replay request");
+                var tracker = new AgentProgressTracker();
+                var progress = JsonConvert.DeserializeObject<ToolExecutionProgress>(JsonConvert.SerializeObject(ToolExecutionProgress.Capture(unknown)));
+                tracker.Observe(unknown.Context.Call, progress, unknown.Message, unknown.ResourceEvidence, unknown.ResourceEffect);
+                AssertTrue(tracker.RequiresManualInspection, "persisted Browser Unknown requires manual verification");
+                string reason, feedback; int delay;
+                AssertTrue(!tracker.CanDispatch(unknown.Context.Call, out reason, out feedback, out delay), "same Browser action stays blocked");
                 var attempts = source.Dispatches;
                 read = execute(ResourceToolCatalog.ReadToolId, new { target = args.target }, null);
                 source.AfterDispatch = null;
@@ -163,7 +169,8 @@ namespace RNAssistant.Harness
                     registry.Register(ToolPackSnapshot.Capture(new ToolDescriptor(contribution.Entry.Id,
                         contribution.Entry.Description, contribution.Entry.ArgumentSchemaJson),
                         contribution.Entry.Policy, contribution.Entry.Binding), contribution.Handler);
-                var runtime = new ToolRuntime(registry, "agent", true, true);
+                var runtime = new ToolRuntime(registry, "agent", true, true, mutationObserver:
+                    new RNAssistant.Runtime.WorkspacePlanningObserver(null, null, browser: bound));
                 var readCall = new ToolCall("read", "core.read", "{}");
                 var read = bound.ResourceRead.ExecuteAsync(new ToolHandlerContext(new ToolExecutionContext(readCall,
                     new ToolPolicySnapshot(readCall.Name, "test", ResourceReadToolHandler.Policy), "run", "turn", "read-step", DateTime.UtcNow, false, 1),
@@ -177,6 +184,7 @@ namespace RNAssistant.Harness
                 var result = runtime.ExecuteAsync(new ToolExecutionContext(call, runtime.Describe(call), "run", "turn", "step", DateTime.UtcNow, false, 1),
                     CancellationToken.None).GetAwaiter().GetResult();
                 AssertEqual(ToolExecutionOutcome.Ok, result.Outcome, result.Message);
+                AssertTrue(result.AuthorityCommitId != null, "Workspace observer publishes the Browser terminal");
                 AssertEqual(1, source.Dispatches, "bound Workspace shares the same native action owner and runtime evidence");
             });
         }

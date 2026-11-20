@@ -228,7 +228,14 @@ namespace RNAssistant.Harness
             AssertTrue(!restartedWire.Result.DataJson.Contains("\"next\":true") &&
                 restartedWire.Result.DataJson.Contains("\"nextExpired\":true"),
                 "a new run receives no promise for a dead handler cursor");
-            var sameRun = new ModelContextCompiler().Compile(authority, new ChatMessage[0],
+            var owner = new ResourceTextSearch();
+            var query = new ResourceTextSearchRequest { Target = "a.js", Query = "hit", Limit = 1 };
+            var inputs = new ResourceSearchSources();
+            inputs.Items.Add(new ResourceSearchSource { Target = "a.js", Open = token => new ResourceSearchText {
+                Reference = new ResourceRef("rna://test/file", "r1"), Reader = new System.IO.StringReader("hit one\nhit two") } });
+            var page = owner.SearchModel(query, inputs, CancellationToken.None);
+            owner.RecordResult(savedSearch.RunId, savedSearch.ToolCallId, page);
+            var sameRun = new ModelContextCompiler(ownsSearch: owner.OwnsResult).Compile(authority, new ChatMessage[0],
                 new[] { savedSearch, new ChatMessage { Role = "user", Content = "Continue this run.", RunId = "run-old" } },
                 null, new ToolCatalogEntry[0], new AppSettings { ToolResultRole = "user" }, 20000);
             var sameRunResult = sameRun.Messages.Single(message => message.Id == savedSearch.Id);
@@ -236,6 +243,19 @@ namespace RNAssistant.Harness
             AssertTrue(ToolResultHistoryReader.TryRead(sameRunResult, out sameRunWire, out sameRunError) &&
                 sameRunWire.Result.DataJson.Contains("\"next\":true"),
                 "the latest search in the owning run keeps its live continuation");
+            var tracker = new AgentProgressTracker();
+            var args = new Dictionary<string, object> { ["target"] = "a.js", ["query"] = "hit", ["limit"] = 1, ["next"] = true };
+            var nextCall = new ToolCall("next-id", "core.search", JsonConvert.SerializeObject(args));
+            tracker.Observe(nextCall, new ToolExecutionProgress(ToolExecutionOutcome.Error,
+                new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.FreshContinuation)), "stale", null, null);
+            var policy = new ToolPolicySnapshot("core.search", "r1", false);
+            string reason, feedback; int delay;
+            AssertTrue(!tracker.CanDispatch(nextCall, out reason, out feedback, out delay, policy), "missing owner blocks next");
+            AssertTrue(!new ResourceTextSearch().OwnsResult(savedSearch.RunId, savedSearch.ToolCallId), "replacement owner expires same-run state");
+            policy.HasLiveContinuation = owner.CanContinue(args);
+            AssertTrue(tracker.CanDispatch(nextCall, out reason, out feedback, out delay, policy), "matching fresh search releases only its next call");
+            query.Next = true;
+            AssertEqual(2, owner.SearchModel(query, inputs, CancellationToken.None).Matches.Single().StartLine.Value, "admitted next returns the second line");
             var incompleteSummary = ToolResultSummaryProjection.Summarize("core.search", JObject.Parse(
                 "{\"matches\":[],\"scanComplete\":false,\"sourceComplete\":true,\"matchesComplete\":false,\"totalMatchesExact\":false,\"incompleteReasons\":[\"page_limit\"]}").ToString());
             AssertTrue(incompleteSummary.Complete == false && incompleteSummary.Partial,
@@ -266,17 +286,20 @@ namespace RNAssistant.Harness
             AssertTrue(!contextModel.ToString().Contains("rna://"), "context projection does not leak exact references");
             AssertTrue(contextModel.Value<bool>("complete") && contextModel["totalMatches"] != null,
                 "completed search reports trustworthy totalMatches");
+            var bodyOpens = 0; var revisionChecks = 0;
             var sources = new ResourceSearchSources {
                 Items = Enumerable.Range(0, 250).Select(index => new ResourceSearchSource {
                     Target = index.ToString("D4") + ".txt",
-                    Open = token => new ResourceSearchText {
+                    CurrentReference = token => { revisionChecks++; return new ResourceRef("rna://fixture/" + index, "r1"); },
+                    Open = token => { bodyOpens++; return new ResourceSearchText {
                         Reference = new ResourceRef("rna://fixture/" + index, "r1"),
-                        Reader = new StringReader(index == 249 ? "needle" : "unrelated") }
+                        Reader = new StringReader(index == 249 ? "needle" : "unrelated") }; }
                 }).ToList()
             };
             var autoRequest = new ResourceTextSearchRequest { Scope = "workspace", Query = "needle" };
             var autoPage = new ResourceTextSearch().SearchWithAutomaticPaging(autoRequest, sources, CancellationToken.None);
             AssertEqual("0249.txt", autoPage.Matches.Single().Target, "runtime skips empty search pages");
+            AssertTrue(bodyOpens == 250 && revisionChecks > 0, "earlier pins are verified without reopening their text");
             AssertTrue(autoPage.ScanComplete && autoPage.SourceComplete && autoPage.Continuation == null,
                 "runtime completed sparse search without additional model turns");
             AssertEqual(250, autoPage.ExactReferences.Count, "hidden pages preserve exact canonical source references");

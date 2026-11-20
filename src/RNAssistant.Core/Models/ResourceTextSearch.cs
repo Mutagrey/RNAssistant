@@ -39,6 +39,7 @@ namespace RNAssistant.Core.Models
     {
         public string Target { get; set; }
         public Func<CancellationToken, ResourceSearchText> Open { get; set; }
+        public Func<CancellationToken, ResourceRef> CurrentReference { get; set; }
     }
 
     public sealed class ResourceSearchText : IDisposable

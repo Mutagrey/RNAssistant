@@ -135,6 +135,7 @@ namespace RNAssistant.Core.Tools
                 },
                 ["package"] = PackageFingerprint(packageMetadata)
             };
+            if (policy.ManualVerificationAfterUnknown) identity["policy"]["manualVerificationAfterUnknown"] = true;
             if (policy.AllowSequentialBatch) identity["policy"]["allowSequentialBatch"] = true;
             return Hash(identity.ToString(Formatting.None));
         }
@@ -152,7 +153,7 @@ namespace RNAssistant.Core.Tools
                 source.Policy.IndependentLocalRead,
                 source.Policy.AllowedModes,
                 source.Policy.RiskLevel, source.Policy.ExecutesCode, source.Policy.EvidenceEligibility, source.Policy.IndependentAgentMessage,
-                source.Policy.AllowSequentialBatch);
+                source.Policy.AllowSequentialBatch, source.Policy.ManualVerificationAfterUnknown);
             var binding = new ToolBinding(
                 source.Binding.HandlerId,
                 source.Binding.EntryPoint,

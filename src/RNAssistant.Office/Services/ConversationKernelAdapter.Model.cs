@@ -10,6 +10,8 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.ModelProtocol;
+using RNAssistant.Core.Tools;
+using RNAssistant.Office.Tools;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
@@ -134,7 +136,8 @@ namespace RNAssistant.Office.Services
                 _conversations as IConversationContextStore,
                 browserPageTarget: CaptureBoundBrowserPageTarget(),
                 referencedResourceTarget: referencedTarget,
-                referencedResourceError: referencedError).ConfigureAwait(false);
+                referencedResourceError: referencedError, ownsSearch: (run, call) =>
+                    (_nativeTools.HandlerFor(ResourceToolCatalog.SearchToolId) as IToolContinuationOwner)?.OwnsResult(run, call) == true).ConfigureAwait(false);
         }
 
         private void RefreshBrowserContext()

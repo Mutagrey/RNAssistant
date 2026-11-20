@@ -364,6 +364,7 @@ namespace RNAssistant.Harness
                 Test("kernel: success then error", () => KernelPreservesCumulativeHealth(ToolExecutionOutcome.Ok, ToolExecutionOutcome.Error, ExecutionHealth.Errors, "0,0,1,1,0")),
                 Test("kernel: read inspection after unknown effect", KernelAllowsInspectionAfterUnknownEffect),
                 Test("kernel: unknown inspection is bounded and restored", KernelUnknownInspectionIsBoundedAndRestored),
+                Test("kernel: Browser Unknown permits an honest manual finish", KernelBrowserManualVerification),
                 Test("kernel: opaque unknown can finish and needs confirmation to repeat", KernelOpaqueUnknownFinishesWithoutImpossibleInspection),
                 Test("kernel: opaque normal return allows new calls with unknown effects", KernelOpaqueNormalReturnAllowsNewCalls),
                 Test("agent: Excel unknown continues through inspection", AgentExcelUnknownContinuesThroughInspection),

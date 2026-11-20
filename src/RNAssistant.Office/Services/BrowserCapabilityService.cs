@@ -23,7 +23,7 @@ namespace RNAssistant.Office.Services
         public BrowserCapabilitySet ForOwner(BrowserOwnerScope owner, ChatSession session, AppSettings settings,
             string runId, Action<string, IReadOnlyList<ChatAttachment>> captureMedia,
             IResourceAuthorityStore authorityStore, IResourceRevisionStore revisions,
-            IResourceMutationJournal mutations, ChatBlobStore payloads)
+            IResourceMutationJournal mutations, ChatBlobStore payloads, Func<ToolExecutionContext, ResourceMutationOrigin> origin = null)
         {
             if (session == null || owner == null || owner.Kind != BrowserOwnerKind.Workspace ||
                 owner.ChatId != session.Id || owner.ScopeId != session.WorkspaceId)
@@ -33,6 +33,7 @@ namespace RNAssistant.Office.Services
             var authority = new ResourceAuthorityService(authorityStore, revisions, mutations, payloads);
             var gateway = new ResourceGatewayService(null, null, null, authority: authority, externalBrowser: _source);
             return new BrowserCapabilitySet {
+                MutationObserver = new ResourceMutationAuthorityObserver(authority, mutations, session, payloads, origin: origin),
                 ModelProjection = ModelToolResultProjection.Instance,
                 Tools = ExternalBrowserToolHandler.Catalog().Select(entry => new WorkspaceToolContribution { Entry = entry,
                     Handler = new ExternalBrowserToolHandler(session, _source, null) }).ToArray(),
@@ -41,10 +42,12 @@ namespace RNAssistant.Office.Services
                 ResourceSearch = new ScopedBrowserRead(new ResourceSearchToolHandler(gateway, session, new ResourceSearchObservation()), false)
             };
         }
-        private sealed class ScopedBrowserRead : IReadOnlyToolHandler
+        private sealed class ScopedBrowserRead : IReadOnlyToolHandler, IToolContinuationOwner
         {
             private readonly IReadOnlyToolHandler _handler; private readonly bool _find;
             internal ScopedBrowserRead(IReadOnlyToolHandler handler, bool find) { _handler = handler; _find = find; }
+            public bool OwnsResult(string runId, string callId) => (_handler as IToolContinuationOwner)?.OwnsResult(runId, callId) == true;
+            public bool CanContinue(IDictionary<string, object> arguments) => (_handler as IToolContinuationOwner)?.CanContinue(arguments) == true;
             public Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken token)
             {
                 var arguments = new Dictionary<string, object>(context.Arguments); arguments.Remove("type");

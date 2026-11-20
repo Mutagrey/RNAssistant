@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Core.Agent
@@ -24,6 +25,7 @@ namespace RNAssistant.Core.Agent
             internal string View;
             internal ToolOperationReference Operation;
             internal DateTime? AfterUtc;
+            internal bool ManualVerification;
         }
         private readonly List<PendingInspection> _inspections = new List<PendingInspection>();
         private readonly HashSet<string> _unknown = new HashSet<string>(StringComparer.Ordinal);
@@ -67,6 +69,9 @@ namespace RNAssistant.Core.Agent
         // A workflow floor, not proof that the requested state was achieved.
         // Reconstructed from terminal facts; never clears unknown replay guards.
         internal bool InspectionRequired => _inspections.Count != 0;
+        internal bool RequiresManualInspection => InspectionRequired && _inspections.All(item =>
+            item.ManualVerification && item.Operation == null);
+        internal string InspectionGuidance => RequiresManualInspection ? ModelProtocolWire.ManualInspectionGuidance : ModelProtocolWire.UnknownEffectGuidance;
 
         internal void RetainReplayGuard(ToolCall call, ToolExecutionProgress progress)
         {
@@ -97,6 +102,11 @@ namespace RNAssistant.Core.Agent
             }
             Failure previous;
             if (!_failures.TryGetValue(key, out previous)) return true;
+            if (previous.Recovery?.RetryPolicy == ToolRetryPolicy.FreshContinuation && policy?.HasLiveContinuation == true)
+            {
+                _failures.Remove(key);
+                return true;
+            }
             var admission = policy?.AdmissionRevision ?? policy?.Revision;
             if (previous.Recovery?.RetryPolicy == ToolRetryPolicy.Replan &&
                 previous.AdmissionRevision != null && admission != null && previous.AdmissionRevision != admission)
@@ -155,7 +165,7 @@ namespace RNAssistant.Core.Agent
                     if (targets.Length == 0) targets = new ResourceIdentity[] { null };
                     foreach (var target in targets)
                         _inspections.Add(new PendingInspection { Target = target, AfterUtc = progress.CompletedUtc,
-                            Operation = progress.Operation,
+                            Operation = progress.Operation, ManualVerification = progress.ManualVerificationRequired,
                             View = progress.Operation != null ? progress.Operation.StatusView :
                                 target != null && target.Equals(progress.Recovery?.ResourceIdentity)
                                 ? progress.Recovery.View : null });
@@ -193,7 +203,7 @@ namespace RNAssistant.Core.Agent
                 else _mutableReadTargets.Remove(key);
             }
             if (progress.Outcome == ToolExecutionOutcome.Ok && progress.IndependentLocalRead)
-                _inspections.RemoveAll(pending => pending.Target != null && pending.AfterUtc.HasValue &&
+                _inspections.RemoveAll(pending => !pending.ManualVerification && pending.Target != null && pending.AfterUtc.HasValue &&
                     observations.Any(observation => pending.Target.Equals(observation.Resource.Identity) &&
                         (pending.View == null || string.Equals(pending.View, observation.View, StringComparison.Ordinal)) &&
                         !observation.Immutable && observation.ObservedAt > pending.AfterUtc.Value &&

@@ -66,8 +66,9 @@ namespace RNAssistant.Core.Services
         private readonly EvidenceStateReducer _reducer = new EvidenceStateReducer();
         private readonly ChatBlobStore _payloads;
         private readonly ModelResultProjection _projection;
-        public ModelContextCompiler(ChatBlobStore payloads = null, ModelResultProjection projection = null)
-        { _payloads = payloads; _projection = projection ?? new ModelResultProjection(); }
+        private readonly Func<string, string, bool> _ownsSearch;
+        public ModelContextCompiler(ChatBlobStore payloads = null, ModelResultProjection projection = null, Func<string, string, bool> ownsSearch = null)
+        { _payloads = payloads; _projection = projection ?? new ModelResultProjection(); _ownsSearch = ownsSearch; }
 
         public IReadOnlyList<ChatMessage> CompileRepair(
             ModelContextSnapshot snapshot, ChatMessage notice)
@@ -540,7 +541,7 @@ namespace RNAssistant.Core.Services
                         if (projectionSkills == null) projectionSkills = authority.Skills.Skills;
                         atom.Messages[index] = _projection.Project(message, tools, projectionSkills,
                             parts => atom.BodyParts[message.Id] = parts, skillSurface?.Tools,
-                            liveContinuation: message.Id == liveSearchResultId);
+                            liveContinuation: message.Id == liveSearchResultId && _ownsSearch?.Invoke(currentRunId, message.ToolCallId) == true);
                         foreach (var skill in skillSurface?.Instructions ?? new SkillDefinition[0])
                         {
                             var part = ContextClaimProjection.CompactSelectedSkillRead(atom.Messages[index], skill,

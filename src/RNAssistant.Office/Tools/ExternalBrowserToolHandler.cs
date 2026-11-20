@@ -72,7 +72,7 @@ namespace RNAssistant.Office.Tools
                     "Click one visible in-page button; expectedText must newly appear as a unique semantic entry within one second. For links use browser.navigate with linkName. ") +
                     "Rejects stale, ambiguous, disabled, sensitive, user-edited or incompletely observed targets. A changed document or missing read-back is unknown and must not be retried.", schema);
                 yield return ControllerToolCatalogEntry.CreateTypedProjection(descriptor,
-                    new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, true, false, new[] { "agent" }, 1),
+                    new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, true, false, new[] { "agent" }, 1, manualVerificationAfterUnknown: true),
                     BindingFor(id), scope: "session", mutatesLocalState: true);
             }
         }

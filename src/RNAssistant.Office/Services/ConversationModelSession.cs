@@ -82,7 +82,7 @@ namespace RNAssistant.Office.Services
             ResourceAuthorityService authority = null, ChatBlobStore payloads = null,
             Func<SkillCatalogSnapshot> captureSkills = null, long? catalogGeneration = null,
             IConversationContextStore contextStore = null, string browserPageTarget = null,
-            string referencedResourceTarget = null, string referencedResourceError = null)
+            string referencedResourceTarget = null, string referencedResourceError = null, Func<string, string, bool> ownsSearch = null)
         {
             if (authority != null && !catalogGeneration.HasValue || catalogGeneration < 0)
                 throw new ArgumentException("An authority-backed model session requires its captured catalog generation.", nameof(catalogGeneration));
@@ -104,7 +104,7 @@ namespace RNAssistant.Office.Services
             owner._catalogGeneration = catalogGeneration;
             owner._payloads = payloads;
             owner._skillSnapshot = captureSkills == null ? new SkillCatalogSnapshot(skills) : captureSkills();
-            owner._compiler = new ModelContextCompiler(payloads, projection: ModelToolResultProjection.Instance);
+            owner._compiler = new ModelContextCompiler(payloads, projection: ModelToolResultProjection.Instance, ownsSearch: ownsSearch);
             await owner.BuildMessagesAsync(mode, text, session, context, settings, runnableCatalog,
                 skills, attachments, replayCurrentUserInHistory, progress, cancellationToken).ConfigureAwait(false);
             owner._runCache = new LlmRunCache();

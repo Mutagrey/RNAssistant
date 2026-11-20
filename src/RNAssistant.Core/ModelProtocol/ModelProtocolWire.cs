@@ -25,6 +25,9 @@ namespace RNAssistant.Core.ModelProtocol
             "Avoid restating the task, lengthy deliberation or claiming an unexecuted action succeeded. ";
         public const string CriterionGuidance =
             "criterion is a short statement of one original user requirement, without copied source, logs or repeated explanation. ";
+        public const string ManualInspectionGuidance =
+            "The Browser action may already have taken effect. Tell the user which action needs manual verification. " +
+            "Do not replay it or claim it succeeded. Report partial or unable_to_complete if the remaining outcome cannot be verified.";
         public const string UnknownEffectGuidance =
             "An unknown effect requires investigation. Before finish, successfully read each affected exact current resource after the unconfirmed operation. " +
             "Inspection requires a fresh, complete whole-resource live read; partial ranges and immutable historical snapshots do not satisfy it. " +

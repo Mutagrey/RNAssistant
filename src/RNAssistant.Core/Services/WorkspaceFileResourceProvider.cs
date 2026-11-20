@@ -94,7 +94,9 @@ namespace RNAssistant.Core.Services
             foreach (var target in targets)
             {
                 var capturedTarget = target;
-                result.Items.Add(new ResourceSearchSource { Target = target, Open = cancellation => {
+                result.Items.Add(new ResourceSearchSource { Target = target,
+                    CurrentReference = cancellation => _files.CaptureFile(_workspace, capturedTarget, 64L * 1024 * 1024, cancellation).Reference,
+                    Open = cancellation => {
                     WorkspaceFileSnapshot snapshot;
                     try { snapshot = _files.CaptureFile(_workspace, capturedTarget, 64L * 1024 * 1024, cancellation); }
                     catch (FileNotFoundException) {

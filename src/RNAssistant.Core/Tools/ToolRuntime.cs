@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Agent;
+using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Core.Tools.Contracts;
@@ -51,7 +52,14 @@ namespace RNAssistant.Core.Tools
             var tool = call == null ? null : _registry.Lookup(call.Name);
             if (tool == null) return null;
             var policy = EffectivePolicy(tool);
-            return new ToolPolicySnapshot(policy.ToolId, policy.Revision, policy.Policy, _admissionRevision?.Invoke(call));
+            var described = new ToolPolicySnapshot(policy.ToolId, policy.Revision, policy.Policy, _admissionRevision?.Invoke(call));
+            if (tool.Handler is IToolContinuationOwner continuation)
+            {
+                try { described.HasLiveContinuation = continuation.CanContinue(ParseArguments(call.ArgumentsJson).ToObject<Dictionary<string, object>>()); }
+                catch (Exception error) when (error is JsonException || error is ResourceRequestException || error is ArgumentException)
+                { /* Argument validation remains owned by normal dispatch. */ }
+            }
+            return described;
         }
 
         private string CheckDispatch(ToolExecutionContext context)
@@ -309,7 +317,7 @@ namespace RNAssistant.Core.Tools
             return new ToolPolicySnapshot(captured.ToolId, captured.Revision,
                 new ToolPolicy(policy.Effect, policy.Verification, false,
                     policy.IndependentLocalRead, policy.AllowedModes, policy.RiskLevel, policy.ExecutesCode, policy.EvidenceEligibility,
-                    policy.IndependentAgentMessage, policy.AllowSequentialBatch));
+                    policy.IndependentAgentMessage, policy.AllowSequentialBatch, policy.ManualVerificationAfterUnknown));
         }
 
         private ToolExecutionRecord CompleteMutation(string attemptId, ToolExecutionRecord record, string preparedStateJson)

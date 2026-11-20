@@ -43,7 +43,17 @@ namespace RNAssistant.Office.Services
             foreach (var target in targets)
             {
                 var currentTarget = target;
-                sources.Items.Add(new ResourceSearchSource { Target = target, Open = cancellation => {
+                sources.Items.Add(new ResourceSearchSource { Target = target, CurrentReference = cancellation => {
+                    cancellation.ThrowIfCancellationRequested();
+                    var selected = ResolveIntentTarget(session, currentTarget);
+                    if (!selected.Descriptor.Mutable && selected.Reference.IsExact) return selected.Reference;
+                    // Live resources can drift outside RNAssistant. The first ordinary read supplies the
+                    // same exact revision as ReadWhole without assembling its remaining pages.
+                    var representation = selected.Descriptor.Representations.Contains(ResourceRepresentations.Source)
+                        ? ResourceRepresentations.Source : ResourceRepresentations.Text;
+                    return Read(session, new ResourceReadRequest { Reference = new ResourceRef(selected.Reference.Uri),
+                        Representation = representation, MaxChars = InternalReadCharacters }, cancellation).Result.Resource.Reference;
+                }, Open = cancellation => {
                     cancellation.ThrowIfCancellationRequested();
                     var selected = ResolveIntentTarget(session, currentTarget);
                     var representation = selected.Descriptor.Representations.Contains(ResourceRepresentations.Source)

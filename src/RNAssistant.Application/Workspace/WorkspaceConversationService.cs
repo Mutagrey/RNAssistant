@@ -1271,9 +1271,9 @@ namespace RNAssistant.Runtime
                     throw new ArgumentException("Resource owner must provide revisions.", nameof(resourceAuthority));
                 var browserSet = session == null ? null : browser?.ForOwner(new BrowserOwnerScope { Kind = BrowserOwnerKind.Workspace,
                     ScopeId = workspace.WorkspaceId, ChatId = session.Id }, session, _settings, browserRunId ?? session.LastRun?.RunId,
-                    CaptureMedia, authorityStore, revisions, mutations, payloads);
+                    CaptureMedia, authorityStore, revisions, mutations, payloads, mutationOrigin);
                 var projection = office?.ModelProjection ?? browserSet?.ModelProjection;
-                _compiler = new ModelContextCompiler(payloads, projection);
+
                 _taskLists = new WorkspaceTaskListObserver(paths, conversations, payloads, session, authorityStore, mutations, mutationOrigin);
                 _plans = new WorkspacePlanService(paths, conversations, payloads, workspace, session, artifacts, authorityStore, mutations, mutationOrigin);
                 _modelTrace = new ModelTracePersistenceService(events);
@@ -1328,9 +1328,11 @@ namespace RNAssistant.Runtime
                     MarkdownOutlineSchema(office?.ResourceOutline != null), false,
                     new WorkspaceMarkdownOutlineHandler(_resources.Select("file"), office?.ResourceOutline));
                 var searchObservation = new ResourceSearchObservation();
+                var searchHandler = new WorkspaceSearchHandler(_resources.Select("file"), office?.ResourceSearch, searchObservation, browserSet?.ResourceSearch);
+                _compiler = new ModelContextCompiler(payloads, projection, searchHandler.OwnsResult);
                 Register(registry, entries, "core.search", ResourceModelSearchSchema.Description,
                     ResourceModelSearchSchema.Create(true, office != null, browserSet != null), false,
-                    new WorkspaceSearchHandler(_resources.Select("file"), office?.ResourceSearch, searchObservation, browserSet?.ResourceSearch), independentRead: false);
+                    searchHandler, independentRead: false);
                 if (webHost != null && webHost.IsAvailable)
                     Register(registry, entries, "web.verify", "Load an immutable local HTML/CSS/JS snapshot in an isolated browser; check asset/runtime errors and any functional checks fixed by the accepted task contract.",
                         Schema("entryPath", true), false,
@@ -1366,7 +1368,7 @@ namespace RNAssistant.Runtime
                 Tools = new ToolRuntime(registry, _mode.Mode, false, _mode.AllowsConfirmation,
                     (context, preparation) => "pending_" + Guid.NewGuid().ToString("N"),
                     mutationObserver: new WorkspacePlanningObserver(_taskLists, _plans, office?.MutationObserver,
-                        office?.Tools?.Select(item => item.Entry.Id)), runPolicy: _mode,
+                        office?.Tools?.Select(item => item.Entry.Id), browserSet), runPolicy: _mode,
                     dispatchGuard: context =>
                     {
                         var error = SkillTaskService.CheckDispatch(_session, context, _toolPack);

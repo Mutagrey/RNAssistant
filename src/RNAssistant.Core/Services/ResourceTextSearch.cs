@@ -12,7 +12,7 @@ namespace RNAssistant.Core.Services
 {
     // Ephemeral continuation validation, scoped to one chat handler. No durable store,
     // write authority, index or inferred dependency traversal. Restart fails closed.
-    public sealed class ResourceTextSearch
+    public sealed class ResourceTextSearch : RNAssistant.Core.Tools.IToolContinuationOwner
     {
         public const int MaximumLineCharacters = 65536;
         public const int MaximumScanCharacters = 8 * 1024 * 1024;
@@ -28,6 +28,30 @@ namespace RNAssistant.Core.Services
         private int _matches;
         private ResourceSearchPosition _next;
         private readonly Dictionary<string, ResourceRef> _pins = new Dictionary<string, ResourceRef>(StringComparer.Ordinal);
+
+        private string _resultRun, _resultCall;
+        public void RecordResult(string runId, string callId, ResourceWithinSearchPage page)
+        {
+            lock (_sync)
+            {
+                if (page.Continuation == null || !ReferenceEquals(page.Continuation, _next)) return;
+                _resultRun = runId;
+                _resultCall = callId;
+            }
+        }
+
+        public bool OwnsResult(string runId, string callId)
+        { lock (_sync) return _next != null && callId != null && runId == _resultRun && callId == _resultCall; }
+
+        public bool CanContinue(IDictionary<string, object> arguments)
+        {
+            var request = ResourceModelSearchSchema.Parse(arguments);
+            lock (_sync) return request.Next && _next != null && _resultCall != null && _request == Fingerprint(request);
+        }
+
+        private static string Fingerprint(ResourceTextSearchRequest request)
+        { return JsonConvert.SerializeObject(new { request.Type, request.Target, request.Scope, request.Directory,
+                request.Recursive, request.IncludeGlobs, request.ExcludeGlobs, request.Query, request.Mode, request.MatchCase, request.Limit, request.Detail }); }
 
         public ResourceWithinSearchPage Search(ResourceTextSearchRequest request, ResourceSearchSources sources, CancellationToken token)
         {
@@ -51,6 +75,11 @@ namespace RNAssistant.Core.Services
                         request.Continuation = _next;
                     }
                     return SearchLocked(request, sources, token);
+                }
+                catch (ResourceRequestException error) when (error.ErrorCode == "resource_search_stale")
+                {
+                    if (_request == Fingerprint(request)) _next = null;
+                    throw;
                 }
                 finally { request.Continuation = original; }
             }
@@ -89,6 +118,11 @@ namespace RNAssistant.Core.Services
                     }
                     return page;
                 }
+                catch (ResourceRequestException error) when (error.ErrorCode == "resource_search_stale")
+                {
+                    if (_request == Fingerprint(request)) _next = null;
+                    throw;
+                }
                 finally { request.Continuation = original; }
             }
         }
@@ -109,27 +143,30 @@ namespace RNAssistant.Core.Services
             var items = sources.Items.OrderBy(x => x.Target, StringComparer.Ordinal).ToList();
             if (items.Select(x => x.Target).Distinct(StringComparer.Ordinal).Count() != items.Count)
                 throw Invalid("Search targets are ambiguous.");
-            var fingerprint = JsonConvert.SerializeObject(new { request.Target, request.Scope, request.Directory,
-                request.Recursive, request.IncludeGlobs, request.ExcludeGlobs, request.Query, request.Mode, request.MatchCase, request.Limit, request.Detail });
+            var fingerprint = Fingerprint(request);
             var membership = JsonConvert.SerializeObject(items.Select(x => x.Target));
             if (request.Continuation != null)
             {
                 if (_next == null || fingerprint != _request || membership != _membership ||
                     JsonConvert.SerializeObject(request.Continuation) != JsonConvert.SerializeObject(_next)) throw Stale();
-                foreach (var source in items.Where(x => _pins.ContainsKey(x.Target)))
+                // The resumed source is verified by the same open that supplies its reader below.
+                foreach (var source in items.Where(x => _pins.ContainsKey(x.Target) &&
+                    !(request.Continuation.AfterLine > 0 && x.Target == request.Continuation.AfterTarget)))
                 {
                     token.ThrowIfCancellationRequested();
                     try
                     {
-                        using (var current = source.Open(token))
-                            if (!Same(_pins[source.Target], current.Reference)) throw Stale();
+                        ResourceRef reference;
+                        if (source.CurrentReference != null) reference = source.CurrentReference(token);
+                        else using (var current = source.Open(token)) reference = current.Reference;
+                        if (!Same(_pins[source.Target], reference)) throw Stale();
                     }
                     catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is ResourceRequestException)
                     { throw Stale(); }
                 }
             }
             else { _pins.Clear(); _gaps.Clear(); _unavailable.Clear(); _sourceComplete = true; _matches = 0; }
-            _next = null;
+            _next = null; _resultCall = null;
             _request = fingerprint; _membership = membership;
             var page = new ResourceWithinSearchPage { Target = request.Target, Scope = request.Scope, Query = request.Query,
                 Mode = request.Mode, ScanComplete = sources.Complete && sources.Unavailable.Count == 0 && _gaps.Count == 0,
@@ -229,6 +266,9 @@ namespace RNAssistant.Core.Services
                         { Continue(page, source.Target, stopLine, stopColumn); return Retain(page); }
                     }
                 }
+                catch (Exception error) when (request.Continuation?.AfterLine > 0 && source.Target == request.Continuation.AfterTarget &&
+                    (error is IOException || error is UnauthorizedAccessException || error is ResourceRequestException || error is DecoderFallbackException))
+                { throw Stale(); }
                 catch (RegexMatchTimeoutException) { Incomplete(page, "regex_timeout"); return Retain(page); }
                 catch (ResourceRequestException ex) when (ex.ErrorCode == "resource_search_stale") { throw; }
                 // An explicit target cannot be represented as a successful partial

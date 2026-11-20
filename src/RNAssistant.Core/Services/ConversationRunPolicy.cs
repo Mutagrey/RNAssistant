@@ -106,7 +106,7 @@ namespace RNAssistant.Core.Services
             var confirmation = !IsPlanningArtifact(id, binding) && !IsAgentCoordination(id, binding) && !IsChatRename(id, binding) && (policy.RequiresConfirmation || policy.MayHaveSideEffects || policy.ExecutesCode);
             return new ToolPolicy(policy.Effect, policy.Verification, confirmation,
                 policy.IndependentLocalRead && !confirmation, policy.AllowedModes, policy.RiskLevel, policy.ExecutesCode, policy.EvidenceEligibility,
-                policy.IndependentAgentMessage && !confirmation, policy.AllowSequentialBatch);
+                policy.IndependentAgentMessage && !confirmation, policy.AllowSequentialBatch, policy.ManualVerificationAfterUnknown);
         }
         public List<ToolCatalogEntry> SelectTools(IEnumerable<ToolCatalogEntry> tools)
         {

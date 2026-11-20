@@ -279,7 +279,7 @@ namespace RNAssistant.Core.Agent
                         _input == null ? CancellationToken.None : _input.InterruptToken))
                         model = await _model.SendAsync(new AgentModelRequest(state.RunId, state.TurnId, stepId,
                             state.Messages, completionFeedback ?? state.FinishCorrection?.Message ?? (state.Progress.InspectionRequired
-                                ? ModelProtocolWire.UnknownEffectGuidance : null), state.Limits.MaxConsecutiveReflections,
+                                ? state.Progress.InspectionGuidance : null), state.Limits.MaxConsecutiveReflections,
                             state.ConsecutiveReflections, requestCause ?? state.FinishCorrection?.RequestCause(),
                             state.FinishCorrection, retained => AppendAsync(state,
                                 new AgentRunEvent(AgentRunEventKind.ModelAttemptRetained, state.Summary(), stepId,
@@ -382,11 +382,13 @@ namespace RNAssistant.Core.Agent
                         continue;
                     }
                 }
-                if (response.Final && state.Progress.InspectionRequired)
+                var manualFinish = response.Final && state.Progress.RequiresManualInspection &&
+                    (response.Outcome == ConversationOutcome.Partial || response.Outcome == ConversationOutcome.UnableToComplete);
+                if (response.Final && state.Progress.InspectionRequired && !manualFinish)
                 {
-                    await RetainModelAsync(state, stepId, model, ModelRuntimeDisposition.Rejected, ModelProtocolWire.UnknownEffectGuidance).ConfigureAwait(false);
+                    await RetainModelAsync(state, stepId, model, ModelRuntimeDisposition.Rejected, state.Progress.InspectionGuidance).ConfigureAwait(false);
                     var stopped = await RejectFinishAsync(state, model.Response,
-                        FinishAdmission.Reject("inspection_required", ModelProtocolWire.UnknownEffectGuidance),
+                        FinishAdmission.Reject("inspection_required", state.Progress.InspectionGuidance),
                         model.SourceModelAttemptId, stepId).ConfigureAwait(false);
                     if (stopped != null) return stopped;
                     continue;
@@ -416,7 +418,7 @@ namespace RNAssistant.Core.Agent
                     }
                     // Reconsider a partial claim once without interpreting free-form reason text.
                     // Keep the available terminal answer when another step cannot fit.
-                    if (response.Outcome == ConversationOutcome.Partial && state.AcceptedIds.Count > 0 &&
+                    if (!manualFinish && response.Outcome == ConversationOutcome.Partial && state.AcceptedIds.Count > 0 &&
                         !partialFinishRechecked && state.Iterations < state.Limits.MaxIterations &&
                         state.ToolSteps < state.Limits.MaxToolSteps)
                     {

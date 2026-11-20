@@ -180,8 +180,10 @@
       if (disposed || !handoverRequested || handoverPending || !current || !current.manualControl || !current.chatBound) return;
       var revision = current.controlRevision;
       handoverPending = true;
-      command("ResumeAgent", { controlRevision: revision }).then(function () {
+      command("ResumeAgent", { controlRevision: revision }).then(function (result) {
         handoverPending = false; handoverRequested = false;
+        if (!disposed && current && result && result.sessionId === current.sessionId && current.manualControl)
+          fail(new Error("Страница остаётся под вашим управлением. Проверьте её перед передачей агенту."));
       }, function (error) {
         handoverPending = false; handoverRequested = false;
         if (!disposed && current && current.manualControl) fail(error);

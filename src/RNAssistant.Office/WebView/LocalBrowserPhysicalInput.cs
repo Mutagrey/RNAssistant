@@ -29,14 +29,24 @@ namespace RNAssistant.Office.WebView
             _keys = SetWindowsHookEx(13, _keyCallback, module, 0);
             if (_mouse == IntPtr.Zero || _keys == IntPtr.Zero) { Dispose(); throw new InvalidOperationException("Native physical input attribution is unavailable."); }
         }
+        private const int LeftDown = 0x0201, RightDown = 0x0204, MiddleDown = 0x0207, ExtraButtonDown = 0x020B;
+        private const int VerticalWheel = 0x020A, HorizontalWheel = 0x020E, KeyDown = 0x0100, SystemKeyDown = 0x0104;
         private IntPtr MouseInput(int code, IntPtr message, IntPtr data)
         {
-            if (code >= 0) { var value = Marshal.PtrToStructure<Mouse>(data); if ((value.Flags & 1) == 0) try { _input(value.Position.X, value.Position.Y, false); } catch { } }
+            // WH_MOUSE_LL also delivers hover and releases. Only a physical press or
+            // wheel starts manual control; pointermove already hides the visual cursor.
+            var kind = message.ToInt64();
+            if (code >= 0 && (kind == LeftDown || kind == RightDown || kind == MiddleDown ||
+                kind == ExtraButtonDown || kind == VerticalWheel || kind == HorizontalWheel))
+            {
+                var value = Marshal.PtrToStructure<Mouse>(data);
+                if ((value.Flags & 1) == 0) try { _input(value.Position.X, value.Position.Y, false); } catch { }
+            }
             return CallNextHookEx(_mouse, code, message, data);
         }
         private IntPtr KeyInput(int code, IntPtr message, IntPtr data)
         {
-            if (code >= 0) { var value = Marshal.PtrToStructure<Keyboard>(data); if ((value.Flags & 0x10) == 0) try { _input(0, 0, true); } catch { } }
+            if (code >= 0 && (message.ToInt64() == KeyDown || message.ToInt64() == SystemKeyDown)) { var value = Marshal.PtrToStructure<Keyboard>(data); if ((value.Flags & 0x10) == 0) try { _input(0, 0, true); } catch { } }
             return CallNextHookEx(_keys, code, message, data);
         }
         public void Dispose()

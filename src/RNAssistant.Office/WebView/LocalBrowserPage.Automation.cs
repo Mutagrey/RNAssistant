@@ -76,7 +76,9 @@ namespace RNAssistant.Office.WebView
         internal void BlockActions() { _actionsBlocked = true; InvalidateAutomation(); }
         internal void ResumeAgent(long? revision)
         {
-            if (!State.ChatBound || Manual.Pending || revision != State.ControlRevision) throw new InvalidOperationException("The manual-control revision changed.");
+            if (!State.ChatBound || Manual.Pending || revision != State.ControlRevision)
+                throw new ResourceRequestException("Состояние управления Browser изменилось. Проверьте страницу перед передачей управления.",
+                    "browser_control_stale", false);
             if (Manual.Failed) throw new InvalidOperationException("Resume the paused run explicitly in its chat, then reopen the page.");
             if (_actionsBlocked) throw new ResourceRequestException("The previous Browser effect is unknown. Close and reopen this Browser tab before another action.",
                 "browser_effect_unknown", false);
