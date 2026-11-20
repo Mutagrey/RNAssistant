@@ -11,6 +11,10 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.10.1-dev
+
+- При фокусе в адресной строке Browser скрывает действия страницы. После выхода из поля кнопки снова доступны.
+
 ### 17.10.0-dev
 
 - В Материалах и меню проектов доступен интерактивный граф Markdown на vis.Network.

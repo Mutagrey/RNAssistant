@@ -15,7 +15,7 @@ const { withPreviewPage } = require('./preview-session');
       nativeLayout.calls.push(structuredClone(p));
       let value = nativeLayout.value;
       if (p.action === 'Open') value = nativeLayout.value = {browserTabId:p.browserTabId,operationId:p.operationId,sessionId:'native-session',ownerScope:p.ownerScope,
-        url:p.locator,title:'Локальная страница',revision:1,documentGeneration:1,status:'Starting',attached:false,controlRevision:1,
+        url:p.locator,title:'Локальная страница',revision:1,documentGeneration:1,status:'Starting',attached:false,controlRevision:1,chatBound:!!p.ownerScope.chatId,
         target:{kind:'WorkspaceHtmlProject',state:'Ready',workspaceId:'project',ownerScope:p.ownerScope,capabilities:{source:true}}};
       if (p.action === 'Attach') { value.attached=true;value.status='Ready'; }
       if (p.action === 'ResumeAgent') { nativeLayout.assertRevision=p.controlRevision;value.manualControl=false;value.controlRevision++; }
@@ -73,8 +73,10 @@ const { withPreviewPage } = require('./preview-session');
   await page.setViewportSize({width:420,height:800});await page.evaluate(()=>document.documentElement.style.zoom='1.25');
   await page.waitForTimeout(150);
   assert.ok(await root.evaluate(n=>n.scrollWidth<=n.clientWidth+1));
-  const header = await root.locator('.material-surface-header').boundingBox();
-  assert.ok(header.height <= 53, 'Browser header stays one row at narrow/125%: ' + JSON.stringify(header));
+  const header = await root.locator('.material-surface-header').evaluate(node => ({
+    height: node.offsetHeight, rowHeight: parseFloat(getComputedStyle(node).minHeight)
+  }));
+  assert.ok(header.height <= header.rowHeight + 1, 'Browser header stays one row at narrow/125%: ' + JSON.stringify(header));
   assert.equal(await root.getByRole('button',{name:'Обсудить в чате рядом',exact:true}).isVisible(),false,'compact header folds discuss into overflow');
   await more.click();
   assert.equal(await page.getByRole('menuitem',{name:'Обсудить в чате рядом',exact:true}).isVisible(),true,'overflow keeps compact Browser actions reachable');
@@ -82,7 +84,7 @@ const { withPreviewPage } = require('./preview-session');
   const latest = await page.evaluate(()=>nativeLayout.calls.filter(c=>c.action==='Layout').at(-1).bounds);
   assert.ok(latest.width > 0 && latest.x + latest.width <= latest.viewportWidth + 1);
   await page.screenshot({path:'docs/ui/review/browser-interactive-narrow.png'});
-  await page.locator('#chatInput').click();
+  await page.locator('#productMobileMenuButton').click();
   await page.waitForFunction(()=>nativeLayout.assertRevision===2);
   assert.equal(await page.evaluate(()=>nativeLayout.assertRevision),2);
   await page.evaluate(()=>RNAssistantDockWorkspace.close('browser:native-layout'));

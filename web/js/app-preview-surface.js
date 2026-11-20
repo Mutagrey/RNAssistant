@@ -121,6 +121,7 @@
     function leaveWindow() { expand(false); }
     function expand(value) {
       if (!value) closeCompletion();
+      actions.hidden = value;
       toolbar.classList.toggle("is-address-focused", value); tools.setAttribute("aria-expanded", String(value));
       document.removeEventListener("pointerdown", outsidePointer, true); window.removeEventListener("blur", leaveWindow);
       if (value) { document.addEventListener("pointerdown", outsidePointer, true); window.addEventListener("blur", leaveWindow); }

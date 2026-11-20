@@ -124,9 +124,7 @@ Local evidence: Chromium at a synthetic 420 px Browser surface measured a single
 passes all changed scripts and `prompt-review` passes 13/13 after the ActionMenu event.
 A runtime-mocked native Browser opened and dismissed the page
 menu and ended on `Layout visible=true`, so the HTML slot was not left hidden; the loading
-status was inspected separately. The focused Playwright fixture now asserts one-row geometry,
-compact action access, immediate version loading and final visible Layout after close,
-but Playwright is unavailable in this workspace, so it was not executed here. Windows x64
+status was inspected separately. On 2026-11-20 the Chromium fixture verified the 52 CSS px header at 125% zoom, address focus, compact menu actions, native layout notifications and manual handoff with a mock bridge. Windows x64
 / Office x64 / WebView2 native airspace and 125% visual acceptance remain open. Rollback
 is the scoped Web CSS/JS diff.
 

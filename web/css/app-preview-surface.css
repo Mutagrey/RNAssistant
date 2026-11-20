@@ -24,7 +24,6 @@
 .preview-surface-toolbar .preview-surface-actions>.icon-btn[aria-pressed="true"]{color:var(--accent);background:var(--accent-soft);box-shadow:none}
 .preview-surface-toolbar.is-address-focused>.preview-surface-navigation,.preview-surface-toolbar.is-address-focused>.preview-surface-tools{visibility:hidden;pointer-events:none}
 .preview-surface-toolbar.is-address-focused>.rna-form-control.preview-surface-location{position:absolute;inset:0;z-index:2;width:100%}
-.preview-surface-toolbar.is-address-focused>.preview-surface-actions{display:none}
 .preview-surface-completion{position:absolute;top:calc(100% + var(--space-2));left:0;right:0;z-index:4;max-height:40vh;overflow:auto;padding:var(--space-1);border:1px solid var(--line-strong);border-radius:var(--radius-sm);background:var(--surface);box-shadow:var(--shadow)}
 .preview-surface-completion>button{display:block;width:100%;padding:var(--space-2);border:0;text-align:left;overflow-wrap:anywhere;background:transparent;color:var(--ink);font:inherit}
 .preview-surface-completion>button[aria-selected="true"],.preview-surface-completion>button:hover{background:var(--surface-hover)}
