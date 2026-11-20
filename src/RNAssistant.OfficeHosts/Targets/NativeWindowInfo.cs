@@ -1,6 +1,7 @@
 using System;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using PowerPoint = Microsoft.Office.Interop.PowerPoint;
 
 namespace RNAssistant.OfficeHosts
 {
@@ -39,6 +40,21 @@ namespace RNAssistant.OfficeHosts
             int processId;
             GetWindowThreadProcessId(new IntPtr(hwnd), out processId);
             return processId;
+        }
+
+        // PowerPoint marks HWND as restricted in its COM type library.
+        internal static long TryReadPowerPointHandle(PowerPoint.DocumentWindow window)
+        {
+            try { return window?.HWND ?? 0; }
+            catch (COMException) { return 0; }
+            catch (InvalidComObjectException) { return 0; }
+        }
+
+        internal static long TryReadPowerPointHandle(PowerPoint.Application application)
+        {
+            try { return application?.HWND ?? 0; }
+            catch (COMException) { return 0; }
+            catch (InvalidComObjectException) { return 0; }
         }
 
         public static long ReadLongMemberPath(object instance, params string[] names)

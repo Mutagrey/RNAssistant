@@ -11,6 +11,10 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.10.7-dev
+
+- Исправлено чтение дескриптора окна PowerPoint при открытии чата из панели Excel.
+
 ### 17.10.6-dev
 
 - Окно NativeHostCli показывает состояние запуска сразу. Подготовка истории и

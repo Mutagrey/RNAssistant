@@ -127,8 +127,7 @@ namespace RNAssistant.OfficeHosts
 
             if (string.Equals(host, "PowerPoint", StringComparison.OrdinalIgnoreCase))
             {
-                var hwnd = NativeWindowInfo.ReadLongMemberPath(application, "HWND");
-                return hwnd != 0 ? hwnd : NativeWindowInfo.ReadLongMemberPath(application, "Hwnd");
+                return NativeWindowInfo.TryReadPowerPointHandle((PowerPoint.Application)application);
             }
 
             return 0;
@@ -300,8 +299,7 @@ namespace RNAssistant.OfficeHosts
             {
                 foreach (PowerPoint.DocumentWindow window in presentation.Windows)
                 {
-                    if (NativeWindowInfo.ReadLongMemberPath(window, "HWND") !=
-                        target.Hwnd) continue;
+                    if (NativeWindowInfo.TryReadPowerPointHandle(window) != target.Hwnd) continue;
                     if (match != null)
                         throw new InvalidOperationException(
                             "The requested PowerPoint window identity is ambiguous.");
@@ -323,7 +321,7 @@ namespace RNAssistant.OfficeHosts
             try
             {
                 foreach (PowerPoint.DocumentWindow window in presentation.Windows)
-                    if (NativeWindowInfo.ReadLongMemberPath(window, "HWND") == hwnd)
+                    if (NativeWindowInfo.TryReadPowerPointHandle(window) == hwnd)
                         return true;
             }
             catch { }

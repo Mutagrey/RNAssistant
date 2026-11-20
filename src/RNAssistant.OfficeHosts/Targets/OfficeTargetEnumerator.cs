@@ -104,11 +104,11 @@ namespace RNAssistant.OfficeHosts
                 {
                     foreach (PowerPoint.DocumentWindow window in presentation.Windows)
                         AddPowerPointTarget(result, presentation,
-                            NativeWindowInfo.ReadLongMemberPath(window, "HWND"));
+                            NativeWindowInfo.TryReadPowerPointHandle(window));
                 }
                 else
                     AddPowerPointTarget(result, presentation,
-                        NativeWindowInfo.ReadLongMemberPath(application, "HWND"));
+                        NativeWindowInfo.TryReadPowerPointHandle(application));
             }
         }
 

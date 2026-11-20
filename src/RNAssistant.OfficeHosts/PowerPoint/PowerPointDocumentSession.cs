@@ -63,16 +63,29 @@ namespace RNAssistant.OfficeHosts
                 RequireOwnerAccess();
                 try
                 {
-                    var name = _presentation.Name;
-                    if (string.IsNullOrWhiteSpace(name)) return false;
-                    return _window == null ||
-                        NativeWindowInfo.ReadLongMemberPath(_window, "HWND") != 0;
+                    return !string.IsNullOrWhiteSpace(_presentation.Name) && IsWindowBindingValid();
                 }
                 catch
                 {
                     return false;
                 }
             }
+        }
+
+        internal string ReadOpenTitle()
+        {
+            RequireOwnerAccess();
+            var title = _presentation.Name;
+            if (string.IsNullOrWhiteSpace(title))
+                throw new InvalidOperationException("PowerPoint не предоставил имя привязанной презентации.");
+            if (!IsWindowBindingValid())
+                throw new InvalidOperationException("Окно привязанной презентации PowerPoint не предоставило HWND.");
+            return title;
+        }
+
+        private bool IsWindowBindingValid()
+        {
+            return _window == null || _window.HWND != 0;
         }
 
         internal PowerPoint.Presentation Presentation

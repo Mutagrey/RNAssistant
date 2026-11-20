@@ -56,7 +56,7 @@ namespace RNAssistant.OfficeHosts
         public IVbaHostBackend VbaHostBackend { get { return _vbaHostBackend; } }
         public string DocumentKey { get { return _documentSession.StableDocumentId; } }
         public string RuntimeDocumentKey { get { return _documentSession.RuntimeDocumentId; } }
-        public string DocumentTitle { get { return RequirePresentation().Name; } }
+        public string DocumentTitle { get { return _documentSession.ReadOpenTitle(); } }
 
         public OfficeContext GetOfficeContext()
         {
@@ -64,8 +64,8 @@ namespace RNAssistant.OfficeHosts
             try
             {
                 var hwnd = _targetWindow == null
-                    ? NativeWindowInfo.ReadLongMemberPath(_application, "HWND")
-                    : NativeWindowInfo.ReadLongMemberPath(_targetWindow, "HWND");
+                    ? NativeWindowInfo.TryReadPowerPointHandle(_application)
+                    : NativeWindowInfo.TryReadPowerPointHandle(_targetWindow);
                 context.AppHwnd = new IntPtr(hwnd);
                 context.ProcessId = NativeWindowInfo.GetProcessId(hwnd);
             }
@@ -116,7 +116,7 @@ namespace RNAssistant.OfficeHosts
                 if (presentation.Windows != null && presentation.Windows.Count > 0)
                     presentation.Windows[1].Activate();
                 NativeWindowInfo.BringToForeground(
-                    NativeWindowInfo.ReadLongMemberPath(_application, "HWND"));
+                    NativeWindowInfo.TryReadPowerPointHandle(_application));
                 return true;
             }
             return false;
@@ -132,7 +132,7 @@ namespace RNAssistant.OfficeHosts
                 if (presentation.Windows != null && presentation.Windows.Count > 0)
                     presentation.Windows[1].Activate();
                 NativeWindowInfo.BringToForeground(
-                    NativeWindowInfo.ReadLongMemberPath(_application, "HWND"));
+                    NativeWindowInfo.TryReadPowerPointHandle(_application));
                 return true;
             }
             catch { return false; }

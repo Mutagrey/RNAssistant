@@ -345,8 +345,8 @@ namespace RNAssistant.OfficeHosts
                     return NativeWindowInfo.ReadLongMemberPath(
                         acquiredApplication, "ActiveWindow", "Hwnd");
                 if (host == "PowerPoint")
-                    return NativeWindowInfo.ReadLongMemberPath(
-                        acquiredApplication, "ActiveWindow", "HWND");
+                    return NativeWindowInfo.TryReadPowerPointHandle(
+                        ((PowerPoint.Application)acquiredApplication).ActiveWindow);
                 if (host == "Outlook")
                 {
                     var application = (Outlook.Application)acquiredApplication;
