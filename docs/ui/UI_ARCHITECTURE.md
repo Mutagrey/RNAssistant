@@ -545,10 +545,14 @@ Office → OfficeHosts обратной зависимости нет. Desktop/V
 optional `hostWindow` bootstrap сообщает capabilities. Это additive capability,
 не второй протокол. Token проверяется до domain switch gate; presentation обходится
 без document maintenance и не входит в счётчик exclusive rebind. Root source check
-сохранён; plugin/preview не получает native authority. Shutdown/SwitchDocument из Web
-исполняются после публикации ACK; закрытие останавливает active runs и закрывает
-admission до cleanup. Активные bridge-запросы не блокируют Shutdown: после flush
-draft хост принимает закрытие, затем отменяет и дренирует фоновую работу. SwitchDocument
+сохранён; plugin/preview не получает native authority. Ответ принадлежит исходному
+WebView2 и доставляется на его UI STA. При закрытии или замене WebView2 доставка
+для старого экземпляра прекращается.
+[WebView2 threading model](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/threading-model)
+Shutdown/SwitchDocument из Web исполняются после попытки передать ACK. Закрытие
+останавливает active runs и закрывает admission до cleanup. Активные bridge-запросы
+не блокируют Shutdown: после flush draft хост принимает закрытие, затем отменяет и
+дренирует фоновую работу. SwitchDocument
 по-прежнему не пересекается с уже начавшейся exclusive сменой host-сессии. Ошибка
 сохранения draft оставляет старую сессию открытой.
 

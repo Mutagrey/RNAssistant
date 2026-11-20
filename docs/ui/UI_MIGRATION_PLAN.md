@@ -632,6 +632,11 @@ Windows qualification открыты; далее P4a, без автоматич�
 
 ## Native window — In Review, 2026-11-11
 
+Проверка доставки при переключении 17.10.4-dev. Из уже запущенного RNAssistant
+выбрать чат закрытой книги и открыть её кнопкой «Открыть документ». Проверить
+переход в Excel, повторный выбор чата и работу панели после перехода. При повторе
+диалога .NET достаточно фото начала раздела «Сведения».
+
 Уточнение по двум фото — **In Review, 2026-11-16**. Scope: presentation верхней
 панели и оконных меню; owners — existing Shell CSS, `app-window`, `app-layout`,
 ActionMenu и SVG registry. Navigation, Inspector, pin, «Полное окно» и

@@ -128,6 +128,9 @@ authority и не меняет authority текущего Office target. Вла�
 controller/Office adapter после завершения их bridge/resource обработчиков.
 Desktop при замене или закрытии панели также откладывает освобождение исходного
 Office adapter до завершения runtime shutdown без ожидания на UI-потоке.
+Bridge привязывает ответ к WebView2, из которого пришёл запрос. При демонтаже панели
+или замене WebView2 запоздавший ответ отбрасывается. Сбой отправки через живой
+транспорт фиксируется как ошибка доставки без повторной отправки.
 
 ## Activation and target selection
 

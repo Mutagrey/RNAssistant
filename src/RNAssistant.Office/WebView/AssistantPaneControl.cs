@@ -30,6 +30,7 @@ namespace RNAssistant.Office.WebView
         private readonly AssistantWebBridge _bridge;
         private readonly System.Threading.CancellationTokenSource _lifetimeCancellation;
         private WebView2 _webView;
+        private volatile CoreWebView2 _rootCore;
         private CoreWebView2Controller _webViewController;
         private RNAssistant.Application.PluginApplicationService _plugins;
         private PluginWebViewHost _pluginHost;
@@ -274,6 +275,7 @@ namespace RNAssistant.Office.WebView
             TabularExecutor = new TabularWebViewExecutor(core.Environment, Handle);
             try { _pluginHost = new PluginWebViewHost(_plugins, Handle, _webRoot, _localBrowserEnvironment); _plugins.EnsureDataTemplates(); }
             catch (Exception error) { _plugins.StartupError = error.Message; RuntimeLog.Error("Plugin host initialization failed.", error); }
+            _rootCore = core;
             core.WebMessageReceived += OnWebMessageReceived;
             core.NavigationStarting += OnNavigationStarting;
             core.NavigationCompleted += OnNavigationCompleted;
@@ -546,7 +548,10 @@ namespace RNAssistant.Office.WebView
 
         private async void OnWebMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e)
         {
+            var source = sender as CoreWebView2;
+            if (!IsCurrentRoot(source)) return;
             BridgeRequest request = null;
+            string responseJson;
             try
             {
                 if (!WebViewSecurityPolicy.IsTrustedDocument(e.Source, _trustedDocumentUri))
@@ -565,18 +570,23 @@ namespace RNAssistant.Office.WebView
                     return;
                 }
 
-                var responseJson = await _bridge.HandleMessageAsync(request).ConfigureAwait(true);
-                PostBridgeMessage(responseJson);
-                _bridge.WindowHost?.ResponsePosted(request.Id);
+                responseJson = await _bridge.HandleMessageAsync(request).ConfigureAwait(true);
             }
             catch (Exception ex)
             {
                 RuntimeLog.Error("Web message handling failed.", ex);
-                PostBridgeMessage(AssistantWebBridge.SerializeFailure(
+                responseJson = AssistantWebBridge.SerializeFailure(
                     request == null ? null : request.Id,
                     "WebView transport failed.", ex.Message,
-                    "bridge_transport_failed", true));
+                    "bridge_transport_failed", true);
+                request = null;
             }
+
+            if (!IsCurrentRoot(source)) return;
+            PostBridgeMessage(source, responseJson);
+            if (request == null) return;
+            try { _bridge.WindowHost?.ResponsePosted(request.Id); }
+            catch (Exception ex) { RuntimeLog.Error("Window command response callback failed.", ex); }
         }
 
         private bool TryHandleHostStateMessage(BridgeRequest request)
@@ -705,13 +715,15 @@ namespace RNAssistant.Office.WebView
 
         private void DetachInitializedWebView()
         {
+            var core = _rootCore;
+            // Browser cleanup can still publish its final state.
+            _rootCore = null;
             DetachPowerQueryAnalyzer();
             _bridge.Browser = null;
             _externalBrowser?.Dispose(); _externalBrowser = null;
             _bridge.WindowHost?.InvalidateChrome();
             try
             {
-                var core = _webView == null || _webView.IsDisposed ? null : _webView.CoreWebView2;
                 if (core != null)
                 {
                     core.WebMessageReceived -= OnWebMessageReceived;
@@ -849,38 +861,57 @@ namespace RNAssistant.Office.WebView
 
         private void PostBridgeMessage(string json)
         {
-            if (IsDisposed || !IsHandleCreated)
-            {
-                return;
-            }
+            var destination = _rootCore;
+            if (!IsCurrentRoot(destination)) return;
 
             if (InvokeRequired)
             {
-                BeginInvoke(new Action(() => PostBridgeMessage(json)));
+                try { BeginInvoke(new Action(() => PostBridgeMessage(destination, json))); }
+                catch (InvalidOperationException error)
+                {
+                    if (IsCurrentRoot(destination)) RuntimeLog.Error("Could not queue a WebView message.", error);
+                }
                 return;
             }
 
-            if (!_webView.IsDisposed && _webView.CoreWebView2 != null)
+            PostBridgeMessage(destination, json);
+        }
+
+        private bool IsCurrentRoot(CoreWebView2 core)
+        {
+            return core != null && ReferenceEquals(core, _rootCore) &&
+                !_resourcesDisposed && !IsDisposed && IsHandleCreated;
+        }
+
+        private void PostBridgeMessage(CoreWebView2 destination, string json)
+        {
+            if (!IsCurrentRoot(destination)) return;
+            var timer = Stopwatch.StartNew();
+            try
             {
-                var timer = Stopwatch.StartNew();
-                _webView.CoreWebView2.PostWebMessageAsJson(json);
-                if (timer.ElapsedMilliseconds >= 250)
+                destination.PostWebMessageAsJson(json);
+            }
+            catch (Exception error) when (error is COMException || error is InvalidOperationException)
+            {
+                RuntimeLog.Error("WebView message delivery failed.", error);
+                return;
+            }
+            if (timer.ElapsedMilliseconds >= 250)
+            {
+                RuntimeLog.Info("WebView post timing: elapsed=" + timer.ElapsedMilliseconds +
+                    "ms, chars=" + (json == null ? 0 : json.Length) + ".");
+                var now = DateTime.UtcNow;
+                if (now - _lastSlowPostReportUtc >= TimeSpan.FromSeconds(5) && IsCurrentRoot(destination))
                 {
-                    RuntimeLog.Info("WebView post timing: elapsed=" + timer.ElapsedMilliseconds +
-                        "ms, chars=" + (json == null ? 0 : json.Length) + ".");
-                    var now = DateTime.UtcNow;
-                    if (now - _lastSlowPostReportUtc >= TimeSpan.FromSeconds(5))
+                    _lastSlowPostReportUtc = now;
+                    try
                     {
-                        _lastSlowPostReportUtc = now;
-                        try
-                        {
-                            _webView.CoreWebView2.PostWebMessageAsJson(JsonConvert.SerializeObject(
-                                new HostPostTimingMessage { Type = "hostPostTiming",
-                                    Payload = new HostPostTimingDto { ElapsedMs = timer.ElapsedMilliseconds,
-                                        ResponseChars = json == null ? 0 : json.Length } }));
-                        }
-                        catch { /* A timing notice cannot change the delivered response. */ }
+                        destination.PostWebMessageAsJson(JsonConvert.SerializeObject(
+                            new HostPostTimingMessage { Type = "hostPostTiming",
+                                Payload = new HostPostTimingDto { ElapsedMs = timer.ElapsedMilliseconds,
+                                    ResponseChars = json == null ? 0 : json.Length } }));
                     }
+                    catch { /* A timing notice cannot change the delivered response. */ }
                 }
             }
         }
