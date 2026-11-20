@@ -354,38 +354,6 @@ namespace RNAssistant.Office
             return ChatState(LoadSession(null));
         }
 
-        private ChatStateResponse CreateStoredChatState(string host, string documentKey, string documentTitle)
-        {
-            EnsureStartupRecovery();
-            var activeId = _conversationStore.LoadActiveSessionId(host, documentKey);
-            var active = string.IsNullOrWhiteSpace(activeId)
-                ? null
-                : _conversationStore.Load(host, documentKey, activeId);
-            var chats = _chatSessions.GetChatSummaries(activeId)
-                .ToList();
-            var artifactPresentation = ArtifactLibraryProjectionService.ProjectState(active, new ChatMessageViewDto[0]);
-
-            return new ChatStateResponse
-            {
-                SessionRevision = active == null ? 0 : active.Revision,
-                RunViewState = RunViewStateProjector.Create(active),
-                ActiveChatId = activeId,
-                ActiveChatModel = active == null ? string.Empty : active.Model,
-                ActiveChatMode = ChatModes.Normalize(active == null ? null : active.Mode),
-                MutationPolicy = active?.MutationPolicy ?? MutationPolicy.Ask,
-                ChatReadOnly = active != null && !active.UsesCurrentProtocol,
-                ActiveChatReasoning = active != null && active.ReasoningEnabled,
-                Chats = chats,
-                Documents = ListOpenDocuments(),
-                Artifacts = artifactPresentation.Artifacts,
-                ArtifactLibrary = artifactPresentation.Library,
-                ActiveContextCheckpointId = active == null ? string.Empty : active.ActiveContextCheckpointId,
-                ActiveHtmlArtifactId = active == null ? string.Empty : active.ActiveHtmlArtifactId,
-                ActiveTaskListArtifactId = active == null ? string.Empty : active.ActiveTaskListArtifactId,
-                ActivePlanDocumentArtifactId = active == null ? string.Empty : active.ActivePlanDocumentArtifactId
-            };
-        }
-
         private static void ReportProgress(Action<string, string, ChatActivity> progress, string phase, string message)
         {
             if (progress != null)

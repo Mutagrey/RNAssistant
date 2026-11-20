@@ -2137,6 +2137,9 @@ is admitted without a source-size cutoff and every upload preserves exact bytes.
 a controlled local model endpoint: shared draft or already committed smart title,
 later smart title with a scoped cursor notice, durable project header and manual
 rename priority.
+MockDemo `--smart-chat-title-test` exercises the real Office controller with a
+scripted model. It checks the draft across approval and controller restart, a
+single title request with the final answer, and the committed catalog row.
 `workspace: accepted call history survives a new turn` checks a two-call read
 batch, exact runtime/model-attempt origins after restart, the next model turn,
 legacy narration display and explicit refusal of an origin-less old record.

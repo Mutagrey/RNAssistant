@@ -36,7 +36,8 @@ namespace RNAssistant.Core.Storage
         public AppSettings Load()
         {
             // Preserve the demo's initial opt-in, but honor explicit saved settings.
-            return Normalize(_json.Load(_paths.SettingsFile, new AppSettings { AutoConfirmToolActions = true }));
+            return Normalize(_json.Load(_paths.SettingsFile,
+                new AppSettings { AutoConfirmToolActions = true, SmartChatTitles = false }));
         }
 
         public bool HasPromptMigrationEvidence(AppSettings published)
@@ -193,8 +194,6 @@ namespace RNAssistant.Core.Storage
             {
                 settings.ContextWindowOverrideTokens = 0;
             }
-
-            settings.SmartChatTitles = false;
 
             if (settings.MaxAgentIterations <= 0)
             {

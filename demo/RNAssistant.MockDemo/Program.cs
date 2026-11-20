@@ -25,6 +25,7 @@ namespace RNAssistant.MockDemo
         {
             var options = DemoOptions.Parse(args);
             if ((args ?? new string[0]).Contains("--confirmation-input-test")) return await RunConfirmationInputTestsAsync().ConfigureAwait(false);
+            if ((args ?? new string[0]).Contains("--smart-chat-title-test")) return await RunSmartChatTitleTestAsync().ConfigureAwait(false);
             if ((args ?? new string[0]).Contains("--native-tool-recovery-test")) return await RunNativeToolRecoveryTestAsync().ConfigureAwait(false);
             if ((args ?? new string[0]).Contains("--resource-workflow-test")) return await RunResourceWorkflowTestAsync().ConfigureAwait(false);
             if (options.UnifiedAgentTest) return await RunUnifiedAgentTestAsync().ConfigureAwait(false);
@@ -103,7 +104,7 @@ namespace RNAssistant.MockDemo
                     SettingsService.ConfigureDemoDefaults(localOptions.BaseUrl, model);
                     // This scripted model covers tools/repair; compaction has its own fixture.
                     new SettingsService(AppDataPaths.CreateForRoot(root)).Save(new AppSettings {
-                        AutoConfirmToolActions = true, ContextWindowOverrideTokens = 131072 });
+                        AutoConfirmToolActions = true, SmartChatTitles = false, ContextWindowOverrideTokens = 131072 });
                     var bridge = CreateBridgeHost(localOptions);
                     await ExerciseModelAsync(bridge, model).ConfigureAwait(false);
                     Console.WriteLine("PASS " + model);
@@ -280,7 +281,7 @@ namespace RNAssistant.MockDemo
                 var liveArtifactProjected = false;
                 var llm = new ScriptedDemoLlm("Excel");
                 new SettingsService(AppDataPaths.CreateForRoot(root)).Save(new AppSettings {
-                    AutoConfirmToolActions = true, ContextWindowOverrideTokens = 131072 });
+                    AutoConfirmToolActions = true, SmartChatTitles = false, ContextWindowOverrideTokens = 131072 });
                 var controller = new AssistantController(
                     FakeOfficeAdapter.ForHost("Excel"),
                     AppDataPaths.CreateForRoot(root),

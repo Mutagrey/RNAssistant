@@ -59,7 +59,7 @@ namespace RNAssistant.MockDemo
                 Func<string, object, string> tool = (name, arguments) => JsonConvert.SerializeObject(new {
                     message = "", action = "execute", reason = "Perform the checked step.", tool_calls = new[] { new { name, arguments } } });
                 const string done = "fixture-finish";
-                new SettingsService(paths).Save(new AppSettings { AutoConfirmToolActions = false, ContextWindowOverrideTokens = 131072 });
+                new SettingsService(paths).Save(new AppSettings { AutoConfirmToolActions = false, SmartChatTitles = false, ContextWindowOverrideTokens = 131072 });
                 controller = new AssistantController(adapter, paths, model);
                 var id = controller.Initialize().ActiveChatId;
                 await CheckResourceLibraryReadsAsync(controller, id);

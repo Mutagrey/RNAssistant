@@ -60,6 +60,7 @@ namespace RNAssistant.Office
                 session, runId, cancellationToken, out runCancellation);
             RunCausalTrace causalTrace = null;
             ChatStateResponse response = null;
+            AppSettings settings;
 
             try
             {
@@ -74,13 +75,9 @@ namespace RNAssistant.Office
                 _inbox.Bind(session);
                 ConversationRunPolicy.ForAcceptedRun(session);
                 ConversationProtocolContext.EnsureCanContinue(session, pending.Command, _toolExecutor.Payloads);
-                var settings = ChatSettingsResolver.ResolveAcceptedRun(_settingsService.Load(), session);
+                settings = ChatSettingsResolver.ResolveAcceptedRun(_settingsService.Load(), session);
                 ChatSettingsResolver.ValidateAcceptedRun(session, settings);
                 var documentRuntimeKey = CaptureExpectedRuntimeDocumentKey(session);
-                if (!supersedePending && !MarkPendingActivityExecuting(session, pending.PendingId, runId))
-                {
-                    throw new InvalidOperationException("Pending tool was not found or was already resolved.");
-                }
                 var updatedMessages = new List<ChatMessage>
                 {
                     SetToolCallReplay(session, pending.Command.ToolCallId, false, runId)
@@ -100,6 +97,8 @@ namespace RNAssistant.Office
                     Status = "running",
                     Phase = "executing",
                     KernelState = previousRun.KernelState,
+                    ProvisionalTitle = previousRun.ProvisionalTitle,
+                    ModelConfiguration = previousRun.ModelConfiguration,
                     ConversationPolicy = previousRun.ConversationPolicy,
                     SelectedSkills = SkillTaskService.CopySelections(previousRun),
                     CurrentAction = supersedePending ? "Учитываю уточнение пользователя." : "Выполняю подтверждённое действие.",
@@ -108,8 +107,7 @@ namespace RNAssistant.Office
                     ToolStepsUsed = pending.ToolStepsUsed,
                     StartedUtc = DateTime.UtcNow
                 };
-                // Kernel.Resume claims the durable pending state before execution.
-                // Do not persist a second, controller-owned running transition.
+                // The kernel claims the pending state and updates the tool activity.
                 causalTrace = RunCausalTrace.Begin(_eventStore, session);
                 RunCausalTrace.Record(new CausalTraceRecord(SessionEventKind.RunStartedObservation)
                 {
@@ -204,6 +202,7 @@ namespace RNAssistant.Office
                 EndInboxRun(session, runLease, ref causalTrace);
                 StartConversationQueue(session, (nextRun, phase, message, activity) => { if (progress != null) progress(phase, message, activity); }, chatStateChanged);
             }
+            StartChatTitleGeneration(session, settings, chatStateChanged);
             return response;
         }
 
@@ -214,6 +213,7 @@ namespace RNAssistant.Office
             CancellationTokenSource cancellation;
             var lease = StartControllerRun(session, runId, token, out cancellation);
             RunCausalTrace trace = null;
+            AppSettings settings;
             try
             {
                 session = ReloadReservedSession(session);
@@ -223,7 +223,7 @@ namespace RNAssistant.Office
                     new OfficeDocumentExecutionExpectation { Host = session.Host, DocumentKey = session.DocumentKey,
                         RuntimeDocumentKey = session.LastRun.DocumentRuntimeKey });
                 ConversationRunPolicy.ForAcceptedRun(session);
-                var settings = ChatSettingsResolver.ResolveAcceptedRun(_settingsService.Load(), session);
+                settings = ChatSettingsResolver.ResolveAcceptedRun(_settingsService.Load(), session);
                 ChatSettingsResolver.ValidateAcceptedRun(session, settings);
                 var context = LoadContext(session);
                 var tools = _toolCatalog.GetFreshConversationTools().Where(tool => tool.Enabled).ToList();
@@ -249,6 +249,7 @@ namespace RNAssistant.Office
                 _toolCatalog.InvalidateDocumentVbaTools();
                 EndInboxRun(session, lease, ref trace);
             }
+            StartChatTitleGeneration(session, settings, changed);
         }
 
         public ChatStateResponse CancelAgentTool(string pendingId, string chatId = null)
@@ -557,33 +558,6 @@ namespace RNAssistant.Office
                 return true;
             }
             return (activity.Children ?? new List<ChatActivity>()).Any(HasPendingAgentConfirmation);
-        }
-
-        private static bool MarkPendingActivityExecuting(ChatSession session, string pendingId, string runId)
-        {
-            if (session == null || session.Messages == null || string.IsNullOrWhiteSpace(pendingId))
-            {
-                return false;
-            }
-
-            foreach (var message in session.Messages)
-            {
-                var activity = FindPendingActivity(message == null ? null : message.Activity, pendingId);
-                if (activity == null)
-                {
-                    continue;
-                }
-
-                activity.Status = "running";
-                activity.ExecutionStatus = "executing";
-                activity.ResultMessage = "Выполняю подтверждённое действие.";
-                message.RunId = runId;
-                message.Sequence = 0;
-                AnnotateActivity(activity, runId, 0);
-                return true;
-            }
-
-            return false;
         }
 
         private ToolInvocation CommandFromActivity(ChatActivity activity)

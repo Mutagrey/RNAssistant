@@ -113,7 +113,7 @@ namespace RNAssistant.MockDemo
                 Func<string, object, string> tool = (name, arguments) => Newtonsoft.Json.JsonConvert.SerializeObject(new {
                     message = "", action = "tool", tool_calls = new[] { new { name, arguments } } });
                 const string done = "{\"message\":\"Done\",\"action\":\"done\",\"tool_calls\":[]}";
-                new SettingsService(paths).Save(new AppSettings { AutoConfirmToolActions = false, ContextWindowOverrideTokens = 131072 });
+                new SettingsService(paths).Save(new AppSettings { AutoConfirmToolActions = false, SmartChatTitles = false, ContextWindowOverrideTokens = 131072 });
                 controller = new AssistantController(adapter, paths, model);
                 var id = controller.Initialize().ActiveChatId;
                 responses.Enqueue(done);

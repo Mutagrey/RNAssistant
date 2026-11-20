@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using RNAssistant.Application.Conversations;
+using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
@@ -239,20 +240,22 @@ namespace RNAssistant.Office
 
         private void StartChatTitleGeneration(
             ChatSession session,
-            string userText,
-            string assistantText,
             AppSettings settings,
-            string expectedCurrentTitle,
             Action<ChatStateResponse> chatStateChanged)
         {
-            if (session == null || !ChatTitleBuilder.CanReplaceAutoTitle(session, expectedCurrentTitle))
+            var expectedCurrentTitle = session?.LastRun?.ProvisionalTitle;
+            var summary = session?.LastRun?.KernelState?.Summary;
+            if (settings?.SmartChatTitles != true || expectedCurrentTitle == null ||
+                summary?.Lifecycle != RunLifecycle.Completed || string.IsNullOrWhiteSpace(summary.AssistantMessage) ||
+                !ChatTitleBuilder.CanReplaceAutoTitle(session, expectedCurrentTitle))
             {
                 return;
             }
 
+            var userText = ChatTitleBuilder.ResolveUserSeed(session, string.Empty);
+            var assistantText = summary.AssistantMessage;
             var host = session.Host;
             var documentKey = session.DocumentKey;
-            var documentTitle = session.DocumentTitle;
             var sessionId = session.Id;
             CancellationToken lifetimeToken;
             try
@@ -304,23 +307,24 @@ namespace RNAssistant.Office
                     {
                         lock (_syncRoot)
                         {
-                            if (!_chatSessions.TryApplyGeneratedTitle(
+                            var updated = _chatSessions.ApplyGeneratedTitle(
                                 host,
                                 documentKey,
                                 sessionId,
                                 expectedCurrentTitle,
-                                title))
+                                title);
+                            if (updated == null || chatStateChanged == null) return;
+                            state = new ChatStateResponse
                             {
-                                return;
-                            }
-                            state = CreateStoredChatState(host, documentKey, documentTitle);
+                                CatalogChanges = new ChatCatalogChangesDto
+                                {
+                                    UpsertedChats = new[] { _chatSessions.GetChatSummary(updated) }
+                                }
+                            };
                         }
                     }
 
-                    if (chatStateChanged != null)
-                    {
-                        chatStateChanged(state);
-                    }
+                    chatStateChanged(state);
                 }
                 catch (OperationCanceledException)
                 {
@@ -386,10 +390,6 @@ namespace RNAssistant.Office
                 session, runId, cancellationToken, out runCancellation);
             RunCausalTrace causalTrace = null;
             SendChatResponse response = null;
-            string titleUserSeed = null;
-            string provisionalTitle = null;
-            string assistantTitleSeed = null;
-            var shouldGenerateLlmTitle = false;
 
             try
             {
@@ -438,18 +438,17 @@ namespace RNAssistant.Office
                     appendedUserMessage = userMessage;
                 }
                 var documentContext = LoadContext(session);
-                titleUserSeed = ChatTitleBuilder.ResolveUserSeed(session, text);
-                shouldGenerateLlmTitle = settings.SmartChatTitles && ChatTitleBuilder.ShouldAssign(session);
-                provisionalTitle = ChatTitleBuilder.ShouldAssign(session)
-                    ? ChatTitleBuilder.BuildDraftTitle(titleUserSeed)
-                    : string.Empty;
-                if (!string.IsNullOrWhiteSpace(provisionalTitle))
+                var assignTitle = ChatTitleBuilder.ShouldAssign(session);
+                if (assignTitle)
                 {
-                    session.Title = provisionalTitle;
+                    var draft = ChatTitleBuilder.BuildDraftTitle(ChatTitleBuilder.ResolveUserSeed(session, text));
+                    if (!string.IsNullOrWhiteSpace(draft)) session.Title = draft;
                 }
 
                 session.LastRun = new ChatRunRecord
                 {
+                    ProvisionalTitle = settings.SmartChatTitles && assignTitle ? session.Title ?? string.Empty : null,
+                    ModelConfiguration = ChatSettingsResolver.CaptureRunConfiguration(settings, session),
                     SelectedSkills = SkillTaskService.CopySelections(session.LastRun),
                     RunId = runId,
                     TurnId = runId,
@@ -664,18 +663,13 @@ namespace RNAssistant.Office
                     RuntimeLog.Info("Chat turn completion timing: chat=" + session.Id + ", finalSave=" + finalSaveMs +
                         "ms, responseProjection=" + finalResponseMs + "ms, messages=" +
                         (session.Messages == null ? 0 : session.Messages.Count) + ".");
-                if (shouldGenerateLlmTitle)
-                    assistantTitleSeed = ChatTitleBuilder.ResolveAssistantSeed(
-                        session, completion.AssistantText);
             }
             finally
             {
                 EndInboxRun(session, runLease, ref causalTrace);
                 StartConversationQueue(session, (nextRun, phase, message, activity) => { if (progress != null) progress(phase, message, activity); }, chatStateChanged);
             }
-            if (shouldGenerateLlmTitle)
-                StartChatTitleGeneration(session, titleUserSeed, assistantTitleSeed,
-                    settings, provisionalTitle, chatStateChanged);
+            StartChatTitleGeneration(session, settings, chatStateChanged);
             return response;
         }
 

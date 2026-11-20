@@ -112,12 +112,6 @@ namespace RNAssistant.Core.Services
             return string.IsNullOrWhiteSpace(fromSession) ? fallbackText : fromSession;
         }
 
-        public static string ResolveAssistantSeed(ChatSession session, string fallbackText)
-        {
-            var fromSession = FirstMessageContent(session, "assistant");
-            return string.IsNullOrWhiteSpace(fromSession) ? fallbackText : fromSession;
-        }
-
         private static string BuildFallback(string assistantText, string userText)
         {
             var title = FirstCandidate(assistantText, false);

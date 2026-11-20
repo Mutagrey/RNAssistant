@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Harness;
@@ -38,13 +39,14 @@ namespace RNAssistant.MockDemo
             var root = Path.Combine(Path.GetTempPath(), "rna-confirmation-input-" + Guid.NewGuid().ToString("N"));
             var paths = AppDataPaths.CreateForRoot(root);
             var adapter = FakeOfficeAdapter.ForHost("Excel");
-            var store = new ChatStore(paths);
+            IConversationStore store;
+            ChatCreationSessions(paths, adapter, out store);
             var responses = new Queue<string>();
             var helperCalls = 0;
             var primaryCalls = 0;
             var expectedAnalysis = string.Empty;
             string chatId = null;
-            var settings = new AppSettings { Model = "text", ToolResultRole = role, AutoConfirmToolActions = false,
+            var settings = new AppSettings { Model = "text", ToolResultRole = role, AutoConfirmToolActions = false, SmartChatTitles = false,
                 ContextWindowOverrideTokens = 131072 };
             settings.ModelCapabilities["text"] = new ModelCapabilitySettings { SupportsImages = routing == "native" };
             settings.ModelCapabilities["vision1"] = new ModelCapabilitySettings { SupportsImages = true };

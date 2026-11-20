@@ -1846,8 +1846,11 @@ failure remains separate from refusal before writing.
 Agent `chat.rename` changes the bound session's `Title` and `TitleAssignedByAgent`
 metadata in the same kernel commit as its terminal tool result. Reload/replay
 retains the naming flag; automatic draft, fallback and smart-title updates respect
-it, including already pending generation. No separate title store or document
-mutation journal is introduced. Usage and policy: [chat naming](tool-library.md#chat-naming--2026-11-03).
+it, including already pending generation. Office persists the provisional title
+and accepted model in the first run record and retains them across confirmation.
+A completed new or resumed run uses its final assistant message to request a
+title. The committed rename publishes one revisioned Office catalog row.
+[Chat naming](tool-library.md#chat-naming--2026-11-03).
 
 Chat-list/header reads use a separate reducer checkpoint in SQLite. It retains scalar header/run metadata, message ids/protocol flags, minimal active-HTML artifact references/counts and CAS reference metadata. Warm header reads do not read or deserialize the full projection root. Cold header builds reduce event metadata without storing message/tool bodies or context or hydrating CAS. HTML counts come only from artifact event metadata; old events without that metadata report zero counts. A later full read verifies the materialization flag again inside its read transaction so a concurrent header rebuild cannot appear as empty history.
 

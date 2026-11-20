@@ -772,7 +772,7 @@ namespace RNAssistant.Office.Services
                 _conversations.SaveActiveSessionId(session.Host, session.DocumentKey, _activeSessionId);
         }
 
-        internal bool TryApplyGeneratedTitle(
+        internal ChatSession ApplyGeneratedTitle(
             string host,
             string documentKey,
             string sessionId,
@@ -781,34 +781,35 @@ namespace RNAssistant.Office.Services
         {
             if (string.IsNullOrWhiteSpace(sessionId) || string.IsNullOrWhiteSpace(generatedTitle))
             {
-                return false;
+                return null;
             }
 
             if (IsRunOwned(sessionId))
             {
-                return false;
+                return null;
             }
-            var session = _conversations.Load(host, documentKey, sessionId) ?? _conversations.Load(sessionId);
-            if (!ChatTitleBuilder.CanReplaceAutoTitle(session, expectedCurrentTitle))
+            var session = _conversations.Load(host, documentKey, sessionId);
+            generatedTitle = generatedTitle.Trim();
+            if (!ChatTitleBuilder.CanReplaceAutoTitle(session, expectedCurrentTitle) ||
+                string.Equals(session.Title, generatedTitle, StringComparison.Ordinal))
             {
-                return false;
+                return null;
             }
 
-            session.Title = generatedTitle.Trim();
             try
             {
-                _conversations.Commit(session, new ConversationCommit());
+                _conversations.SetTitle(session, generatedTitle);
             }
             catch (ChatConcurrencyException)
             {
-                return false;
+                return null;
             }
             if (string.Equals(_activeSessionId, sessionId, StringComparison.OrdinalIgnoreCase))
             {
                 _activeSession = session;
                 _activeSessionPersisted = _conversations.IsPersisted(session);
             }
-            return true;
+            return session;
         }
 
         public ChatSession GetActiveSession()
