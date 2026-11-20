@@ -1194,6 +1194,67 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void WorkspaceActivePollAndDiagnosticCost()
+        {
+            WithPluginPaths(paths => {
+                using (var service = new PluginApplicationService(paths))
+                {
+                    var id = service.CreateProjectWorkspace(new ProjectConnectionRequest {
+                        RootPath = Path.Combine(paths.Root, "active-cost") }).SelectedWorkspaceId;
+                    var created = service.CreateProjectChat(new ProjectChatRequest { WorkspaceId = id });
+                    var workspace = new WorkspaceStore(paths).OpenConnected(id);
+                    var session = service.Conversations.GetSession(workspace, created.SessionId);
+                    var store = service.Conversations.ConversationStore;
+                    var journal = ((ConversationJournalRouter)store).ForAddress(ConversationMetadata.From(session));
+                    var initial = CheckpointState("active-cost-run", RunLifecycle.Running, 0, 0);
+                    session.LastRun = new ChatRunRecord { RunId = initial.Summary.RunId, TurnId = initial.Summary.TurnId,
+                        RuntimeId = "live", Status = "running", KernelState = initial, ConversationPolicy = ConversationRunPolicy.For(ChatModes.Agent) };
+                    new ConversationRunCommit(session, new AgentRunEvent(AgentRunEventKind.Started, initial.Summary, limits: initial.Limits),
+                        new ChatMessage[0]).Persist(store.CommitRun, session);
+                    var correlation = new SessionEventCorrelation(session.LastRun.RunId, session.LastRun.TurnId, "step");
+                    var request = new LlmTraceRecord { Type = "request", SessionId = session.Id, RunId = correlation.RunId,
+                        StepId = correlation.StepId, RequestId = "cost", Manifest = new ModelRequestManifest() };
+                    var write = new SessionEventWrite(SessionEventDescriptors.For(SessionEventKind.ModelRequestPrepared), request, null, correlation);
+                    var events = (IEventStore)journal;
+                    using (ConversationLeaseService.ForWorkspace(paths).Reserve(session.Id))
+                    foreach (var height in Environment.GetEnvironmentVariable("RNA_DIAGNOSTIC_COST_CURVE") == "1"
+                        ? new[] { 100, 1000, 10000 } : new[] { 100 })
+                    {
+                        while (session.Messages.Count < height)
+                        {
+                            var batch = Enumerable.Range(0, Math.Min(100, height - session.Messages.Count))
+                                .Select(index => new ChatMessage { Role = "user", Content = "retained" }).ToArray();
+                            session.Messages.AddRange(batch); store.Commit(session, new ConversationCommit(batch));
+                        }
+                        string last = null;
+                        while (session.Revision < height || last == null) last = events.Append(session, write).EventId;
+                        var records = journal.Journal.ReadRecords; var bodies = journal.ChatBodyReads;
+                        var timer = System.Diagnostics.Stopwatch.StartNew();
+                        var poll = service.Conversations.ReadStateWindow(workspace, session.Id, 80);
+                        var pollRecords = journal.Journal.ReadRecords - records; var pollBodies = journal.ChatBodyReads - bodies;
+                        var pollMs = timer.ElapsedMilliseconds;
+                        AssertTrue(poll.Window.PageMessages.Count == 80 && pollBodies <= 82 && pollRecords <= 18, "bounded active poll at H=" + height);
+                        records = journal.Journal.ReadRecords; bodies = journal.ChatBodyReads; timer.Restart();
+                        var address = ConversationMetadata.From(session);
+                        var raw = journal.ReadRawPage(address, new TrajectoryQueryRequest { PageSize = 30 }, CancellationToken.None);
+                        var manifests = journal.ReadRequestPage(address, correlation.RunId, null, CancellationToken.None, correlation.StepId);
+                        var exact = journal.ReadModelEvent(address, last, CancellationToken.None);
+                        AssertTrue(raw.Records.Count == 30 && manifests.Count == 51 && exact.EventId == last, "bounded diagnostic pages and exact locator");
+                        var readRecords = journal.Journal.ReadRecords - records; var readBodies = journal.ChatBodyReads - bodies;
+                        AssertTrue(readRecords <= 95 && readBodies <= 82, "diagnostics cost independent of history");
+                        RuntimeThrows<OperationCanceledException>(() => journal.ReadRequestPage(address, null, null, new CancellationToken(true)));
+                        var unrelatedRecords = journal.Journal.ReadRecords;
+                        var unrelated = journal.ReadRunTrajectory(address, new TrajectoryViewQueryRequest {
+                            View = TrajectoryViews.RunCausal, RunId = "another-run" }, CancellationToken.None);
+                        AssertTrue(unrelated.TotalEvents == 0 && journal.Journal.ReadRecords - unrelatedRecords < 5,
+                            "the run journal reads no events from another run");
+                        Console.WriteLine("H={0} poll records={1} bodies={2} ms={3}; raw30 + manifests51 + exact1 records={4} bodies={5} ms={6}",
+                            height, pollRecords, pollBodies, pollMs, readRecords, readBodies, timer.ElapsedMilliseconds);
+                    }
+                }
+            });
+        }
+
         private static void PluginsProjectChatHistoryPages()
         {
             WithPluginPaths(paths => {
@@ -1247,6 +1308,19 @@ namespace RNAssistant.Harness
                     new ConversationRunCommit(session, new AgentRunEvent(AgentRunEventKind.Started,
                         session.LastRun.KernelState.Summary, limits: session.LastRun.KernelState.Limits),
                         new ChatMessage[0]).Persist(service.Conversations.ConversationStore.CommitRun, session);
+                    var oldMessage = Directory.EnumerateFiles(paths.ChatBlobDirectory,
+                        RNAssistant.Core.Tools.TextPatternEngine.Sha256("Message 1") + ".blob", SearchOption.AllDirectories).Single();
+                    File.Move(oldMessage, oldMessage + ".fixture");
+                    try
+                    {
+                        using (RNAssistant.Application.Conversations.ConversationLeaseService.ForWorkspace(paths).Reserve(session.Id))
+                        {
+                            var active = service.Conversations.ReadStateWindow(workspace, session.Id, 80);
+                            AssertEqual(80, active.Window.PageMessages.Count, "busy run keeps the bounded window");
+                            AssertEqual("running", active.Session.LastRun.Status, "poll does not reconcile an owned run");
+                        }
+                    }
+                    finally { File.Move(oldMessage + ".fixture", oldMessage); }
                     File.Delete(Directory.GetFiles(paths.ChatBlobDirectory, "*.blob", SearchOption.AllDirectories)
                         .Single(path => !beforeRunBlobs.Contains(path)));
                     var canonical = StorageJournal.Inventory(paths).SelectMany(stream => stream.Segments)

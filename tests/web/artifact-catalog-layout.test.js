@@ -34,6 +34,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
           resourceClass: "versioned_aggregate" } }));
       window.commands = []; window.historyRequests = []; window.exportRequests = []; window.historyWait = null;
       window.renderHtmlWorkspace = () => RNAssistantHtmlWorkspaceTree.render({ root: $("htmlWorkspaceTree"), selected: {}, files: [], artifacts: [] });
+      window.RNAssistantHtmlWorkspaceSurface = { isDirty: () => state.htmlWorkspaceDirty === true };
       window.applyChatStateForChat = () => {};
       window.send = async (command, args) => {
         commands.push(command);
@@ -73,6 +74,21 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       "HTML projects group by source chat inside their document");
     await page.locator("#artifactCatalogOverview").waitFor({ state: "visible" });
     assert.equal(await page.locator("#artifactCatalogOverviewRows tr").count(), 3, "demo-style catalog table uses the loaded projection");
+    await page.evaluate(async () => {
+      window.isPanelActive = name => name === "artifacts";
+      state.chatProjectionRevisions = { chat: 3 };
+      const reads = () => commands.filter(command => command === "listArtifactCatalog").length;
+      const start = reads();
+      for (let i = 0; i < 5; i++) {
+        state.artifactLibrary.sessionRevision++; state.chatProjectionRevisions.chat++;
+        RNAssistantArtifactCatalog.sync();
+      }
+      if (reads() !== start) throw new Error("Run progress reloaded an unchanged material page");
+      state.artifactLibrary.catalogStamp = "new-head";
+      RNAssistantArtifactCatalog.sync();
+      await Promise.resolve();
+      if (reads() !== start + 1) throw new Error("Material change did not request one new page");
+    });
     assert.equal(await page.locator("#htmlWorkspaceSearchInput").count(), 0, "catalog and tree use one material search");
     assert.equal(await page.locator("#artifactNavSearch").count(), 1);
     await page.evaluate(() => { window.createCalls = 0;
@@ -89,6 +105,9 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "overview does not overflow narrow pane");
     if (process.env.LAYOUT_SCREENSHOT) await page.screenshot({ path: process.env.LAYOUT_SCREENSHOT.replace(/\.png$/, "-overview-420.png") });
     await page.setViewportSize({ width: 1100, height: 760 });
+    await page.waitForFunction(() => !document.querySelector(".shell").classList.contains("navigation-overlay"));
+    if (await page.locator("#htmlWorkspaceSidebar").getAttribute("aria-hidden") === "true")
+      await page.locator("#productMobileMenuButton").click();
     await page.locator("#htmlWorkspaceTree").getByText("Отчёт по продажам", { exact: true }).click();
     assert.equal(await page.evaluate(() => openTargets.at(-1).resourceUri), await page.evaluate(() => fixtureItems[0].resourceUri));
     await page.evaluate(() => { state.htmlWorkspaceDirty = true; });
@@ -105,7 +124,9 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
         return { chatId:'chat', sessionRevision:3, documentId:'doc', items:fixtureItems.filter(item=>item.title.includes(args.query || '')) };
       };
     });
-    await page.getByRole('button',{name:'Поиск материалов',exact:true}).click();
+    if (await page.locator("#htmlWorkspaceSidebar").getAttribute("aria-hidden") === "true")
+      await page.locator("#productMobileMenuButton").click();
+    await page.locator('button[aria-controls="artifactNavSearch"]').click();
     await page.locator('#artifactNavSearch').fill('нет такого файла');
     await page.waitForFunction(()=>document.getElementById('artifactCatalogStatus').textContent==='Артефакты не найдены.');
     assert.deepEqual(await page.evaluate(() => openTargets.at(-1)),selectedTarget,'filter does not retarget the open view');

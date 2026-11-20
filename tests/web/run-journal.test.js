@@ -296,11 +296,20 @@ function selectTree(key) {
   assert.match(root.querySelector(".rn-run-journal-part").textContent, /усечены/);
   console.log("PASS journal: exact grouping, unknown scope, lossless arguments and results");
 
-  const metadataOnly = [row(1, "llm.response", "received", { RunId: "metadata", ModelAttemptId: "m1" })];
+  const metadataOnly = [row(4, "llm.response", "received", { RunId: "metadata", ModelAttemptId: "m1" })];
   context.RNAssistantRunJournal.render(root, metadataOnly, options);
   selectTree(metadataOnly[0].Id);
-  assert.match(root.textContent, /Точные байты этой попытки не сохранены/,
-    "metadata-only response does not offer a broken CAS loader");
+  assert.match(root.textContent, /доступны только метаданные/);
+  assert.equal(findButton(root, "Открыть содержимое в Inspector"), undefined);
+  const recordedRequests = [
+    row(2, "llm.request", "prepared", { RunId: "other", ModelAttemptId: "m1" }),
+    row(3, "llm.request", "prepared", { RunId: "metadata", ModelAttemptId: "m1" })
+  ];
+  context.RNAssistantRunJournal.render(root, recordedRequests.concat(metadataOnly), options);
+  selectTree(metadataOnly[0].Id);
+  findButton(root, "Открыть содержимое в Inspector").click();
+  assert.equal(openedRequest.runId, "metadata");
+  assert.equal(openedRequest.requestEventId, "evt-3");
 
   const repairRows = [
     row(1, "llm.request", "prepared", { RunId: "repair", StepId: "logical", ModelAttemptId: "a1" }),

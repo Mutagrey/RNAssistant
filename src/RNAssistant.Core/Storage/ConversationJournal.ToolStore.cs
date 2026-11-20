@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using Microsoft.Data.Sqlite;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
@@ -464,9 +465,14 @@ namespace RNAssistant.Core.Storage
                     command.Parameters.AddWithValue("$operation", record.Operation); command.ExecuteNonQuery();
                 }
             if (fact.ModelEvent != null)
-                using (var command = Command(db, "INSERT INTO chat_event VALUES($stream,$chat,$run,$kind,$operation,$sequence)", tx))
+                using (var command = Command(db, "INSERT INTO chat_event VALUES($stream,$chat,$run,$kind,$operation,$sequence,$step,CASE WHEN $kind=$request THEN (SELECT COALESCE(MAX(request_ordinal),0)+1 FROM chat_event WHERE stream=$stream AND chat=$chat) END)", tx))
                 {
                     command.Parameters.AddWithValue("$chat", fact.Card.ChatId); command.Parameters.AddWithValue("$run", fact.ModelEvent.RunId);
+                    var step = fact.ModelEvent.LogicalStepId;
+                    if (step == null && fact.ModelEvent.Kind == SessionEventKind.ModelRequestPrepared)
+                        step = (string)JObject.Parse(ReadChatBody(fact.ModelEvent.Body))["StepId"];
+                    command.Parameters.AddWithValue("$step", (object)step ?? DBNull.Value);
+                    command.Parameters.AddWithValue("$request", (int)SessionEventKind.ModelRequestPrepared);
                     command.Parameters.AddWithValue("$kind", (int)fact.ModelEvent.Kind); command.Parameters.AddWithValue("$operation", record.Operation);
                     command.Parameters.AddWithValue("$sequence", position.Sequence); command.ExecuteNonQuery();
                 }

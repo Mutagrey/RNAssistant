@@ -308,6 +308,41 @@ namespace RNAssistant.Core.Storage
             }
         }
 
+        // Read-only actor for saved material views. No history, run recovery, or selection side effects.
+        internal ChatSession ReadArtifactActor(string id, string resourceUri)
+        {
+            IReadOnlyList<ResourceRef> ignored;
+            return ReadArtifactActor(id, resourceUri, true, out ignored);
+        }
+
+        internal ChatSession ReadArtifactActor(string id, string resourceUri, bool hydrate, out IReadOnlyList<ResourceRef> membership)
+        {
+            membership = new ResourceRef[0];
+            using (RuntimeStorageActivity.Acquire(_paths))
+            {
+                var receipt = ReadChat(id);
+                if (receipt == null) return null;
+                var card = receipt.Fact.Card;
+                var address = ChatMetadata(receipt);
+                var resources = ReadResourceSet(receipt.Fact.Resources, address);
+                membership = resources.References;
+                var selected = resourceUri == null ? resources.References : resources.References.Where(item => item.Uri == resourceUri);
+                return new ChatSession { Id = id, Revision = address.Revision, Host = address.Host, DocumentKey = address.DocumentKey,
+                    WorkspaceId = address.WorkspaceId, DocumentAuthorityId = address.DocumentAuthorityId, Title = card.Title,
+                    DocumentTitle = card.DocumentTitle, DocumentPath = card.DocumentPath, Artifacts = hydrate ? ReadArtifacts(address, selected).ToList() : new List<ChatArtifact>(),
+                    ArtifactLinks = resources.Links.ToList(), ActiveHtmlArtifactId = resources.ActiveHtml == null ? null : ResourceUri.Parse(resources.ActiveHtml.Uri).Segments[2],
+                    ActivePlanDocumentArtifactId = resources.ActivePlan == null ? null : ResourceUri.Parse(resources.ActivePlan.Uri).Segments[2] };
+            }
+        }
+
+        internal bool HasActiveHtml(string id, string artifactId)
+        {
+            var receipt = ReadChat(id);
+            if (receipt == null) return false;
+            var html = ReadResourceSet(receipt.Fact.Resources, ChatMetadata(receipt)).ActiveHtml;
+            return html != null && ResourceUri.Parse(html.Uri).Segments[2] == artifactId;
+        }
+
         private ChatSession CreateSessionShell(ConversationChatReceipt receipt)
         {
             var card = receipt.Fact.Card;
@@ -332,10 +367,11 @@ namespace RNAssistant.Core.Storage
             return session;
         }
 
-        private IReadOnlyList<ChatSessionHeader> ReadChatHeaders(string host = null, string key = null, bool includeStorageUsage = false, string selectedId = null)
+        internal IReadOnlyList<ChatSessionHeader> ReadChatHeaders(string host = null, string key = null, bool includeStorageUsage = false,
+            string selectedId = null, ChatBlobStore.StorageSizeSnapshot sharedSizes = null)
         {
             RequireTextRoot();
-            var sizes = includeStorageUsage ? _bodies.CreateStorageSizeSnapshot() : null;
+            var sizes = includeStorageUsage ? sharedSizes ?? _bodies.CreateStorageSizeSnapshot() : null;
             return Access((db, cursor) => {
                 var ids = new List<string>();
                 if (selectedId != null) ids.Add(selectedId);
@@ -362,8 +398,8 @@ namespace RNAssistant.Core.Storage
         ChatSessionHeader IConversationStore.ReadHeader(string id, bool includeStorageUsage)
         { return string.IsNullOrWhiteSpace(id) ? null : ReadChatHeaders(selectedId: id, includeStorageUsage: includeStorageUsage).SingleOrDefault(); }
 
-        IReadOnlyList<ChatSessionHeader> IConversationStore.ListHeaders(bool includeStorageUsage)
-        { return ReadChatHeaders(includeStorageUsage: includeStorageUsage); }
+        IReadOnlyList<ChatSessionHeader> IConversationStore.ListHeaders(bool includeStorageUsage, bool documentsOnly)
+        { return documentsOnly && !_scope.StartsWith("document:", StringComparison.Ordinal) ? new ChatSessionHeader[0] : ReadChatHeaders(includeStorageUsage: includeStorageUsage); }
         IReadOnlyList<ChatSessionHeader> IConversationStore.ListHeaders(string host, string key, string title) { return ReadChatHeaders(host, key, true); }
         void IConversationStore.SetTitle(ChatSession session, string title) { session.Title = title; ((IConversationStore)this).Commit(session, new ConversationCommit()); }
         void IConversationStore.SetModel(ChatSession session, string model) { session.Model = model; ((IConversationStore)this).Commit(session, new ConversationCommit()); }

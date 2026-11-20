@@ -28,12 +28,12 @@ namespace RNAssistant.Office.Services
         private static bool IsWordSearch(string target)
         { return target == "stories-main" || target == "stories-selection" || target == "stories-all"; }
 
-        private string ReadWordSearch(string target)
+        private string ReadWordSearch(string target, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
             if (_word == null)
                 throw new ResourceRequestException("The bound Word reader is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
             WordSearchSnapshot snapshot;
-            try { snapshot = new WordService(_word).CaptureSearch(target.Substring(8), CancellationToken.None); }
+            try { snapshot = new WordService(_word).CaptureSearch(target.Substring(8), cancellationToken); }
             catch (WordBackendException error)
             { throw new ResourceRequestException(error.Message, error.ErrorCode, error.Retryable); }
             var json = new JObject { ["scope"] = snapshot.Scope,
@@ -78,14 +78,14 @@ namespace RNAssistant.Office.Services
                 MaxChars = WordService.MaximumTextCharacters };
         }
 
-        private string ReadWordText(string target)
+        private string ReadWordText(string target, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
             if (_word == null)
                 throw new ResourceRequestException("The bound Word reader is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
             var request = target.StartsWith("range-", StringComparison.Ordinal) ? WordRange(target) :
                 new WordTextReadRequest { Source = target == "selection" ? "selection" : "document",
                     MaxChars = WordService.MaximumTextCharacters };
-            try { return new WordService(_word).CaptureText(request, CancellationToken.None).Text; }
+            try { return new WordService(_word).CaptureText(request, cancellationToken).Text; }
             catch (WordBackendException error)
             { throw new ResourceRequestException(error.Message, error.ErrorCode, error.Retryable); }
         }
@@ -125,13 +125,13 @@ namespace RNAssistant.Office.Services
             });
         }
 
-        private string ReadWordStructure()
+        private string ReadWordStructure(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
             if (_word == null)
                 throw new ResourceRequestException("The bound Word reader is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
             try
             {
-                var bounds = new WordService(_word).CaptureMainStoryBounds(CancellationToken.None);
+                var bounds = new WordService(_word).CaptureMainStoryBounds(cancellationToken);
                 return new JObject
                 {
                     ["type"] = "rnassistant.wordMainStory",

@@ -12,11 +12,9 @@ namespace RNAssistant.Core.Storage
 {
     internal sealed partial class ConversationJournal
     {
-        private DocumentArtifactStore ResourceStore()
-        {
-            var resources = new ResourceJournal(_paths, _protector);
-            return new DocumentArtifactStore(resources, resources, _bodies);
-        }
+        private readonly Lazy<DocumentArtifactStore> _artifactPublications;
+        internal long OriginalBindingBatches { get { return _artifactPublications.IsValueCreated ? _artifactPublications.Value.OriginalBindingBatches : 0; } }
+        private DocumentArtifactStore ResourceStore() { return _artifactPublications.Value; }
 
         bool IConversationArtifactBodyReader.LoadArtifactBody(ChatSession session, string artifactId)
         {
@@ -148,9 +146,11 @@ namespace RNAssistant.Core.Storage
             if (published.Length == 0 && checkpoints.Length == 0 && (session.DocumentAuthorityId == null ||
                 !messages.Any(item => item.Header.Attachments?.Count > 0))) return;
             var originals = ResourceStore();
-            foreach (var artifact in published)
+            var references = published.Select(item => ChatResourceUri.CreateArtifactRevision(session, item)).ToArray();
+            int index = 0;
+            foreach (var retained in originals.ReadPublishedMetadata(metadata, references))
             {
-                var retained = originals.Read(metadata, ChatResourceUri.CreateArtifactRevision(session, artifact), false);
+                var artifact = published[index++];
                 RequireArtifactProjection(artifact, retained);
                 if (artifact.Id == session.ActiveHtmlArtifactId && originals.IsRemoved(metadata, retained))
                     throw new InvalidDataException("A removed HTML workspace cannot be selected as active.");

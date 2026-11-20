@@ -630,7 +630,7 @@ namespace RNAssistant.Harness
             public ResourceHeadState GetHead(ResourceAuthorityScopeId scope, ResourceIdentity identity) { return _authority.GetHead(scope, identity); }
             public ResourceHeadPage ReadHeads(ResourceAuthorityScopeId scope, IReadOnlyList<ResourceHeadRange> ranges, int offset, int limit)
             { HeadPages++; var page = _authority.ReadHeads(scope, ranges, offset, limit); HeadPageRead?.Invoke(); return page; }
-            public AuthorityCommitResult Publish(ResourceAuthorityCommit commit) { return _authority.Publish(commit); }
+            public AuthorityCommitResult Publish(ResourceAuthorityCommit commit, bool includeAllHeads = true) { return _authority.Publish(commit, includeAllHeads); }
             public void RegisterRevision(ResourceAuthorityScopeId scope, ResourceRevisionMetadata revision) { _revisions.RegisterRevision(scope, revision); }
             public ResourceRevisionMetadata GetRevision(ResourceAuthorityScopeId scope, ResourceRef reference) { return _revisions.GetRevision(scope, reference); }
             public void RegisterView(ResourceAuthorityScopeId scope, ResourceRevisionView view) { _revisions.RegisterView(scope, view); ViewRegistered?.Invoke(view); }

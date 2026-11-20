@@ -90,8 +90,8 @@ namespace RNAssistant.Office.Services
                     if (TryOutlookArchiveAttachmentKey(target, out archiveId, out archivePage,
                         out archiveRow, out archiveAttachment))
                         return CaptureOutlookArchiveAttachmentSource(session, archiveId, archivePage,
-                            archiveRow, archiveAttachment);
-                    return CaptureAttachmentSource(session, target);
+                            archiveRow, archiveAttachment, cancellationToken);
+                    return CaptureAttachmentSource(session, target, cancellationToken);
                 }
                 var representation = NormalizeRepresentation(request == null ? null : request.Representation, target);
                 if (IsPowerPoint && IsPowerPointNotes(target) &&
@@ -105,7 +105,7 @@ namespace RNAssistant.Office.Services
                     {
                         Result = new ResourceReadResult
                         {
-                            Resource = Describe(session, target),
+                            Resource = Describe(session, target, cancellationToken),
                             Representation = ResourceRepresentations.Metadata,
                             Complete = true
                         },
@@ -113,14 +113,14 @@ namespace RNAssistant.Office.Services
                     };
                 }
 
-                var content = IsWord && IsWordSearch(target) ? ReadWordSearch(target)
-                    : IsPowerPoint && IsPowerPointSearch(target) ? ReadPowerPointSearch(target)
-                    : IsOutlook ? ReadOutlookSource(target, representation)
+                var content = IsWord && IsWordSearch(target) ? ReadWordSearch(target, cancellationToken)
+                    : IsPowerPoint && IsPowerPointSearch(target) ? ReadPowerPointSearch(target, cancellationToken)
+                    : IsOutlook ? ReadOutlookSource(target, representation, cancellationToken)
                     : representation == ResourceRepresentations.Source
-                    ? ReadPowerPointSource(target, true)
+                    ? ReadPowerPointSource(target, true, cancellationToken)
                     : representation == ResourceRepresentations.Structure
-                    ? ReadStructure(target)
-                    : ReadText(target);
+                    ? ReadStructure(target, cancellationToken)
+                    : ReadText(target, cancellationToken);
                 var sourceTruncated = !IsExactSource(target) && content.Length >= MaximumMaterializedCharacters;
                 var cursorBinding = ResourceReadCursor.ReadBinding(resourceUri, representation);
                 var position = ResourceReadCursor.ParseRevisionBound(request, cursorBinding);
@@ -132,7 +132,7 @@ namespace RNAssistant.Office.Services
                     sourceTruncated,
                     request,
                     position,
-                    cursorBinding);
+                    cursorBinding, cancellationToken);
                 if (IsWord && target.StartsWith("range-", StringComparison.Ordinal) &&
                     representation == ResourceRepresentations.Text)
                 {
@@ -226,12 +226,12 @@ namespace RNAssistant.Office.Services
             });
         }
 
-        private string ReadText(string target)
+        private string ReadText(string target, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
-            if (IsOutlook) return ReadOutlookSource(target, ResourceRepresentations.Text);
-            if (IsWord) return ReadWordText(target);
-            if (IsPowerPoint && IsPowerPointNotes(target)) return ReadPowerPointNotes(target);
-            if (IsPowerPoint && target != "selection") return ReadPowerPointSource(target, false);
+            if (IsOutlook) return ReadOutlookSource(target, ResourceRepresentations.Text, cancellationToken);
+            if (IsWord) return ReadWordText(target, cancellationToken);
+            if (IsPowerPoint && IsPowerPointNotes(target)) return ReadPowerPointNotes(target, cancellationToken);
+            if (IsPowerPoint && target != "selection") return ReadPowerPointSource(target, false, cancellationToken);
             if (string.Equals(target, "selection", StringComparison.Ordinal))
             {
                 var selection = _adapter.CaptureSelectionContext("selection", MaximumMaterializedCharacters);
@@ -247,11 +247,11 @@ namespace RNAssistant.Office.Services
             return _adapter.GetDocumentSnapshot(MaximumMaterializedCharacters) ?? string.Empty;
         }
 
-        private string ReadStructure(string target)
+        private string ReadStructure(string target, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
-            if (IsWord && target == "root") return ReadWordStructure();
+            if (IsWord && target == "root") return ReadWordStructure(cancellationToken);
             if (IsPowerPoint && (IsPowerPointSlide(target) || IsPowerPointNotes(target)))
-                return ReadPowerPointStructure(target);
+                return ReadPowerPointStructure(target, cancellationToken);
             if (IsWord && target.StartsWith("range-", StringComparison.Ordinal))
             {
                 var range = WordRange(target);
@@ -309,7 +309,7 @@ namespace RNAssistant.Office.Services
             bool sourceTruncated,
             ResourceReadRequest request,
             ResourceReadPosition position,
-            string cursorBinding)
+            string cursorBinding, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
             content = content ?? string.Empty;
             var offset = position == null ? 0 : position.Offset;
@@ -330,7 +330,7 @@ namespace RNAssistant.Office.Services
             var next = offset + length;
             var uri = CreateUri(session, target);
             var complete = next >= content.Length && !sourceTruncated;
-            var descriptor = Describe(session, target);
+            var descriptor = Describe(session, target, cancellationToken);
             descriptor.ContentSha256 = contentSha256;
             descriptor.Reference = new ResourceRef(descriptor.Reference.Uri, contentSha256);
             return new ResourceReadSelection

@@ -124,6 +124,8 @@ namespace RNAssistant.Core.Storage
         private void ApplyControlRows(SqliteConnection db, SqliteTransaction tx, JournalRecord record,
             JournalCursor position, ConversationQueueControl fact)
         {
+            SaveDiagnosticRunEvent(db, tx, record, position, fact.Origin?.Sender, fact.Origin?.RunId);
+            if (fact.NativeChat) SaveDiagnosticRunEvent(db, tx, record, position, fact.ChatId, fact.RunId);
             using (var command = Command(db, "INSERT INTO control_fact VALUES($stream,$operation,$chat,$fingerprint,$segment,$start,$end,$sequence,$hash,$first,$sender,$source_run,$source_call,$native); INSERT INTO control_current VALUES($stream,$chat,$operation) ON CONFLICT(stream,chat) DO UPDATE SET operation=$operation", tx))
             {
                 command.Parameters.AddWithValue("$native", fact.NativeChat ? 1 : 0);

@@ -19,6 +19,7 @@ namespace RNAssistant.Core.Storage
         public string ChatDirectory { get; private set; }
         public string ChatDraftFile { get; private set; }
         public string ChatBlobDirectory { get; private set; }
+        internal string ModelDiagnosticDirectory { get { return Path.Combine(Root, ModelDiagnosticCaptureStore.DirectoryName); } }
         public string WebViewUserDataDirectory { get; private set; }
         public string AttachmentDirectory { get; private set; }
         public string ResourceAuthorityDirectory { get; private set; }
@@ -99,6 +100,7 @@ namespace RNAssistant.Core.Storage
                 EnsureManagedDirectory(Root);
                 EnsureManagedDirectory(ChatDirectory);
                 EnsureManagedDirectory(ChatBlobDirectory);
+                EnsureManagedDirectory(ModelDiagnosticDirectory);
                 EnsureManagedDirectory(VbaJournalDirectory);
                 EnsureManagedDirectory(AttachmentDirectory);
                 EnsureManagedDirectory(ResourceAuthorityDirectory);
@@ -107,6 +109,7 @@ namespace RNAssistant.Core.Storage
                     throw new IOException("Chat draft file cannot be a reparse point.");
                 ClearDirectory(ChatDirectory);
                 ClearDirectory(ChatBlobDirectory);
+                ClearDirectory(ModelDiagnosticDirectory);
                 ClearDirectory(VbaJournalDirectory);
                 ClearDirectory(AttachmentDirectory);
                 ClearDirectory(ResourceAuthorityDirectory);

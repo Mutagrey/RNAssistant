@@ -154,6 +154,7 @@ namespace RNAssistant.Office
         internal ManualResetEventSlim RunEntered { get; set; }
         internal ManualResetEventSlim RunRelease { get; set; }
         internal Action NavigationWork { get; set; }
+        internal Action<CancellationToken> ArtifactReadWork { get; set; }
         internal Func<string, ChatStateResponse> CurrentDocumentChatSelection { get; set; }
 
         public InitResponse Initialize(bool includeChatState = true)
@@ -181,7 +182,7 @@ namespace RNAssistant.Office
                 Messages = new ChatMessageViewDto[0] };
         }
         internal Exception TrajectoryFailure { get; set; }
-        public ChatTrajectoryResponse GetChatTrajectory(ChatTrajectoryRequest request)
+        public ChatTrajectoryResponse GetChatTrajectory(ChatTrajectoryRequest request, System.Threading.CancellationToken token = default(System.Threading.CancellationToken))
         {
             if (TrajectoryFailure != null) throw TrajectoryFailure;
             LastDiagnosticsWorkspaceId = request?.WorkspaceId;
@@ -730,7 +731,7 @@ namespace RNAssistant.Office
         public ResourceDataCloseResponse CancelHtmlWorkspaceMutationUpload(ResourceUploadLeaseRequest request) { LastChatId = request.ChatId; return new ResourceDataCloseResponse { Closed = true }; }
         public HtmlWorkspaceResponse SaveHtmlWorkspaceFile(HtmlWorkspaceFilePayload request, CancellationToken token) { token.ThrowIfCancellationRequested(); LastChatId = request.ChatId; return new HtmlWorkspaceResponse { ActiveChatId = request.ChatId, Workspace = HtmlWorkspaceDto.From(new HtmlWorkspace { ActiveFileId = request.Path ?? string.Empty }) }; }
         public HtmlWorkspaceResponse SaveHtmlWorkspaceData(HtmlWorkspaceDataPayload request, CancellationToken token) { token.ThrowIfCancellationRequested(); LastChatId = request.ChatId; return new HtmlWorkspaceResponse { ActiveChatId = request.ChatId, Workspace = HtmlWorkspaceDto.From(null) }; }
-        public ArtifactCatalogResponse ListArtifactCatalog(ArtifactCatalogRequest request)
+        public ArtifactCatalogResponse ListArtifactCatalog(ArtifactCatalogRequest request, System.Threading.CancellationToken token = default(System.Threading.CancellationToken))
         { LastChatId = request.ChatId; return new ArtifactCatalogResponse { ChatId = request.ChatId }; }
         public ArtifactLibraryPageResponse GetArtifactLibraryPage(ArtifactLibraryPageRequest request)
         { LastChatId = request.ChatId; return new ArtifactLibraryPageResponse { ChatId = request.ChatId }; }
@@ -762,6 +763,7 @@ namespace RNAssistant.Office
         public ArtifactViewerPageDto ReadArtifactViewerPage(string chatId, string resourceUri, string cursor,
             System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken), string documentId = null)
         {
+            ArtifactReadWork?.Invoke(cancellationToken);
             LastChatId = chatId;
             LastArtifactViewerDocumentId = documentId;
             LastArtifactViewerResourceUri = resourceUri;

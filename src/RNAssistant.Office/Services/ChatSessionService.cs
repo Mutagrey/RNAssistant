@@ -334,6 +334,12 @@ namespace RNAssistant.Office.Services
             return LoadSession(requestedSessionId, false);
         }
 
+        internal ChatSession AddressedDraft(string id)
+        {
+            var draft = _activeSession;
+            return !_activeSessionPersisted && draft != null && string.Equals(draft.Id, id, StringComparison.OrdinalIgnoreCase) ? draft : null;
+        }
+
         internal ConversationMetadata LoadDiagnosticsMetadata(string requestedSessionId)
         {
             if (string.IsNullOrWhiteSpace(requestedSessionId))
@@ -342,9 +348,8 @@ namespace RNAssistant.Office.Services
             if (stored != null) return stored;
             // An unsaved, selected draft has no durable events yet. It must not be
             // persisted, selected again or recovered by a diagnostic read.
-            var draft = _activeSession;
-            if (draft != null && !_activeSessionPersisted &&
-                string.Equals(draft.Id, requestedSessionId, StringComparison.OrdinalIgnoreCase))
+            var draft = AddressedDraft(requestedSessionId);
+            if (draft != null)
                 return ConversationMetadata.From(draft);
             throw new ChatSessionNotFoundException(requestedSessionId);
         }
@@ -846,7 +851,7 @@ namespace RNAssistant.Office.Services
             // The Office catalog owns document chats only. Workspace/plugin chats
             // are rendered from the project catalog and must not appear a second
             // time under an Office "document" titled by their workspace name.
-            var headers = _conversations.ListHeaders().Where(header => header != null && !IsWorkspaceChat(header)).ToArray();
+            var headers = _conversations.ListHeaders(documentsOnly: true).Where(header => header != null && !IsWorkspaceChat(header)).ToArray();
             var headerMs = timer.ElapsedMilliseconds;
             var currentHost = _adapter.HostName;
             var currentDocumentKey = _adapter.DocumentKey;

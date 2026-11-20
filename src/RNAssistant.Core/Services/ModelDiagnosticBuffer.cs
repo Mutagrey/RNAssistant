@@ -39,6 +39,7 @@ namespace RNAssistant.Core.Services
             {
                 Expire();
                 while (_order.Count >= _maximumEntries || _bytes + entry.Bytes.LongLength > _maximumBytes) RemoveFirst();
+                record.DiagnosticExpiresUtc = entry.Expires;
                 _entries.Add(entry.Id, _order.AddLast(entry)); _bytes += entry.Bytes.LongLength;
             }
             return entry.Id;

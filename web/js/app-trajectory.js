@@ -894,6 +894,7 @@
     var chatId = selectedChatId();
     var requestedScope = scopeKey(), workspaceId = trajectoryWorkspaceId;
     var payload = queryPayload(chatId, append ? nextCursor : null);
+    if (payload.view === "run-causal" && payload.runId) payload.scopeToRun = true;
     var selectionKey = JSON.stringify([requestedScope, Object.assign({}, payload, { cursor: null })]);
     var queryKey = JSON.stringify([selectionKey, payload.cursor, !!append]);
     if (trajectoryQuery && trajectoryQuery.key === queryKey) return trajectoryQuery.completion;

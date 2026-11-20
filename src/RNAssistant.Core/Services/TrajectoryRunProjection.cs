@@ -23,7 +23,7 @@ namespace RNAssistant.Core.Services
             var rows = new List<TrajectoryViewRow>();
             foreach (var item in source)
             {
-                if (string.Equals(item.Type, SessionEventTypes.SessionCommit, StringComparison.OrdinalIgnoreCase))
+                if (item.IsConversationCommit)
                 {
                     AddCommitRows(rows, item);
                 }
@@ -159,9 +159,9 @@ namespace RNAssistant.Core.Services
                 var modelAttemptId = Text(Property(origin, "ModelAttemptId"));
                 var originCallIndex = IntValue(Property(origin, "CallIndex"));
                 var data = BaseData(SessionOperationTypes.ToolCallRecorded,
-                    SessionEventTypes.SessionCommit, "tool", "recorded");
+                    item.Type, "tool", "recorded");
                 data["operationIndex"] = operationIndex;
-                data["operationPath"] = "Operations[" + operationIndex.ToString(CultureInfo.InvariantCulture) + "]";
+                data["operationPath"] = (string)operation["SourcePath"] ?? "Operations[" + operationIndex.ToString(CultureInfo.InvariantCulture) + "]";
                 data["acceptedCallOrigin"] = origin == null ? JValue.CreateNull() : origin.DeepClone();
                 data["sourceCallPosition"] = callPosition;
                 data["originComplete"] = !string.IsNullOrWhiteSpace(originStepId) &&
@@ -210,9 +210,9 @@ namespace RNAssistant.Core.Services
             var toolCallId = Text(Property(activity, "ToolCallId")) ?? Text(Property(value, "ToolCallId"));
             var toolId = Text(Property(activity, "ToolId")) ?? Text(Property(value, "ToolName"));
             var artifactId = IsArtifactOperation(operationType) ? Text(Property(value, "Id")) : null;
-            var data = BaseData(operationType, SessionEventTypes.SessionCommit, Layer(operationType), "recorded");
+            var data = BaseData(operationType, item.Type, Layer(operationType), "recorded");
             data["operationIndex"] = operationIndex;
-            data["operationPath"] = "Operations[" + operationIndex.ToString(CultureInfo.InvariantCulture) + "]";
+            data["operationPath"] = (string)operation["SourcePath"] ?? "Operations[" + operationIndex.ToString(CultureInfo.InvariantCulture) + "]";
             Copy(data, value, "Id", "messageOrArtifactId");
             Copy(data, value, "Role", "role");
             Copy(data, value, "ResponseStatus", "responseStatus");
@@ -252,7 +252,7 @@ namespace RNAssistant.Core.Services
                 RunId = Text(Property(activity, "RunId")) ?? Text(Property(value, "RunId")) ?? item.RunId,
                 TurnId = item.TurnId,
                 StepId = Text(Property(activity, "StepId")) ?? Text(Property(origin, "StepId")) ?? item.StepId,
-                ModelAttemptId = Text(Property(origin, "ModelAttemptId")),
+                ModelAttemptId = Text(Property(origin, "ModelAttemptId")) ?? Text(Property(value, "ResponseModelAttemptId")),
                 ToolCallId = toolCallId,
                 ToolId = toolId,
                 MutationId = FirstValue(operation, "MutationId"),
@@ -284,12 +284,18 @@ namespace RNAssistant.Core.Services
             IReadOnlyList<SessionEvent> events)
         {
             var recorded = rows.ToList();
+            var terminals = events.Where(item => Same(item.Type, SessionEventTypes.TurnEnded)
+                ? IsFinalTurnStatus(Text(Property(item.Data, "Status")))
+                : item.NativeCommitOperations != null && item.CommitOperations.Any(op => Same(Text(Property(op, "Type")), SessionOperationTypes.RunEnded))).ToArray();
+            if (terminals.Length == 0) return;
+            var attempts = recorded.ToLookup(row => row.ModelAttemptId, StringComparer.OrdinalIgnoreCase);
+            var calls = recorded.ToLookup(row => row.ToolCallId, StringComparer.OrdinalIgnoreCase);
             foreach (var request in recorded.Where(item => Same(item.Kind, "model.request.prepared") ||
                 Same(item.Kind, SessionEventTypes.LlmRequest)).ToList())
             {
-                var terminal = TerminalTurn(events, request);
+                var terminal = TerminalTurn(terminals, request);
                 if (terminal == null || string.IsNullOrWhiteSpace(request.ModelAttemptId)) continue;
-                var attemptRows = recorded.Where(item => Same(item.ModelAttemptId, request.ModelAttemptId)).ToList();
+                var attemptRows = attempts[request.ModelAttemptId].Where(item => Same(item.RunId, request.RunId)).ToArray();
                 var hasResponse = attemptRows.Any(item => Same(item.Kind, SessionEventTypes.LlmResponse));
                 var hasFailure = attemptRows.Any(item => Same(item.Kind, SessionEventTypes.LlmFailure));
                 if (!hasResponse && !hasFailure)
@@ -300,6 +306,7 @@ namespace RNAssistant.Core.Services
                 var hasVerdict = attemptRows.Any(item => Same(item.Kind, "model.attempt.rejected") ||
                     Same(item.Kind, SessionEventTypes.AgentResponseRejected) ||
                     Same(item.Kind, "model.response.accepted") ||
+                    Same(item.Kind, SessionOperationTypes.AssistantMessageAppended) ||
                     Same(item.Kind, SessionOperationTypes.ToolCallRecorded));
                 if (hasResponse && !hasVerdict)
                 {
@@ -310,9 +317,9 @@ namespace RNAssistant.Core.Services
             foreach (var call in recorded.Where(item => Same(item.Kind, SessionOperationTypes.ToolCallRecorded) &&
                 !string.IsNullOrWhiteSpace(item.ToolCallId)).ToList())
             {
-                var terminal = TerminalTurn(events, call);
+                var terminal = TerminalTurn(terminals, call);
                 if (terminal == null) continue;
-                var toolRows = recorded.Where(item => Same(item.ToolCallId, call.ToolCallId)).ToList();
+                var toolRows = calls[call.ToolCallId].Where(item => Same(item.RunId, call.RunId)).ToArray();
                 var hasStart = toolRows.Any(item => Same(item.Kind, "tool.execution.started"));
                 var hasTerminal = toolRows.Any(item => Same(item.Kind, "tool.execution.completed") ||
                     Same(item.Kind, SessionOperationTypes.ToolExecutionFinished));
@@ -365,15 +372,10 @@ namespace RNAssistant.Core.Services
 
         private static SessionEvent TerminalTurn(IEnumerable<SessionEvent> events, TrajectoryViewRow row)
         {
-            return (events ?? new List<SessionEvent>())
-                .Where(item => item != null && item.Sequence >= row.LastSequence &&
-                    Same(item.Type, SessionEventTypes.TurnEnded) &&
+            return events.FirstOrDefault(item => item.Sequence >= row.LastSequence &&
                     (string.IsNullOrWhiteSpace(row.TurnId) || Same(item.TurnId, row.TurnId)) &&
                     (string.IsNullOrWhiteSpace(row.RunId) || Same(item.RunId, row.RunId) ||
-                     !string.IsNullOrWhiteSpace(row.TurnId) && Same(item.TurnId, row.TurnId)) &&
-                    IsFinalTurnStatus(Text(Property(item.Data, "Status"))))
-                .OrderBy(item => item.Sequence)
-                .FirstOrDefault();
+                     !string.IsNullOrWhiteSpace(row.TurnId) && Same(item.TurnId, row.TurnId)));
         }
 
         private static bool IsFinalTurnStatus(string status)

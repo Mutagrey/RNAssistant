@@ -92,7 +92,7 @@ namespace RNAssistant.Office.Services
         }
 
         private ResourceReadSelection CaptureOutlookArchiveAttachmentSource(ChatSession session,
-            string id, int page, int row, int attachment)
+            string id, int page, int row, int attachment, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
             if (_payloads == null || !IsOutlookMailbox)
                 throw new ResourceRequestException("Archive attachment storage is unavailable.",
@@ -112,7 +112,7 @@ namespace RNAssistant.Office.Services
                     StoreId = indexed.StoreId, EntryId = indexed.EntryId, Index = attachment,
                     ExpectedCount = indexed.AttachmentCount,
                     ExpectedModificationUtc = indexed.LastModificationUtc,
-                    IncludePst = manifest.IncludePst }, CancellationToken.None);
+                    IncludePst = manifest.IncludePst }, cancellationToken);
             }
             catch (OutlookBackendException error)
             { throw new ResourceRequestException(error.Message, error.ErrorCode, error.Retryable); }

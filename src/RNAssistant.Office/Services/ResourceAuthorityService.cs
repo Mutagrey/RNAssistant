@@ -73,9 +73,12 @@ namespace RNAssistant.Office.Services
         internal ResourceRevisionMetadata RequirePublished(ResourceAuthoritySnapshot snapshot, ResourceRef exact, ChatSession session = null)
         {
             var metadata = exact?.IsExact == true ? _revisions.GetRevision(snapshot.ScopeId, exact) : null;
-            if (metadata == null || PublicationOrder(snapshot, exact, session) == null)
-                throw new ResourceRequestException("The exact resource revision has not crossed its publication barrier or is unavailable.",
-                    "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
+            if (exact?.IsExact != true)
+                throw new ResourceRequestException("An exact resource reference is required.", "RESOURCE_SNAPSHOT_INVALID_REFERENCE", false);
+            if (metadata == null)
+                throw new ResourceRequestException("The exact revision metadata is missing.", "RESOURCE_SNAPSHOT_METADATA_MISSING", false);
+            if (PublicationOrder(snapshot, exact, session) == null)
+                throw new ResourceRequestException("The revision has not crossed its publication barrier.", "RESOURCE_SNAPSHOT_UNPUBLISHED", false);
             return metadata;
         }
 
@@ -96,6 +99,15 @@ namespace RNAssistant.Office.Services
         {
             EnsureReady(scopes);
             var snapshot = _authority.CaptureMany(scopes);
+            EnsureReady(scopes);
+            return snapshot;
+        }
+
+        internal ResourceAuthoritySnapshot CapturePublishedHead(ResourceAuthorityScopeId scope, ResourceIdentity identity)
+        {
+            var scopes = new[] { scope };
+            EnsureReady(scopes);
+            var snapshot = _authority.CaptureAddressed(scope, new[] { identity });
             EnsureReady(scopes);
             return snapshot;
         }
@@ -258,7 +270,29 @@ namespace RNAssistant.Office.Services
             var result = selection.Result;
             var identity = new ResourceIdentity(result.Resource.Reference.Uri);
             var scope = ScopeFor(session, result.Resource.Reference, live);
-            var snapshot = _authority.Capture(scope);
+            var selectedReference = result.Resource.Reference;
+            var addressed = new List<ResourceIdentity> { identity };
+            ResourceIdentity planIdentity = null;
+            if (!live && DocumentArtifactStore.IsPlan(session, selectedReference) && _payloads != null)
+            {
+                var plan = new DocumentArtifactStore(_authority, _revisions, _payloads).Read(ConversationMetadata.From(session), selectedReference);
+                planIdentity = DocumentArtifactStore.PlanIdentity(session, PlanDocumentService.PlanId(plan));
+                addressed.Add(planIdentity);
+            }
+            string currentId;
+            if (!live && ChatResourceUri.TryGetCurrentArtifactId(session, selectedReference, out currentId))
+            {
+                var markdown = MarkdownDocumentIdentity.LogicalId(currentId);
+                var html = HtmlWorkspaceIdentity.LogicalId(currentId);
+                if (markdown != null) addressed.Add(MarkdownDocumentIdentity.Identity(session, markdown));
+                if (html != null) addressed.Add(HtmlWorkspaceIdentity.Identity(session, html));
+                string member;
+                if (html != null && result.Resource.Kind == ChatHtmlResourceCatalog.FileKind &&
+                    result.Resource.Metadata.TryGetValue("logicalMemberKey", out member))
+                    addressed.Add(HtmlWorkspaceIdentity.MemberIdentity(session, html, member));
+            }
+            var snapshot = live && VbaResourceMutationDomain.SourceComponent(identity) != null
+                ? _authority.Capture(scope) : _authority.CaptureAddressed(scope, addressed);
             var head = snapshot.GetHead(identity);
             ResourceAuthorityCommit publication = null;
             var contentSha256 = string.IsNullOrWhiteSpace(result.ContentSha256)
@@ -347,10 +381,9 @@ namespace RNAssistant.Office.Services
                 result.NextCursor = ResourceReadCursor.CreateRevisionBound(continuation.Offset, exact.Revision, cursorBinding);
             if (!live)
             {
-                if (DocumentArtifactStore.IsPlan(session, exact) && _payloads != null)
+                if (planIdentity != null)
                 {
-                    var plan = new DocumentArtifactStore(_authority, _revisions, _payloads).Read(ConversationMetadata.From(session), exact);
-                    var logical = snapshot.GetHead(DocumentArtifactStore.PlanIdentity(session, PlanDocumentService.PlanId(plan)));
+                    var logical = snapshot.GetHead(planIdentity);
                     if (logical?.Knowledge == HeadKnowledge.Known && _revisions.GetRevision(scope, logical.Revision)?.Dependencies
                         .Any(dependency => dependency.Kind == "immutable-snapshot" && dependency.Resource.Uri == exact.Uri && dependency.Resource.Revision == exact.Revision) == true)
                         result.Resource.Dependencies.Add(new ResourceDependency(logical.Revision, "text", ResourceCoverage.Whole(), "current-state"));
@@ -407,8 +440,8 @@ namespace RNAssistant.Office.Services
                     retainedView ?? result.RetainedViewKey ?? result.Representation,
                     contentSha256, result.CompleteViewPayload, ResourceCoverage.Whole(), result.CompleteViewParts));
             // Every referenced view is durable before the head becomes visible to another reader.
-            if (publication != null) _authority.Publish(publication);
-            result.AuthorityGeneration = _authority.Capture(scope).Generation;
+            result.AuthorityGeneration = publication == null ? snapshot.Generation :
+                _authority.Publish(publication, includeAllHeads: false).Snapshot.Generation;
             if (originalRequest?.Reference?.IsExact == true && originalRequest.Reference.Revision != exact.Revision)
                 throw new ResourceRequestException("The resource changed while resolving the requested revision.",
                     "RESOURCE_REVISION_CHANGED", true);

@@ -159,6 +159,7 @@
   window.renderHtmlWorkspace = renderHtmlWorkspace;
   window.bindHtmlWorkspaceActions = bindHtmlWorkspaceActions;
   window.handleResourceAuthorityChanged = function (notice) {
+    if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.authorityChanged(notice);
     RNAssistantDockWorkspace.eachView("html-editor", function (editor) { editor.authorityChanged(notice); });
     RNAssistantDockWorkspace.eachView("browser", function (view) { view.authorityChanged(notice); });
   };

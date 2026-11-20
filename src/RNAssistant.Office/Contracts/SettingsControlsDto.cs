@@ -34,6 +34,7 @@ namespace RNAssistant.Office.Contracts
         public int MaxAgentToolSteps { get; set; }
         public bool AutoCompressContext { get; set; }
         public bool DebugModelTraffic { get; set; }
+        public bool PersistModelTraffic { get; set; }
         public string HistoryIntegrityMode { get; set; }
         public string HistoryEncryptionMode { get; set; }
         public string HistoryKeySource { get; set; }
@@ -84,6 +85,7 @@ namespace RNAssistant.Office.Contracts
                 MaxAgentToolSteps = settings.MaxAgentToolSteps,
                 AutoCompressContext = settings.AutoCompressContext,
                 DebugModelTraffic = settings.DebugModelTraffic,
+                PersistModelTraffic = settings.PersistModelTraffic,
                 HistoryIntegrityMode = settings.HistoryIntegrityMode,
                 HistoryEncryptionMode = settings.HistoryEncryptionMode,
                 HistoryKeySource = settings.HistoryKeySource,
@@ -139,6 +141,7 @@ namespace RNAssistant.Office.Contracts
             result.MaxAgentToolSteps = MaxAgentToolSteps;
             result.AutoCompressContext = AutoCompressContext;
             result.DebugModelTraffic = DebugModelTraffic;
+            result.PersistModelTraffic = DebugModelTraffic && PersistModelTraffic;
             result.HistoryIntegrityMode = HistoryIntegrityMode;
             result.HistoryEncryptionMode = HistoryEncryptionMode;
             result.HistoryKeySource = HistoryKeySource;

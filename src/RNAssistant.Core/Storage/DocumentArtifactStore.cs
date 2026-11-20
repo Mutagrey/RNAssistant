@@ -171,8 +171,83 @@ namespace RNAssistant.Core.Storage
             if (!Owns(session, reference)) throw new InvalidDataException("The artifact belongs to another document.");
             if (!HasPublishedSnapshot(scope, reference))
                 throw new InvalidDataException("The original has not crossed its publication barrier or is unavailable.");
-            var record = ReadRecord(_revisions.GetView(scope, reference, RecordView));
-            var revision = _revisions.GetRevision(scope, reference);
+            return ReadOriginal(session, reference, scope, _revisions.GetRevision(scope, reference), _revisions.GetView(scope, reference, RecordView));
+        }
+
+        private sealed class OriginalMetadata
+        {
+            internal ChatArtifact Artifact;
+            internal PayloadRef Record;
+        }
+
+        // One bounded, disposable proof of immutable original registrations. The
+        // current authority receipt is re-read and every metadata CAS is verified
+        // on use. Active mutable selections always go through their publication owner.
+        private sealed class OriginalProof
+        {
+            internal string Scope, Commit;
+            internal long Generation;
+            internal Dictionary<string, OriginalMetadata> Originals;
+        }
+        private volatile OriginalProof _originalProof;
+        internal long OriginalBindingBatches { get; private set; }
+
+        internal IEnumerable<ChatArtifact> ReadPublishedMetadata(ConversationMetadata session, IReadOnlyList<ResourceRef> references)
+        {
+            var native = _authority as ResourceJournal;
+            if (native == null || !ReferenceEquals(native, _revisions) || session.DocumentAuthorityId == null || references.Count == 0)
+                return references.Select(reference => Read(session, reference, false));
+            var originals = references.Where(reference => Owns(session, reference) && !IsPlan(session, reference) &&
+                !IsAuthored(session, reference)).ToArray();
+            if (originals.Length == 0) return references.Select(reference => Read(session, reference, false));
+            var scope = Scope(session);
+            var frozen = native.CaptureAddressed(scope, new ResourceIdentity[0]);
+            var proof = _originalProof;
+            var reusable = proof != null && proof.Scope == scope.Id && proof.Generation == frozen.Generation && proof.Commit == frozen.HighWaterCommitId;
+            var selected = new Dictionary<string, OriginalMetadata>(StringComparer.Ordinal);
+            var missing = new List<ResourceRef>();
+            foreach (var reference in originals)
+            {
+                OriginalMetadata prior;
+                if (!reusable || !proof.Originals.TryGetValue(reference.Uri, out prior)) { missing.Add(reference); continue; }
+                if (!_payloads.HasVerifiedReference(prior.Record.ToBlobReference()))
+                    throw new InvalidDataException("The retained original record is missing or corrupt.");
+                selected.Add(reference.Uri, prior);
+            }
+            for (var offset = 0; offset < missing.Count; offset += 32)
+            {
+                var group = missing.GetRange(offset, Math.Min(32, missing.Count - offset));
+                var bindings = native.ReadArtifactBindings(scope, group, RecordView);
+                OriginalBindingBatches++;
+                for (var i = 0; i < group.Count; i++)
+                {
+                    var reference = group[i];
+                    var binding = bindings[i];
+                    var head = binding.Item1;
+                    // Removed snapshots need proof of their earlier publication.
+                    if (head?.Knowledge != HeadKnowledge.Known) continue;
+                    if (head.Revision.Uri != reference.Uri || head.Revision.Revision != reference.Revision)
+                        throw new InvalidDataException("The original has not crossed its publication barrier.");
+                    selected.Add(reference.Uri, new OriginalMetadata { Artifact = ReadOriginal(session, reference, scope, binding.Item2, binding.Item3),
+                        Record = binding.Item3.Payload });
+                }
+            }
+            if (missing.Count != 0 && selected.Count <= 128 && selected.Values.Sum(item => item.Record.ByteLength) <= 4 * 1024 * 1024)
+            {
+                var after = native.CaptureAddressed(scope, new ResourceIdentity[0]);
+                if (frozen.Generation == after.Generation && frozen.HighWaterCommitId == after.HighWaterCommitId)
+                    _originalProof = new OriginalProof { Scope = scope.Id, Commit = frozen.HighWaterCommitId, Generation = frozen.Generation, Originals = selected };
+            }
+            return references.Select(reference => {
+                OriginalMetadata value;
+                return selected.TryGetValue(reference.Uri, out value) ? value.Artifact : Read(session, reference, false);
+            });
+        }
+
+        private ChatArtifact ReadOriginal(ConversationMetadata session, ResourceRef reference, ResourceAuthorityScopeId scope,
+            ResourceRevisionMetadata revision, ResourceRevisionView view)
+        {
+            var record = ReadRecord(view);
             if (record.Artifact.DocumentAuthorityId != scope.Id ||
                 ChatResourceUri.CreateArtifactRevision(session.Id, record.Artifact).Uri != reference.Uri ||
                 record.Artifact.ContentSha256 != record.Original.ContentSha256 ||

@@ -82,7 +82,7 @@ namespace RNAssistant.Office.Services
             var build = Build(session, visibleIds);
             var library = includeHeads ? InitialPage(session, build) : new ArtifactLibraryProjectionDto
             {
-                SessionRevision = session == null ? 0 : session.Revision,
+                SessionRevision = session == null ? 0 : session.Revision, CatalogStamp = build.HeadStamp,
                 Heads = new ArtifactLibraryHeadDto[0], RemovedResourceUris = build.RemovedResourceUris
             };
             if (includeHeads)
@@ -200,7 +200,7 @@ namespace RNAssistant.Office.Services
             }
             return new ArtifactLibraryProjectionDto
             {
-                SessionRevision = session == null ? 0 : session.Revision,
+                SessionRevision = session == null ? 0 : session.Revision, CatalogStamp = build.HeadStamp,
                 Heads = first, TotalHeads = build.Heads.Count,
                 NextCursor = build.Heads.Count > PageSize ? Cursor(session, "heads", string.Empty, build.HeadStamp, PageSize) : null,
                 RemovedResourceUris = build.RemovedResourceUris

@@ -176,7 +176,7 @@ namespace RNAssistant.Harness
                 "Office event consumers must use IEventStore instead of broad ChatStore event members: " +
                 string.Join(", ", offenders.ToArray()));
 
-            var causal = File.ReadAllText(Path.Combine(officeRoot, "Services", "RunCausalTrace.cs"));
+            var causal = File.ReadAllText(Path.Combine(root, "src", "RNAssistant.Core", "Persistence", "CausalTraceRecord.cs"));
             AssertContains(causal, "public CausalTraceRecord(SessionEventKind kind)",
                 "causal records require a closed event kind at construction");
             AssertContains(causal, "descriptor.Lane != SessionEventLane.DomainDiagnostic",

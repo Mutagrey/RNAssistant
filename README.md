@@ -306,10 +306,10 @@ window through a named pipe and switch the active Office target.
 If launched without arguments, the desktop shell can attach to the foreground
 Office window as an MVP fallback. Desktop launcher logs remain under
 `%LOCALAPPDATA%\OfficeAssistant\logs`; shared runtime logs are written to
-`%APPDATA%\RNAssistant\logs\rnassistant.log`. Settings → Service can enable
-pretty-printed raw model request/response logging in the runtime log; message
-bodies may contain document data, while API keys and HTTP header values are
-never logged.
+`%APPDATA%\RNAssistant\logs\rnassistant.log`. Settings → Защита истории can enable
+optional capture of model request and response bodies for Inspector. Captured
+bodies can contain document content. See [diagnostics](docs/diagnostics.md) for
+the memory and protected Windows profile retention limits.
 
 The desktop shell includes a target picker. `Manual` mode keeps the chosen
 working document locked even if the user switches Office windows. `Auto follow`

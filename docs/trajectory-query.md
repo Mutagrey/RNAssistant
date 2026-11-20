@@ -1,6 +1,6 @@
 # Trajectory query projection
 
-`ITrajectoryQuery` is a read-only, disposable projection over a fully validated session event stream. The implementation receives canonical `SessionEvent` records from `ChatStore`, builds query metadata in memory, returns one page, and discards it. It never writes an index or another history file.
+Native raw pages use sequence locators in the disposable journal index. The Inspector request list uses per-chat request ordinals and the optional run and step identifiers. Opening a payload validates the exact event locator and chat revision. In the run view, typed operations in a verified `chat.committed` frame supply accepted calls, results and runtime acceptance. The accepted response text is read from its addressed CAS body when needed. The selected run uses indexed event locators for that run, including tool, input, peer and control correlations. Its counts refer to that run. Pagination binds a cursor to the chat, run and frozen source sequence. Whole-chat derived correlations and free-text filters still reconstruct the complete projection.
 
 Phase 9A exposes a host-neutral `run-causal` projection over these source events.
 Phase 9B supplies the shared JSON viewer and Phase 9C renders the projection as

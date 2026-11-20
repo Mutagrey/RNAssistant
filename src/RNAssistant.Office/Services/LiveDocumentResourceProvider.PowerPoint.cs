@@ -35,7 +35,7 @@ namespace RNAssistant.Office.Services
             return scope == "deck" || IsPowerPointSlide(scope);
         }
 
-        private string ReadPowerPointSearch(string target)
+        private string ReadPowerPointSearch(string target, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
             var notes = target.EndsWith("+notes", StringComparison.Ordinal);
             var scope = target.Substring(7);
@@ -43,7 +43,7 @@ namespace RNAssistant.Office.Services
             try
             {
                 var snapshot = new PowerPointService(_powerPoint).CaptureSearch(scope == "deck" ? 0 :
-                    int.Parse(scope.Substring(6), CultureInfo.InvariantCulture), notes, CancellationToken.None);
+                    int.Parse(scope.Substring(6), CultureInfo.InvariantCulture), notes, cancellationToken);
                 var json = new JObject { ["slideIndex"] = snapshot.SlideIndex, ["includeNotes"] = notes,
                     ["targets"] = new JArray(snapshot.Targets.Select(item => new JObject {
                         ["slideIndex"] = item.SlideIndex, ["shapeName"] = item.ShapeName,
@@ -92,7 +92,7 @@ namespace RNAssistant.Office.Services
                 index > 0 && target == "notes-" + index.ToString(CultureInfo.InvariantCulture);
         }
 
-        private string ReadPowerPointNotes(string target)
+        private string ReadPowerPointNotes(string target, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
             if (_powerPoint == null)
                 throw new ResourceRequestException("The bound PowerPoint reader is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
@@ -103,9 +103,10 @@ namespace RNAssistant.Office.Services
                 var probe = service.CaptureSlideTextWindow(new PowerPointSlideTextWindowRequest
                 { SlideIndex = slideIndex, StartChar = 0,
                     CharCount = ResourceReadRequest.MaximumCharacters, IncludeNotes = true },
-                    CancellationToken.None);
+                    cancellationToken);
                 if (probe.TotalCharacters <= ResourceReadRequest.MaximumCharacters)
                     return probe.Text;
+                cancellationToken.ThrowIfCancellationRequested();
                 var snapshot = service.CaptureSlides(new PowerPointReadSlidesRequest
                 {
                     HasSlideIndex = true,
@@ -113,14 +114,14 @@ namespace RNAssistant.Office.Services
                     MaxSlides = PowerPointService.MaxSlides,
                     MaxShapesPerSlide = PowerPointService.MaxShapesPerSlide,
                     MaxCharacters = PowerPointService.MaximumTextCharacters
-                }, CancellationToken.None);
+                }, cancellationToken);
                 return snapshot.Slides[0].Notes;
             }
             catch (PowerPointBackendException error)
             { throw new ResourceRequestException(error.Message, error.ErrorCode, error.Retryable); }
         }
 
-        private string ReadPowerPointSource(string target, bool includeNotes)
+        private string ReadPowerPointSource(string target, bool includeNotes, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
             if (_powerPoint == null)
                 throw new ResourceRequestException("The bound PowerPoint reader is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
@@ -134,7 +135,7 @@ namespace RNAssistant.Office.Services
             };
             try
             {
-                var snapshot = new PowerPointService(_powerPoint).CaptureSlides(request, CancellationToken.None);
+                var snapshot = new PowerPointService(_powerPoint).CaptureSlides(request, cancellationToken);
                 var content = includeNotes
                     ? new JArray(snapshot.Slides.Select(slide => new JObject
                     {
@@ -201,7 +202,7 @@ namespace RNAssistant.Office.Services
             });
         }
 
-        private string ReadPowerPointStructure(string target)
+        private string ReadPowerPointStructure(string target, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
             var slideIndex = int.Parse(target.Substring(6), CultureInfo.InvariantCulture);
             var notes = IsPowerPointNotes(target);
@@ -210,7 +211,7 @@ namespace RNAssistant.Office.Services
                 var bounds = new PowerPointService(_powerPoint).CaptureSlideTextWindow(
                     new PowerPointSlideTextWindowRequest { SlideIndex = slideIndex,
                         StartChar = 0, CharCount = 0,
-                        IncludeNotes = notes }, CancellationToken.None);
+                        IncludeNotes = notes }, cancellationToken);
                 return new JObject { ["type"] = notes ? "rnassistant.powerPointNotes" : "rnassistant.powerPointSlide",
                     ["slideIndex"] = slideIndex, ["slideId"] = bounds.SlideId,
                     ["textStart"] = 0, ["textEnd"] = bounds.TotalCharacters,

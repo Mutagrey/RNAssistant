@@ -149,6 +149,48 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void LegacyChatImportConcurrentReadCost()
+        {
+            WithTempPaths(paths => {
+                var legacy = new ChatStore(paths); var source = LegacyImportFixture(paths, legacy);
+                source.Messages.AddRange(Enumerable.Range(0, 256).Select(index => new ChatMessage { Role = "user", Content = "Occurrence " + index }));
+                legacy.Save(source);
+                var item = legacy.ReadLegacyRecoveryChats().Items.Single();
+                var importer = new ConversationJournal(paths, "document:" + source.DocumentAuthorityId);
+                var other = new ConversationJournal(paths, "document:another");
+                IConversationStore store = other;
+                var chat = store.CreateTransient("Word", "another", "Other", "Other");
+                store.Commit(chat, new ConversationCommit());
+                var held = new System.Diagnostics.Stopwatch();
+                var elapsed = new System.Diagnostics.Stopwatch();
+                var reads = other.Journal.ReadRecords; var bodies = importer.ChatBodyReads;
+                using (var appended = new ManualResetEventSlim())
+                using (var reading = new ManualResetEventSlim())
+                {
+                    importer.Fault = point => {
+                        if (point == "after_legacy_import_append")
+                        {
+                            appended.Set();
+                            if (!reading.Wait(5000)) throw new TimeoutException("Concurrent reader did not start.");
+                            held.Start();
+                        }
+                        if (point == "before_legacy_import_index_commit") held.Stop();
+                    };
+                    var reader = System.Threading.Tasks.Task.Run(() => {
+                        if (!appended.Wait(15000)) throw new TimeoutException("Import did not reach its projection.");
+                        elapsed.Start(); reading.Set();
+                        var result = store.ReadMetadata(chat.Id); elapsed.Stop(); return result;
+                    });
+                    importer.ImportLegacyChat(source, JObject.FromObject(source), item.SourceId, item.Revision, CancellationToken.None);
+                    AssertEqual(chat.Id, reader.GetAwaiter().GetResult().Id, "other document remains readable after the import transaction");
+                    AssertEqual(source.Messages.Count, ((IConversationStore)importer).ReadMessageWindow(source.Id, 0, 1).TotalCount,
+                        "import exposes a complete occurrence index");
+                }
+                Console.WriteLine("import 256 metadata hold ms={0}, competing read ms={1}, read records={2}, import body reads={3}",
+                    held.ElapsedMilliseconds, elapsed.ElapsedMilliseconds, other.Journal.ReadRecords - reads, importer.ChatBodyReads - bodies);
+            });
+        }
+
         private static void LegacyChatImportGuards()
         {
             WithTempPaths(paths => {

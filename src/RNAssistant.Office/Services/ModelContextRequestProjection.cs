@@ -19,7 +19,7 @@ namespace RNAssistant.Office.Services
     internal static class ModelContextRequestProjection
     {
         internal static ModelContextSummaryDto Summary(IReadOnlyList<SessionEvent> all,
-            SessionEvent request, IReadOnlyList<ModelContextEventDto> exchange, CancellationToken token)
+            SessionEvent request, IReadOnlyList<ModelContextEventDto> exchange, CancellationToken token, ChatBlobStore blobs = null)
         {
             var trace = request.Data?.ToObject<LlmTraceRecord>() ?? new LlmTraceRecord();
             var rejected = exchange.LastOrDefault(item => item.Type == SessionEventTypes.AgentResponseRejected);
@@ -30,7 +30,7 @@ namespace RNAssistant.Office.Services
                 Parser = rejected != null ? ModelContextAcceptance.Rejected : accepted != null
                     ? ModelContextAcceptance.Accepted : ModelContextAcceptance.NotRecorded,
                 Runtime = ModelContextAcceptance.NotRecorded,
-                Reason = rejected?.Trace?.Error ?? failure?.Trace?.Error ?? CaptureReason(request, trace),
+                Reason = rejected?.Trace?.Error ?? failure?.Trace?.Error ?? CaptureReason(request, trace, blobs),
                 ResponseEventId = response?.EventId, RejectedEventId = rejected?.EventId,
                 RequestBytes = request.Payload?.ByteLength ?? trace.WireBytes, RequestSha256 = request.Payload?.Sha256 ?? trace.WireSha256,
                 ResponseComplete = response?.Trace?.Completed,
@@ -48,13 +48,32 @@ namespace RNAssistant.Office.Services
         private const int MaxMessages = 8000;
         private const int MaxChanges = 200;
 
-        private static string CaptureReason(SessionEvent request, LlmTraceRecord trace)
+        internal static bool Available(string session, LlmTraceRecord trace, ChatBlobStore blobs)
+        {
+            return trace?.ProtectedDiagnosticCapture == true ? blobs?.DiagnosticCaptures.Contains(session, trace) == true
+                : ModelDiagnosticBuffer.Shared.Contains(session, trace);
+        }
+
+        internal static byte[] ReadCapture(string session, LlmTraceRecord trace, ChatBlobStore blobs)
+        {
+            return trace?.ProtectedDiagnosticCapture == true ? blobs?.DiagnosticCaptures.Read(session, trace)
+                : ModelDiagnosticBuffer.Shared.Read(session, trace);
+        }
+
+        private static string CaptureReason(SessionEvent request, LlmTraceRecord trace, ChatBlobStore blobs)
         {
             if (trace.Manifest == null) return null;
-            if (ModelDiagnosticBuffer.Shared.Contains(request.SessionId, trace)) return "Точные байты доступны во временной диагностике (до 10 минут, в пределах общего буфера). Manifest доставки сохранён отдельно.";
-            return trace.DiagnosticCapture == ModelDiagnosticCaptureStatus.Disabled
-                ? "Сохранён manifest доставки. Точные байты запроса не сохранялись: диагностика выключена."
-                : "Manifest доставки сохранён; точные байты недоступны (лимит, срок хранения, перезапуск или ошибка диагностики). Реконструкция не является исходным wire.";
+            if (Available(request.SessionId, trace, blobs))
+                return (trace.ProtectedDiagnosticCapture ? "Содержимое в защищённом профиле" : "Содержимое в памяти") +
+                    (trace.DiagnosticExpiresUtc.HasValue ? " доступно до " + trace.DiagnosticExpiresUtc.Value.ToLocalTime().ToString("g") : " доступно") + ".";
+            switch (trace.DiagnosticCapture)
+            {
+                case ModelDiagnosticCaptureStatus.Disabled: return "Сохранён manifest доставки. Точные байты не сохранялись — захват выключен.";
+                case ModelDiagnosticCaptureStatus.SizeLimit: return "Сохранён manifest доставки. Содержимое превысило лимит захвата.";
+                case ModelDiagnosticCaptureStatus.CaptureFailed: return "Сохранён manifest доставки. Ошибка захвата содержимого.";
+                default: return trace.DiagnosticExpiresUtc <= DateTime.UtcNow ? "Срок хранения содержимого истёк." :
+                    trace.ProtectedDiagnosticCapture ? "Защищённая запись вытеснена или удалена." : "Запись вытеснена из памяти или завершён процесс.";
+            }
         }
 
         internal static ModelContextComparisonDto Compare(SessionEvent before, SessionEvent after,
@@ -65,8 +84,8 @@ namespace RNAssistant.Office.Services
                 BeforeBytes = before.Payload?.ByteLength ?? beforeTrace?.WireBytes, AfterBytes = after.Payload?.ByteLength ?? afterTrace?.WireBytes,
                 BeforeSha256 = before.Payload?.Sha256 ?? beforeTrace?.WireSha256, AfterSha256 = after.Payload?.Sha256 ?? afterTrace?.WireSha256,
                 SettingsChanged = new string[0], Changes = new ModelContextMessageChangeDto[0] };
-            if (before.Payload == null && !ModelDiagnosticBuffer.Shared.Contains(before.SessionId, beforeTrace) ||
-                after.Payload == null && !ModelDiagnosticBuffer.Shared.Contains(after.SessionId, afterTrace))
+            if (before.Payload == null && !Available(before.SessionId, beforeTrace, blobs) ||
+                after.Payload == null && !Available(after.SessionId, afterTrace, blobs))
             { result.Reason = "Точные байты одного из запросов не сохранены или временная диагностика недоступна; manifest не заменяет wire."; return result; }
             if (result.BeforeBytes > MaxBytes || result.AfterBytes > MaxBytes)
             { result.Reason = "Сравнение ограничено 8 МБ на запрос. Доступны точные исходники."; return result; }
@@ -116,7 +135,7 @@ namespace RNAssistant.Office.Services
         private static JObject Read(SessionEvent item, ChatBlobStore blobs, CancellationToken token)
         {
             using (var stream = item.Payload == null
-                ? new MemoryStream(ModelDiagnosticBuffer.Shared.Read(item.SessionId, item.Data?.ToObject<LlmTraceRecord>()) ?? throw new InvalidDataException("Diagnostic capture expired."), false)
+                ? new MemoryStream(ReadCapture(item.SessionId, item.Data?.ToObject<LlmTraceRecord>(), blobs) ?? throw new InvalidDataException("Diagnostic capture expired."), false)
                 : blobs.OpenVerifiedRead(item.Payload, MaxBytes, token))
             using (var text = new StreamReader(stream, new UTF8Encoding(false, true)))
             using (var json = new JsonTextReader(text) { DateParseHandling = DateParseHandling.None, MaxDepth = 128 })

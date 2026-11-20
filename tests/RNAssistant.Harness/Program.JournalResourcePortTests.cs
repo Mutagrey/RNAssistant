@@ -16,6 +16,31 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void JournalPublishedReadCost()
+        {
+            WithTempPaths(paths => {
+                var journal = new ResourceJournal(paths); var blobs = new ChatBlobStore(paths);
+                var service = new ResourceAuthorityService(journal, journal, journal, blobs);
+                var chat = new ChatSession { DocumentAuthorityId = "read-cost" };
+                var text = PayloadRef.FromBlob(blobs.StoreText("read", "text/plain"));
+                Func<string, ResourceReadSelection> publish = name => {
+                    var reference = new ResourceRef(ResourceUri.Create("state", "document", chat.DocumentAuthorityId, name));
+                    return service.PublishRead(chat, new ResourceReadSelection { Result = new ResourceReadResult {
+                        Resource = new ResourceDescriptor { Reference = reference, Mutable = true }, Representation = "text",
+                        Text = "read", ContentSha256 = text.Sha256, CompleteViewPayload = text, Complete = true } },
+                        new ResourceReadRequest { Reference = reference, Representation = "text" }, true);
+                };
+                for (var i = 0; i < 40; i++) publish("sibling-" + i);
+                var before = journal.Journal.ReadRecords;
+                var first = publish("addressed"); var cold = journal.Journal.ReadRecords - before;
+                before = journal.Journal.ReadRecords;
+                var second = publish("addressed"); var warm = journal.Journal.ReadRecords - before;
+                AssertEqual(first.Result.Resource.Reference.Revision, second.Result.Resource.Reference.Revision, "same bytes preserve exact head");
+                AssertEqual(41L, second.Result.AuthorityGeneration.Value, "publication supplies the exact generation");
+                AssertTrue(cold < 40 && warm < 40, "both addresses avoid hydrating the 40 sibling heads");
+                Console.WriteLine("PublishRead: 40 siblings, new records={0}, repeat records={1}", cold, warm);
+            });
+        }
         private static void JournalResourceWorkspace()
         {
             WithTempPaths(paths => {

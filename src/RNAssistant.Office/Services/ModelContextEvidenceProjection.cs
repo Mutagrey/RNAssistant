@@ -84,7 +84,8 @@ namespace RNAssistant.Office.Services
             var result = new List<ModelContextFinishDto>();
             foreach (var accepted in AcceptedMessages(events, request, trace, token))
             {
-                var read = ConversationResponseHistoryReader.Read(accepted.Message);
+                if (accepted.Message.AcceptedCallOrigin != null) continue;
+                var read = ConversationResponseHistoryReader.Read(accepted.ReadBody == null ? accepted.Message : accepted.ReadBody(accepted.Message.Id));
                 if (!read.Success || read.Response.Action != ConversationResponse.FinishAction) continue;
                 result.Add(new ModelContextFinishDto { EventId = accepted.EventId, MessageId = accepted.Message.Id,
                     Outcome = ConversationFinishContract.Name(read.Response.Outcome.Value),
@@ -98,6 +99,7 @@ namespace RNAssistant.Office.Services
         {
             internal string EventId { get; set; }
             internal ChatMessage Message { get; set; }
+            internal Func<string, ChatMessage> ReadBody { get; set; }
         }
 
         internal static IEnumerable<AcceptedMessage> AcceptedMessages(IEnumerable<SessionEvent> events,
@@ -109,19 +111,18 @@ namespace RNAssistant.Office.Services
                 token.ThrowIfCancellationRequested();
                 // A later repair/fallback dispatch owns its subsequent canonical decisions.
                 if (item.Type == SessionEventTypes.LlmRequest && item.Data?.ToObject<LlmTraceRecord>()?.ModelAttemptId == trace.ModelAttemptId) yield break;
-                if (item.Type != SessionEventTypes.SessionCommit) continue;
-                var commit = item.Data?.ToObject<CommitData>();
-                foreach (var operation in commit?.Operations ?? new List<SessionOperation>())
+                if (!item.IsConversationCommit || item.CommitOperations == null) continue;
+                foreach (var operation in item.CommitOperations)
                 {
-                    if (operation.Type != SessionOperationTypes.AssistantMessageAppended) continue;
-                    var message = operation.Data?.ToObject<MessageData>()?.Value;
-                    if (message == null || message.ResponseModelAttemptId != trace.ModelAttemptId || message.RunId != request.RunId || message.RuntimeProjection) continue;
-                    yield return new AcceptedMessage { EventId = item.EventId, Message = message };
+                    var type = (string)operation["Type"];
+                    if (type != SessionOperationTypes.AssistantMessageAppended && type != SessionOperationTypes.ToolCallRecorded) continue;
+                    var message = operation["Data"]?["Value"]?.ToObject<ChatMessage>();
+                    if (message == null || (message.AcceptedCallOrigin?.ModelAttemptId ?? message.ResponseModelAttemptId) != trace.ModelAttemptId ||
+                        message.RunId != request.RunId || message.RuntimeProjection) continue;
+                    yield return new AcceptedMessage { EventId = item.EventId, Message = message, ReadBody = item.ReadCommittedMessage };
                 }
             }
         }
 
-        private sealed class CommitData { public List<SessionOperation> Operations { get; set; } }
-        private sealed class MessageData { public ChatMessage Value { get; set; } }
     }
 }

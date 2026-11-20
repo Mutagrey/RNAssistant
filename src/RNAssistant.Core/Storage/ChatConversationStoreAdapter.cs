@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
@@ -80,9 +81,10 @@ namespace RNAssistant.Core.Storage
             return _store.IsPersisted(session);
         }
 
-        public IReadOnlyList<ChatSessionHeader> ListHeaders(bool includeStorageUsage = true)
+        public IReadOnlyList<ChatSessionHeader> ListHeaders(bool includeStorageUsage = true, bool documentsOnly = false)
         {
-            return _store.ListHeaders(includeStorageUsage);
+            var headers = _store.ListHeaders(includeStorageUsage);
+            return documentsOnly ? headers.Where(header => string.IsNullOrEmpty(header.WorkspaceId)).ToArray() : headers;
         }
 
         public IReadOnlyList<ChatSessionHeader> ListHeaders(

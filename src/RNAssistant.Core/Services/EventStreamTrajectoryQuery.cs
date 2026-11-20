@@ -159,7 +159,7 @@ namespace RNAssistant.Core.Services
             return value.Length == 0 ? null : value;
         }
 
-        private static long? ParseCursor(string cursor)
+        internal static long? ParseCursor(string cursor)
         {
             if (string.IsNullOrWhiteSpace(cursor)) return null;
             long sequence;
@@ -214,7 +214,7 @@ namespace RNAssistant.Core.Services
             var targets = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
             foreach (var sessionEvent in events ?? new List<SessionEvent>())
             {
-                if (!string.Equals(sessionEvent.Type, SessionEventTypes.SessionCommit, StringComparison.Ordinal) || sessionEvent.Data == null) continue;
+                if (!sessionEvent.IsConversationCommit || sessionEvent.Data == null) continue;
                 foreach (var operation in Operations(sessionEvent))
                 {
                     foreach (var target in OperationTargets(operation)) targets[target] = sessionEvent.Sequence;
@@ -223,7 +223,7 @@ namespace RNAssistant.Core.Services
             return targets;
         }
 
-        private static TrajectoryEventRecord Project(SessionEvent sessionEvent, IDictionary<string, long> currentTargets)
+        internal static TrajectoryEventRecord Project(SessionEvent sessionEvent, IDictionary<string, long> currentTargets, bool? indexedCurrent = null)
         {
             var visibility = TrajectoryVisibility.LogOnly;
             if (string.Equals(sessionEvent.Type, SessionEventTypes.SessionCreated, StringComparison.Ordinal) ||
@@ -231,10 +231,11 @@ namespace RNAssistant.Core.Services
             {
                 visibility = TrajectoryVisibility.Current;
             }
-            else if (string.Equals(sessionEvent.Type, SessionEventTypes.SessionCommit, StringComparison.Ordinal))
+            else if (sessionEvent.IsConversationCommit)
             {
-                var targets = Operations(sessionEvent).SelectMany(OperationTargets).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-                visibility = targets.Any(target => currentTargets.ContainsKey(target) && currentTargets[target] == sessionEvent.Sequence)
+                var current = indexedCurrent ?? Operations(sessionEvent).SelectMany(OperationTargets).Any(target =>
+                    currentTargets.ContainsKey(target) && currentTargets[target] == sessionEvent.Sequence);
+                visibility = current
                     ? TrajectoryVisibility.Current
                     : TrajectoryVisibility.Shadowed;
             }
@@ -317,9 +318,7 @@ namespace RNAssistant.Core.Services
 
         internal static IEnumerable<JObject> Operations(SessionEvent sessionEvent)
         {
-            var operations = sessionEvent == null || sessionEvent.Data == null
-                ? null
-                : Property(sessionEvent.Data, "Operations") as JArray;
+            var operations = sessionEvent?.CommitOperations;
             return operations == null ? new List<JObject>() : operations.OfType<JObject>();
         }
 

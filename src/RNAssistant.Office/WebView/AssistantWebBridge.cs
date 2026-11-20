@@ -414,7 +414,7 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.GetChatTrajectory:
                         var trajectoryRequest = Payload<ChatTrajectoryRequest>(payload);
                         responsePayload = await RunBridgeWorkAsync(
-                            () => _controller.GetChatTrajectory(trajectoryRequest),
+                            () => _controller.GetChatTrajectory(trajectoryRequest, cancellationToken),
                             cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.ExportChatTrajectory:
@@ -998,7 +998,8 @@ namespace RNAssistant.Office.WebView
                         responsePayload = _controller.CancelHtmlWorkspaceMutationUpload(Payload<ResourceUploadLeaseRequest>(payload));
                         break;
                     case BridgeOperationId.ListArtifactCatalog:
-                        responsePayload = _controller.ListArtifactCatalog(Payload<ArtifactCatalogRequest>(payload));
+                        var catalogQuery = Payload<ArtifactCatalogRequest>(payload);
+                        responsePayload = await RunBridgeWorkAsync(() => _controller.ListArtifactCatalog(catalogQuery, cancellationToken), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.GetArtifactLibraryPage:
                         var libraryPage = Payload<ArtifactLibraryPageRequest>(payload);
@@ -1055,42 +1056,42 @@ namespace RNAssistant.Office.WebView
                         break;
                     case BridgeOperationId.ReadArtifactViewerPage:
                         var artifactViewerPage = Payload<ArtifactViewerPagePayload>(payload);
-                        responsePayload = _controller.ReadArtifactViewerPage(
+                        responsePayload = await RunBridgeWorkAsync(() => _controller.ReadArtifactViewerPage(
                             artifactViewerPage.ChatId,
                             artifactViewerPage.ResourceUri,
-                            artifactViewerPage.Cursor, cancellationToken, artifactViewerPage.DocumentId);
+                            artifactViewerPage.Cursor, cancellationToken, artifactViewerPage.DocumentId), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.ReadArtifactImage:
                         var artifactImage = Payload<ArtifactImageViewerPayload>(payload);
-                        responsePayload = _controller.ReadArtifactImage(
+                        responsePayload = await RunBridgeWorkAsync(() => _controller.ReadArtifactImage(
                             artifactImage.ChatId,
-                            artifactImage.ResourceUri, cancellationToken, artifactImage.DocumentId);
+                            artifactImage.ResourceUri, cancellationToken, artifactImage.DocumentId), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.ReadArtifactImageThumbnail:
                         var artifactImageThumbnail = Payload<ArtifactImageThumbnailPayload>(payload);
-                        responsePayload = _controller.ReadArtifactImageThumbnail(
+                        responsePayload = await RunBridgeWorkAsync(() => _controller.ReadArtifactImageThumbnail(
                             artifactImageThumbnail.ChatId,
-                            artifactImageThumbnail.ResourceUri, cancellationToken, artifactImageThumbnail.DocumentId);
+                            artifactImageThumbnail.ResourceUri, cancellationToken, artifactImageThumbnail.DocumentId), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.ReadArtifactPdfInfo:
                         var artifactPdf = Payload<ArtifactPdfViewerPayload>(payload);
-                        responsePayload = _controller.ReadArtifactPdfInfo(
+                        responsePayload = await RunBridgeWorkAsync(() => _controller.ReadArtifactPdfInfo(
                             artifactPdf.ChatId,
-                            artifactPdf.ResourceUri, artifactPdf.DocumentId);
+                            artifactPdf.ResourceUri, artifactPdf.DocumentId), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.ReadArtifactPdfPage:
                         var artifactPdfPage = Payload<ArtifactPdfPagePayload>(payload);
-                        responsePayload = _controller.ReadArtifactPdfPage(
+                        responsePayload = await RunBridgeWorkAsync(() => _controller.ReadArtifactPdfPage(
                             artifactPdfPage.ChatId,
                             artifactPdfPage.ResourceUri,
-                            artifactPdfPage.PageIndex, cancellationToken, artifactPdfPage.DocumentId);
+                            artifactPdfPage.PageIndex, cancellationToken, artifactPdfPage.DocumentId), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.ReadArtifactPdfThumbnail:
                         var artifactPdfThumbnail = Payload<ArtifactPdfPagePayload>(payload);
-                        responsePayload = _controller.ReadArtifactPdfThumbnail(
+                        responsePayload = await RunBridgeWorkAsync(() => _controller.ReadArtifactPdfThumbnail(
                             artifactPdfThumbnail.ChatId,
                             artifactPdfThumbnail.ResourceUri,
-                            artifactPdfThumbnail.PageIndex, cancellationToken, artifactPdfThumbnail.DocumentId);
+                            artifactPdfThumbnail.PageIndex, cancellationToken, artifactPdfThumbnail.DocumentId), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.ImportUploadedHtmlToWorkspace:
                         var htmlImport = Payload<HtmlWorkspaceImportPayload>(payload);

@@ -20,6 +20,7 @@ namespace RNAssistant.Office.Contracts
     {
         [JsonProperty("workspaceId")] public string WorkspaceId { get; set; }
         [JsonProperty("view")] public string View { get; set; }
+        [JsonProperty("scopeToRun")] public bool ScopeToRun { get; set; }
         [JsonProperty("cursor")] public string Cursor { get; set; }
         [JsonProperty("pageSize")] public int? PageSize { get; set; }
         [JsonProperty("search")] public string Search { get; set; }

@@ -254,6 +254,27 @@ namespace RNAssistant.Core.Storage
         private void SaveChatMetadata(SqliteConnection db, SqliteTransaction tx, JournalRecord record,
             JournalCursor position, ConversationChatCommit fact, long lastActivity)
         {
+            var runs = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { fact.ModelEvent?.RunId, fact.Run?.RunId, fact.Input?.RunId };
+            foreach (var entry in fact.Messages)
+            {
+                runs.Add(entry.Header.RunId);
+                runs.Add(entry.Header.Activity?.RunId);
+            }
+            foreach (var run in runs) SaveDiagnosticRunEvent(db, tx, record, position, fact.Card.ChatId, run);
+            if (fact.ModelEvent == null && fact.Control == null)
+            {
+                var targets = fact.Messages.Select(entry => "message:" + entry.Header.Id)
+                    .Concat((fact.Snapshots ?? new ChatArtifact[0]).Select(artifact => "artifact:" + artifact.Id)).ToList();
+                if (fact.Checkpoint != null) targets.Add("run");
+                if (targets.Count == 0) targets.Add(SessionOperationTypes.SessionMetadataSet + ":Value");
+                using (var update = Command(db, "INSERT OR REPLACE INTO chat_diagnostic_current VALUES($stream,$chat,$target,$seq)", tx))
+                {
+                    update.Parameters.AddWithValue("$chat", fact.Card.ChatId);
+                    update.Parameters.AddWithValue("$seq", position.Sequence);
+                    var target = update.Parameters.Add("$target", SqliteType.Text);
+                    foreach (var key in targets) { target.Value = key; update.ExecuteNonQuery(); }
+                }
+            }
             using (var command = Command(db, "INSERT INTO chat_write VALUES($stream,$chat,$operation,$fingerprint,$segment,$start,$end,$sequence,$hash,$first)", tx))
             { command.Parameters.AddWithValue("$chat", fact.Card.ChatId); AddDeliveryPosition(command, record, position); command.ExecuteNonQuery(); }
             using (var command = Command(db, "INSERT OR REPLACE INTO chat_card VALUES($stream,$chat,$alias,$operation,$fingerprint,$segment,$start,$end,$sequence,$hash,$first)", tx))

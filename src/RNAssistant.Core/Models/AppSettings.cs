@@ -378,6 +378,7 @@ namespace RNAssistant.Core.Models
         private int LegacyMessageLimit { set { _legacyMessageLimit = value; } }
         public bool AutoCompressContext { get; set; }
         public bool DebugModelTraffic { get; set; }
+        public bool PersistModelTraffic { get; set; }
         public DiagnosticLogOptions DiagnosticLogs { get; set; } = new DiagnosticLogOptions();
         public string HistoryIntegrityMode { get; set; }
         public string HistoryEncryptionMode { get; set; }

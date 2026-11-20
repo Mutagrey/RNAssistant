@@ -130,6 +130,8 @@ namespace RNAssistant.Core.Llm
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string WireSha256 { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public long? WireBytes { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string DiagnosticCaptureId { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public DateTime? DiagnosticExpiresUtc { get; set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool ProtectedDiagnosticCapture { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ModelDiagnosticCaptureStatus? DiagnosticCapture { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ModelPayloadRepresentation? PayloadRepresentation { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public ModelRequestManifest Manifest { get; set; }

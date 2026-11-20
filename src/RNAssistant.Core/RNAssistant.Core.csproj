@@ -224,6 +224,7 @@
     <Compile Include="Tools\IToolRuntime.cs" />
     <Compile Include="Persistence\IRunStore.cs" />
     <Compile Include="Persistence\ConversationFinishEvidenceAdmission.cs" />
+    <Compile Include="Persistence\CausalTraceRecord.cs" />
     <Compile Include="Persistence\IEventStore.cs" />
     <Compile Include="Persistence\AgentDeliveryCommand.cs" />
     <Compile Include="Persistence\IConversationStore.cs" />
@@ -303,6 +304,7 @@
     <Compile Include="Services\ToolProtocolMessages.cs" />
     <Compile Include="Services\ModelTracePersistenceService.cs" />
     <Compile Include="Services\ModelDiagnosticBuffer.cs" />
+    <Compile Include="Storage\ModelDiagnosticCaptureStore.cs" />
     <Compile Include="Services\ModelResultProjection.cs" />
     <Compile Include="Services\ToolResultMaterialization.cs" />
     <Compile Include="Services\ResourceMediaMessages.cs" />
@@ -465,6 +467,7 @@
     <Compile Include="Storage\ResourceJournal.cs" />
     <Compile Include="Storage\ResourceJournal.Store.cs" />
     <Compile Include="Storage\ResourceJournal.Queries.cs" />
+    <Compile Include="Storage\ResourceJournal.ArtifactCatalog.cs" />
     <Compile Include="Storage\ResourceOutcomeLink.cs" />
     <Compile Include="Models\RetainedToolResultBody.cs" />
     <Compile Include="Services\ToolResultPersistence.cs" />

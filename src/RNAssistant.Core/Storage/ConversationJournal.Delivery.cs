@@ -599,6 +599,7 @@ namespace RNAssistant.Core.Storage
 
         private void SaveDelivery(SqliteConnection db, SqliteTransaction tx, JournalRecord record, JournalCursor position, AgentMessageAccepted fact)
         {
+                    SaveDiagnosticRunEvent(db, tx, record, position, fact.Sender, fact.RunId);
                     using (var command = Command(db, "INSERT INTO agent_delivery VALUES($stream,$operation,$message,$sender,$recipient,$run,$call,$chain,$reply,$resolution,$created,$fingerprint,$segment,$start,$end,$sequence,$hash,$first,$assignment)", tx))
                     {
                         command.Parameters.AddWithValue("$assignment", fact.Assignment ? 1 : 0);

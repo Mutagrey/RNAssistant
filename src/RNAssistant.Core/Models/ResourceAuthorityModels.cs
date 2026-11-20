@@ -365,7 +365,7 @@ namespace RNAssistant.Core.Models
         ResourceAuthoritySnapshotSet CaptureMany(IReadOnlyList<ResourceAuthorityScopeId> scopes);
         ResourceHeadState GetHead(ResourceAuthorityScopeId scope, ResourceIdentity identity);
         ResourceHeadPage ReadHeads(ResourceAuthorityScopeId scope, IReadOnlyList<ResourceHeadRange> ranges, int offset, int limit);
-        AuthorityCommitResult Publish(ResourceAuthorityCommit commit);
+        AuthorityCommitResult Publish(ResourceAuthorityCommit commit, bool includeAllHeads = true);
     }
 
     public interface IResourceRevisionStore

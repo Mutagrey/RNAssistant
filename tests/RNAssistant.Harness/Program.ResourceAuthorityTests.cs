@@ -11,6 +11,7 @@ using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Services;
+using RNAssistant.Office.Runtime;
 using RNAssistant.Office.Tools;
 using RNAssistant.Runtime;
 using UglyToad.PdfPig.Core;
@@ -657,7 +658,8 @@ namespace RNAssistant.Harness
                     using (var data = new ResourceDataPlaneService(gateway))
                     {
                         var error = RuntimeThrows<ResourceRequestException>(() => data.Open(session, "workspace", exact, view));
-                        AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", error.ErrorCode, view + "/" + defect + " has a canonical exact-snapshot failure");
+                        AssertEqual(defect == "missing" ? "RESOURCE_SNAPSHOT_MISSING" : defect == "invalid-utf8" ?
+                            "RESOURCE_SNAPSHOT_ENCODING" : "RESOURCE_SNAPSHOT_UNAVAILABLE", error.ErrorCode, view + "/" + defect + " has a canonical exact-snapshot failure");
                         AssertTrue(!error.Retryable, "broken retained metadata cannot suggest recapture");
                     }
                     AssertEqual(0, reads, view + "/" + defect + " does not read original bytes or render");
@@ -1275,16 +1277,16 @@ namespace RNAssistant.Harness
                 Func<ResourceRef, ResourceReadSelection> read = exact => executor.ResourceGateway.Read(session,
                     new ResourceReadRequest { Reference = exact, Representation = "text", MaxChars = 128 });
                 var generation = executor.ResourceAuthority.Store.Capture(scope).Generation;
-                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => read(prepared)).ErrorCode,
+                AssertEqual("RESOURCE_SNAPSHOT_UNPUBLISHED", RuntimeThrows<ResourceRequestException>(() => read(prepared)).ErrorCode,
                     "prepared catalog metadata cannot be exposed as a committed publication");
                 AssertTrue(revisions.GetView(scope, prepared, "text") == null, "failed publication check cannot retain a public text view");
                 System.IO.File.Delete(executor.Payloads.PathFor(metadata.Payload.Sha256));
-                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => read(root)).ErrorCode,
+                AssertEqual("RESOURCE_SNAPSHOT_MISSING", RuntimeThrows<ResourceRequestException>(() => read(root)).ErrorCode,
                     "missing prompt CAS cannot become an empty successful catalog body");
                 AssertTrue(revisions.GetView(scope, root, "text") == null, "missing root payload is not replaced by an invented empty view");
                 var publishedSkill = active.Skills.Skills.Single(item => item.Id == skill.Id);
                 System.IO.File.WriteAllText(executor.Payloads.PathFor(publishedSkill.References.Single().Payload.Sha256), "CORRUPT CAS");
-                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => read(
+                AssertEqual("RESOURCE_SNAPSHOT_INTEGRITY", RuntimeThrows<ResourceRequestException>(() => read(
                     SkillPublicationService.SkillResource(publishedSkill, "references/details.md"))).ErrorCode, "corrupt reference CAS has a typed unavailable result");
                 AssertEqual(generation, executor.ResourceAuthority.Store.Capture(scope).Generation, "missing/corrupt catalog reads cannot advance authority");
                 AssertEqual(root.Revision, executor.ResourceAuthority.Store.GetHead(scope, root.Identity).Revision.Revision, "failures never replace a catalog head");
@@ -1412,7 +1414,7 @@ namespace RNAssistant.Harness
                     if (index != null) revisionStore.RegisterView(scope, new ResourceRevisionView(prepared, index.View,
                         index.ContentSha256, index.Payload, index.Coverage, index.Parts));
                     foreach (var view in new[] { "text", "table", "records" })
-                        AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => gateway.Read(session,
+                        AssertEqual("RESOURCE_SNAPSHOT_UNPUBLISHED", RuntimeThrows<ResourceRequestException>(() => gateway.Read(session,
                             new ResourceReadRequest { Reference = prepared, Representation = view, MaxRows = 1 })).ErrorCode,
                             "prepared definition cannot borrow the visibility of an older committed head or a retained index");
                 }
@@ -1494,13 +1496,13 @@ namespace RNAssistant.Harness
                     new ResourceForkService(executor.ResourceAuthority, executor.Payloads));
                 var childScope = executor.ResourceAuthority.Scope(child, false);
                 AssertEqual(0L, executor.ResourceAuthority.Store.Capture(childScope).Generation, "preparation cannot publish copied heads");
-                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => gateway.Read(child,
+                AssertEqual("RESOURCE_SNAPSHOT_UNPUBLISHED", RuntimeThrows<ResourceRequestException>(() => gateway.Read(child,
                     new ResourceReadRequest { Reference = child.Context.Notes[0].Evidence.Resource, Representation = "text" })).ErrorCode,
                     "prepared context copies cannot become readable/published through a read");
                 AssertEqual(0L, executor.ResourceAuthority.Store.Capture(childScope).Generation, "rejected read leaves fork preparation unpublished");
                 var childDerived = child.HtmlWorkspace.DataSources.Single(item => item.Name == "virtual").Binding.Resource;
                 foreach (var view in new[] { "text", "table", "records" })
-                    AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => gateway.Read(child,
+                    AssertEqual("RESOURCE_SNAPSHOT_UNPUBLISHED", RuntimeThrows<ResourceRequestException>(() => gateway.Read(child,
                         new ResourceReadRequest { Reference = childDerived, Representation = view, MaxRows = 1 })).ErrorCode,
                         "copy provenance alone cannot authorize a prepared fork before its commit");
                 AssertTrue(childDerived.Uri.Contains(child.Id) && childDerived.Revision != derived.Revision, "fork has a new exact resource identity/revision");
@@ -1590,11 +1592,11 @@ namespace RNAssistant.Harness
                 AssertEqual("resource_cursor_invalid", RuntimeThrows<ResourceRequestException>(() => gateway.Read(session,
                     new ResourceReadRequest { Reference = derived, Representation = "table", Cursor = read.NextCursor,
                         Fields = new List<string> { "Sales" } })).ErrorCode, "virtual continuation guards run before definition CAS hydration");
-                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => gateway.Read(session,
+                AssertEqual("RESOURCE_SNAPSHOT_MISSING", RuntimeThrows<ResourceRequestException>(() => gateway.Read(session,
                     new ResourceReadRequest { Reference = derived, Representation = "table", Cursor = read.NextCursor })).ErrorCode,
                     "missing committed virtual definition has a typed unavailable result, not a newer replacement");
                 System.IO.File.WriteAllText(executor.Payloads.PathFor(revisions.GetRevision(scope, derived).Payload.Sha256), "corrupt definition");
-                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => gateway.Read(session,
+                AssertEqual("RESOURCE_SNAPSHOT_INTEGRITY", RuntimeThrows<ResourceRequestException>(() => gateway.Read(session,
                     new ResourceReadRequest { Reference = derived, Representation = "table" })).ErrorCode,
                     "corrupt committed virtual definition fails through the same retained payload reader");
             });
@@ -1822,7 +1824,7 @@ namespace RNAssistant.Harness
                 System.IO.File.Delete(payloads.PathFor(store.GetView(scope, r1, "record-index-v1:$.Rows").Payload.Sha256));
                 AssertEqual("resource_cursor_invalid", RuntimeThrows<ResourceRequestException>(() => read(r1, first.NextCursor, "$.Rows", new[] { "amount" })).ErrorCode,
                     "projection guards run before structural index CAS hydration");
-                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => read(r1, first.NextCursor, "$.Rows", new[] { "Amount" })).ErrorCode,
+                AssertEqual("RESOURCE_SNAPSHOT_MISSING", RuntimeThrows<ResourceRequestException>(() => read(r1, first.NextCursor, "$.Rows", new[] { "Amount" })).ErrorCode,
                     "valid continuation with missing exact index fails explicitly");
                 AssertEqual(generation, store.Capture(scope).Generation, "continuations and failures cannot publish heads");
             });
@@ -1848,14 +1850,23 @@ namespace RNAssistant.Harness
                 AssertEqual(1L, Convert.ToInt64(read("table").Table.Rows.Single()["value"]), "committed table index is retained");
                 var index = store.GetView(scope, exact, "record-index-v1:$");
                 System.IO.File.WriteAllText(payloads.PathFor(index.Parts.Single().Sha256), "corrupt record part");
-                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => read("table")).ErrorCode,
+                AssertEqual("RESOURCE_SNAPSHOT_INTEGRITY", RuntimeThrows<ResourceRequestException>(() => read("table")).ErrorCode,
                     "corrupt indexed part is a typed unavailable snapshot, never re-materialized from source");
                 System.IO.File.WriteAllText(payloads.PathFor(index.Payload.Sha256), "corrupt index");
-                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => read("records")).ErrorCode,
+                AssertEqual("RESOURCE_SNAPSHOT_INTEGRITY", RuntimeThrows<ResourceRequestException>(() => read("records")).ErrorCode,
                     "corrupt index is a typed unavailable snapshot");
                 System.IO.File.WriteAllText(payloads.PathFor(payload.Sha256), "corrupt source");
-                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => read("text")).ErrorCode,
+                AssertEqual("RESOURCE_SNAPSHOT_INTEGRITY", RuntimeThrows<ResourceRequestException>(() => read("text")).ErrorCode,
                     "retained source uses the same typed CAS failure behavior");
+                foreach (var error in new[] {
+                    RuntimeThrows<ResourceRequestException>(() => read("text")),
+                    RuntimeThrows<ResourceRequestException>(() => ResourcePublicationReader.ReadPayload(null, payload, 100)) })
+                {
+                    var terminal = OfficeToolFailure.Resource(error).GetAwaiter().GetResult();
+                    AssertEqual(error.ErrorCode, (string)JObject.Parse(terminal.Result.DataJson)["code"], "tool keeps the precise storage failure");
+                    AssertEqual(ToolFailureKind.ToolDefect, terminal.Recovery.FailureKind, "failure belongs to storage");
+                    AssertEqual(ToolRetryPolicy.None, terminal.Recovery.RetryPolicy, "storage failure cannot request a model replan");
+                }
                 AssertEqual(1L, store.Capture(scope).Generation, "payload failures never change publication authority");
                 AssertEqual(exact.Revision, store.GetHead(scope, exact.Identity).Revision.Revision, "payload failures do not invent a replacement head");
             });
@@ -2359,11 +2370,9 @@ namespace RNAssistant.Harness
                 AssertEqual(EvidenceState.Unknown, new EvidenceStateReducer().Reduce(gateway.Evidence(session, historical).Single(),
                     authority.CaptureMany(new[] { scope })).State, "snapshot access never reconciles unknown evidence currentness");
                 AssertEqual(generation, authority.Store.Capture(scope).Generation, "historical reads never publish a head");
-                var missing = new ResourceRef(identity.Uri, "r_missing_cursor_view");
-                var missingPayload = new PayloadRef(new string('f', 64), body.Length, "text/plain");
-                revisions.RegisterRevision(scope, new ResourceRevisionMetadata(missing, missingPayload.Sha256, missingPayload));
-                revisions.RegisterView(scope, new ResourceRevisionView(missing, "source", missingPayload.Sha256, missingPayload, ResourceCoverage.Whole()));
-                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => read(missing, null, 128)).ErrorCode,
+                var retainedView = revisions.GetView(scope, r1, "source");
+                System.IO.File.Delete(executor.Payloads.PathFor(retainedView.Payload.Sha256));
+                AssertEqual("RESOURCE_SNAPSHOT_MISSING", RuntimeThrows<ResourceRequestException>(() => read(r1, null, 128)).ErrorCode,
                     "missing retained CAS fails explicitly without falling back to current Office bytes");
                 AssertEqual(calls, adapter.TotalBackendCallCount, "retained failures also stay outside Office");
                 var unboundGateway = new ResourceGatewayService(adapter, null, null);
@@ -2491,7 +2500,7 @@ namespace RNAssistant.Harness
                 AssertEqual("last", payloads.ReadText(evidence.Payload.ToBlobReference()), "only selected lines become observation bytes");
                 AssertEqual(body, payloads.ReadText(payload.ToBlobReference()), "selection preserves the original snapshot");
                 System.IO.File.Delete(payloads.PathFor(payload.Sha256));
-                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() =>
+                AssertEqual("RESOURCE_SNAPSHOT_MISSING", RuntimeThrows<ResourceRequestException>(() =>
                     gateway.ReadWhole(session, exact, "text")).ErrorCode, "another operation cannot borrow a cached body");
             });
         }
@@ -2519,7 +2528,7 @@ namespace RNAssistant.Harness
                         new[] { new ResourceHeadChange(identity, snapshot.GetHead(identity), ResourceHeadState.Known(reference, snapshot.Generation + 1)) },
                         AuthorityCommitReason.InitialObservation));
                 };
-                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => read(r1, null, 4)).ErrorCode,
+                AssertEqual("RESOURCE_SNAPSHOT_UNPUBLISHED", RuntimeThrows<ResourceRequestException>(() => read(r1, null, 4)).ErrorCode,
                     "retained metadata alone cannot activate an unpublished state identity");
                 AssertEqual(0L, store.Capture(scope).Generation, "unpublished read is side-effect free");
                 publish(r1);

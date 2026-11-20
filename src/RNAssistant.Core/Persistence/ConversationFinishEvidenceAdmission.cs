@@ -172,8 +172,8 @@ namespace RNAssistant.Core.Persistence
                 }
                 yield break;
             }
-            if (item.Type != SessionEventTypes.SessionCommit) yield break;
-            var operations = item.Data?["Operations"] as JArray;
+            if (!item.IsConversationCommit) yield break;
+            var operations = item.CommitOperations;
             if (operations == null) throw new InvalidOperationException("Run commit has no typed operations.");
             foreach (var index in positions == null ? Enumerable.Range(0, operations.Count) : positions.OrderBy(value => value))
             {

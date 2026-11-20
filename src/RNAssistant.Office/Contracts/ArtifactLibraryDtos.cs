@@ -23,6 +23,7 @@ namespace RNAssistant.Office.Contracts
 
     public sealed class ArtifactLibraryProjectionDto
     {
+        [JsonProperty("catalogStamp")] public string CatalogStamp { get; set; }
         [JsonProperty("sessionRevision")]
         public long SessionRevision { get; set; }
 

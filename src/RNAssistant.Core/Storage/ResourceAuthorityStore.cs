@@ -130,7 +130,7 @@ namespace RNAssistant.Core.Storage
             return low;
         }
 
-        public AuthorityCommitResult Publish(ResourceAuthorityCommit commit)
+        public AuthorityCommitResult Publish(ResourceAuthorityCommit commit, bool includeAllHeads = true)
         {
             if (commit == null) throw new ArgumentNullException(nameof(commit));
             ResourceAuthoritySnapshot snapshot;
@@ -144,7 +144,7 @@ namespace RNAssistant.Core.Storage
                     var original = state.Commits.Single(item => item.CommitId == commit.CommitId);
                     if (JsonConvert.SerializeObject(original) != JsonConvert.SerializeObject(commit))
                         throw new ResourceAuthorityConflictException("A commit id was reused with different content.");
-                    return new AuthorityCommitResult(false, true, Snapshot(state));
+                    return new AuthorityCommitResult(false, true, Snapshot(state, includeAllHeads));
                 }
                 if (!string.IsNullOrWhiteSpace(commit.MutationAttemptId) &&
                     state.MutationAttemptCommits.ContainsKey(commit.MutationAttemptId))
@@ -153,7 +153,7 @@ namespace RNAssistant.Core.Storage
                 Append(commit);
                 Apply(state, commit);
                 state.AuthorityLength = new FileInfo(PathFor(commit.ScopeId)).Length;
-                snapshot = Snapshot(state);
+                snapshot = Snapshot(state, includeAllHeads);
                 published = true;
             }
             if (published)
@@ -555,10 +555,11 @@ namespace RNAssistant.Core.Storage
                 JsonConvert.SerializeObject(first.Dependencies) == JsonConvert.SerializeObject(second.Dependencies);
         }
 
-        private static ResourceAuthoritySnapshot Snapshot(ScopeProjection state)
+        private static ResourceAuthoritySnapshot Snapshot(ScopeProjection state, bool includeAllHeads = true)
         {
             return new ResourceAuthoritySnapshot(state.Scope, state.Generation,
-                state.HighWaterCommitId, state.EffectHighWaterMark, state.Heads.Values, state.Commits);
+                state.HighWaterCommitId, state.EffectHighWaterMark, includeAllHeads ? state.Heads.Values.AsEnumerable() : Enumerable.Empty<ResourceHeadState>(),
+                includeAllHeads ? state.Commits.AsEnumerable() : Enumerable.Empty<ResourceAuthorityCommit>());
         }
 
         private sealed class ScopeProjection

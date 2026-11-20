@@ -16,7 +16,7 @@ namespace RNAssistant.Core.Storage
     // Permanent composition for multiple exact conversation scopes over the one
     // canonical index. It owns no facts and delegates every operation to the
     // existing per-scope ConversationJournal.
-    internal sealed class ConversationJournalRouter : IConversationStore, IEventStore, IConversationContextStore,
+    internal sealed class ConversationJournalRouter : IConversationStore, IEventStore, IIndexedModelEventReader, IConversationContextStore,
         IConversationInputReadStore, IToolOperationResolutionStore, IConversationArtifactBodyReader
     {
         private readonly AppDataPaths _paths;
@@ -49,7 +49,7 @@ namespace RNAssistant.Core.Storage
             throw new InvalidOperationException("Conversation address has no canonical document/workspace scope.");
         }
 
-        private ConversationJournal ForAddress(ConversationMetadata address)
+        internal ConversationJournal ForAddress(ConversationMetadata address)
         { return Journal(AddressScope(address)); }
         private ConversationJournal For(ChatSession session)
         { return ForAddress(ConversationMetadata.From(session)); }
@@ -243,9 +243,26 @@ namespace RNAssistant.Core.Storage
         public bool IsPersisted(ChatSession session)
         { return session != null && Conversations(For(session)).IsPersisted(session); }
 
-        public IReadOnlyList<ChatSessionHeader> ListHeaders(bool includeStorageUsage = true)
+        internal ChatSession ReadArtifactActor(string chatId, string resourceUri) => ForChat(chatId)?.ReadArtifactActor(chatId, resourceUri);
+        internal ChatSession ReadCatalogActor(string chatId, out IReadOnlyList<ResourceRef> membership)
         {
-            return AllJournals().SelectMany(journal => Conversations(journal).ListHeaders(includeStorageUsage))
+            membership = new ResourceRef[0];
+            var journal = ForChat(chatId);
+            return journal == null ? null : journal.ReadArtifactActor(chatId, null, false, out membership);
+        }
+
+        internal bool HasActiveHtml(string chatId, string artifactId) => ForChat(chatId)?.HasActiveHtml(chatId, artifactId) == true;
+
+        public IReadOnlyList<ChatSessionHeader> ListHeaders(bool includeStorageUsage = true, bool documentsOnly = false)
+        {
+            var sizes = includeStorageUsage ? new ChatBlobStore(_paths, () => _protector ?? StorageProtector.None).CreateStorageSizeSnapshot() : null;
+            return ReadHeaders(documentsOnly, sizes);
+        }
+
+        internal IReadOnlyList<ChatSessionHeader> ReadHeaders(bool documentsOnly, ChatBlobStore.StorageSizeSnapshot sizes)
+        {
+            return StorageJournal.ConversationInventory(_paths).Where(stream => !documentsOnly || stream.Identity.StartsWith("document:", StringComparison.Ordinal))
+                .SelectMany(stream => Journal(stream.Identity).ReadChatHeaders(includeStorageUsage: sizes != null, sharedSizes: sizes))
                 .OrderByDescending(header => header.UpdatedUtc).ToArray();
         }
 
@@ -318,6 +335,16 @@ namespace RNAssistant.Core.Storage
 
         public SessionEvent Append(ChatSession session, SessionEventWrite write)
         { return Events(For(session)).Append(session, write); }
+
+        internal TrajectoryQueryPage ReadRawPage(ConversationMetadata chat, TrajectoryQueryRequest request, CancellationToken token)
+        { return ForAddress(chat).ReadRawPage(chat, request, token); }
+
+        public IReadOnlyList<KeyValuePair<int, SessionEvent>> ReadRequestPage(ConversationMetadata chat, string run, long? before, CancellationToken token, string step = null)
+        { return ForAddress(chat).ReadRequestPage(chat, run, before, token, step); }
+        public IReadOnlyList<SessionEvent> ReadEvents(ConversationMetadata chat, SessionEventReadMode mode, CancellationToken token)
+        { return ForAddress(chat).ReadEvents(chat, mode, token); }
+        public SessionEvent ReadModelEvent(ConversationMetadata chat, string eventId, CancellationToken token)
+        { return ForAddress(chat).ReadModelEvent(chat, eventId, token); }
 
         public IReadOnlyList<SessionEvent> ReadToolPackAdmissions(ConversationMetadata session, IReadOnlyList<string> runs)
         { return Events(ForAddress(session)).ReadToolPackAdmissions(session, runs); }

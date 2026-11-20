@@ -20,6 +20,65 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void JournalMaterialCatalogPages()
+        {
+            WithTempPaths(paths => {
+                var registry = new DocumentAuthorityRegistry(paths);
+                var doc = registry.Resolve("Word", "catalog-fixture", Path.Combine(paths.Root, "Catalog.docx")).Id;
+                var chatJournal = new ConversationJournal(paths, "document:" + doc);
+                IConversationStore chats = chatJournal;
+                var chat = chats.CreateTransient("Word", "catalog-fixture", "Catalog.docx", "Catalog");
+                chats.Commit(chat, new ConversationCommit());
+                var resources = new ResourceJournal(paths); var blobs = new ChatBlobStore(paths);
+                var artifacts = new DocumentArtifactStore(resources, resources, blobs);
+                var catalog = new ArtifactCatalogService(registry, artifacts, new ArtifactWorkingSetService(artifacts, resources), resources, blobs);
+                var probes = new[] { 0, 10, 50, 100 };
+                foreach (var count in probes)
+                {
+                    while (chat.Artifacts.Count < count)
+                    {
+                        var id = chat.Artifacts.Count.ToString("D3", System.Globalization.CultureInfo.InvariantCulture);
+                        chat.Artifacts.Add(artifacts.ImportOriginal(chat, "material-" + id + ".txt", "text/plain", Encoding.UTF8.GetBytes(id), Guid.NewGuid().ToString("N")));
+                    }
+                    chats.Commit(chat, new ConversationCommit());
+                    var batches = chatJournal.OriginalBindingBatches;
+                    var timer = System.Diagnostics.Stopwatch.StartNew();
+                    for (var title = 0; title < 3; title++) { chat.Title = "Title " + title; chats.Commit(chat, new ConversationCommit()); }
+                    AssertEqual(batches, chatJournal.OriginalBindingBatches, "unchanged original bindings reused at count=" + count);
+                    Console.WriteLine("journal material commit originals=" + count + " warmBindingBatches=0 meanMs=" + timer.ElapsedMilliseconds / 3);
+                }
+                var query = new ArtifactCatalogRequest { ChatId = chat.Id, Scope = "chat", SortBy = "title" };
+                var selected = ChatResourceUri.CreateArtifactRevision(chat, chat.Artifacts.Last());
+                var records = resources.Journal.ReadRecords;
+                var lookup = catalog.List(chat, new ArtifactCatalogRequest { ChatId = chat.Id, Scope = "chat", Query = "material-099" });
+                AssertEqual(selected.Uri, lookup.Items.Single().ResourceUri, "indexed lookup resolves its exact material");
+                AssertTrue(resources.Journal.ReadRecords - records < 40, "one match does not read 100 canonical materials");
+                var actor = chatJournal.ReadArtifactActor(chat.Id, selected.Uri);
+                AssertTrue(actor.Messages.Count == 0 && actor.Artifacts.Single().Id == chat.Artifacts.Last().Id,
+                    "viewer loads only the selected material");
+                var first = catalog.List(chat, query);
+                AssertEqual(50, first.Items.Count, "native material page has 50 items");
+                AssertEqual("material-000.txt", first.Items.First().Title, "native material sort matches presentation order");
+                AssertTrue(first.NextCursor != null && first.Items.All(row => row.Linked), "catalog can continue with exact links");
+                chats.Commit(chat, new ConversationCommit());
+                query.Cursor = first.NextCursor;
+                var second = catalog.List(chat, query);
+                AssertEqual("material-050.txt", second.Items.First().Title, "unrelated commit preserves page two");
+                chat.Title = "New display owner"; chats.Commit(chat, new ConversationCommit());
+                RuntimeThrows<InvalidOperationException>(() => catalog.List(chat, query));
+                var original = chat.Artifacts[0]; var name = original.Title;
+                original.Title = "tampered projection";
+                RuntimeThrows<InvalidDataException>(() => chats.Commit(chat, new ConversationCommit()));
+                original.Title = name;
+                var snapshot = ChatResourceUri.CreateArtifactRevision(chat, original);
+                var metadata = resources.GetView(ResourceAuthorityScopeId.Document(new DocumentAuthorityId(doc)), snapshot, "artifact-original-record");
+                File.WriteAllBytes(blobs.PathFor(metadata.Payload.Sha256), new byte[] { 1, 2 });
+                RuntimeThrows<InvalidDataException>(() => chats.Commit(chat, new ConversationCommit()));
+                IConversationStore restarted = new ConversationJournal(paths, "document:" + doc);
+                RuntimeThrows<InvalidDataException>(() => restarted.Commit(chat, new ConversationCommit()));
+            });
+        }
+
         private static ArtifactTransferPackage TransferFixture()
         {
             return new ArtifactTransferPackage { Title = "Dashboard", EntryPath = "index.html", Files = new List<ArtifactTransferFile> {

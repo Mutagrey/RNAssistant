@@ -1,6 +1,7 @@
 using System;
 using RNAssistant.Application.Conversations;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Office.Diagnostics;
 using RNAssistant.Office.Services;
 

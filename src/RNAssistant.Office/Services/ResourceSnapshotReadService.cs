@@ -19,7 +19,7 @@ namespace RNAssistant.Office.Services
         {
             var exact = request.Reference.IsExact ? request.Reference : descriptor.Reference;
             if (exact?.IsExact != true) throw Error("RESOURCE_HEAD_UNKNOWN", "The logical resource has no known current revision.");
-            var snapshot = _authority.CaptureMany(new[] { scope }).Get(scope);
+            var snapshot = _authority.CapturePublishedHead(scope, exact.Identity);
             var metadata = _authority.RequirePublished(snapshot, exact, session);
             var view = string.IsNullOrWhiteSpace(request.Representation) || request.Representation == "auto" ? "text" : request.Representation;
             var captured = _revisions.GetView(scope, exact, view);

@@ -292,6 +292,7 @@ namespace RNAssistant.Core.Storage
         private void Apply(SqliteConnection db, string operation, string fingerprint, ResourceJournalFact fact, JournalCursor position)
         {
             ValidateTransition(db, fact);
+            var materials = CatalogChanges(db, fact);
             using (var tx = db.BeginTransaction())
             {
                 using (var command = Command(db, "INSERT INTO resource_fact VALUES($scope,$operation,$fingerprint,$segment,$start,$end,$sequence,$hash,$first)", fact.Scope, tx))
@@ -300,6 +301,7 @@ namespace RNAssistant.Core.Storage
                     JournalIndex.AddPosition(command, position); command.ExecuteNonQuery();
                 }
                 ApplyStoreRows(db, tx, operation, fact, position);
+                SaveCatalogChanges(db, tx, fact.Scope, materials, position.Sequence);
                 JournalIndex.SaveCursor(db, "resources", position, tx); tx.Commit();
             }
         }

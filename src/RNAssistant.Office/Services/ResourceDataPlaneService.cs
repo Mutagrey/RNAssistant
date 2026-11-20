@@ -61,7 +61,7 @@ namespace RNAssistant.Office.Services
                 ResourceReadSelection first;
                 using (DocumentAccessGate.BeginOperation())
                     first = _gateway.Read(session, new ResourceReadRequest { Reference = reference.Copy(),
-                        Representation = view, ViewPath = viewPath, Cursor = initialCursor, MaxChars = MaximumBatchItems, MaxRows = 500 });
+                        Representation = view, ViewPath = viewPath, Cursor = initialCursor, MaxChars = MaximumBatchItems, MaxRows = 500 }, cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
                 if (first?.Result?.Resource?.Reference == null || !first.Result.Resource.Reference.IsExact)
                     throw Error("RESOURCE_REVISION_UNAVAILABLE", "The provider did not establish an exact view revision.");
@@ -166,7 +166,7 @@ namespace RNAssistant.Office.Services
                         selected = _gateway.Read(access.Session, new ResourceReadRequest {
                             Reference = access.Lease.Resource.Copy(), Representation = access.Lease.Views[0],
                             Cursor = access.Cursor, MaxChars = limit, MaxRows = limit, RowOffset = offset,
-                            Fields = fields?.ToList(), ViewPath = access.ViewPath });
+                            Fields = fields?.ToList(), ViewPath = access.ViewPath }, cancellationToken);
                 }
                 var result = selected.Result;
                 if (result.Resource.Reference.Revision != access.Lease.Resource.Revision ||

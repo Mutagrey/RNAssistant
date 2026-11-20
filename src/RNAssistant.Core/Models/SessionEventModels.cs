@@ -12,6 +12,7 @@ namespace RNAssistant.Core.Models
         public const string SessionCreated = "session.created";
         public const string SessionForked = "session.forked";
         public const string SessionCommit = "session.commit";
+        public const string ChatCommitted = "chat.committed";
         public const string TurnStarted = "turn.started";
         public const string TurnEnded = "turn.ended";
         public const string StepStarted = "step.started";
@@ -80,6 +81,12 @@ namespace RNAssistant.Core.Models
         public ChatBlobReference Payload { get; set; }
         [JsonIgnore]
         internal long StorageByteOffset { get; set; }
+
+        [JsonIgnore] internal Lazy<JArray> NativeCommitOperations { get; set; }
+        [JsonIgnore] internal Func<string, ChatMessage> ReadCommittedMessage { get; set; }
+        [JsonIgnore] internal bool IsConversationCommit => Type == SessionEventTypes.ChatCommitted || Type == SessionEventTypes.SessionCommit;
+        [JsonIgnore] internal JArray CommitOperations => Type == SessionEventTypes.ChatCommitted
+            ? NativeCommitOperations?.Value : Data?["Operations"] as JArray;
 
         public SessionEvent()
         {

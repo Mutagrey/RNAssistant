@@ -192,18 +192,32 @@ namespace RNAssistant.Core.Storage
         public ResourceRevisionView GetView(ResourceAuthorityScopeId scope, ResourceRef reference, string view)
         {
             if (scope == null || reference?.IsExact != true || string.IsNullOrWhiteSpace(view)) throw new ArgumentException("Exact view coordinates required.");
-            return Access((db, cursor) => {
-                using (var command = ViewCommand(db, "SELECT operation FROM resource_view WHERE scope=$scope AND uri=$uri AND revision=$revision AND view=$view ORDER BY whole DESC,sequence LIMIT 1", scope, reference))
-                {
-                    command.Parameters.AddWithValue("$view", view);
-                    var operation = command.ExecuteScalar() as string;
-                    if (operation == null) return null;
-                    var result = ViewOf(Find(db, scope, operation)?.Fact);
-                    if (result?.Reference.Uri != reference.Uri || result.Reference.Revision != reference.Revision || result.View != view)
-                        throw new InvalidDataException("View locator mismatch.");
-                    return result;
-                }
-            }, CancellationToken.None);
+            return Access((db, cursor) => SelectedView(db, scope, reference, view), CancellationToken.None);
+        }
+
+        private ResourceRevisionView SelectedView(SqliteConnection db, ResourceAuthorityScopeId scope, ResourceRef reference, string view)
+        {
+            using (var command = ViewCommand(db, "SELECT operation FROM resource_view WHERE scope=$scope AND uri=$uri AND revision=$revision AND view=$view ORDER BY whole DESC,sequence LIMIT 1", scope, reference))
+            {
+                command.Parameters.AddWithValue("$view", view);
+                var operation = command.ExecuteScalar() as string;
+                if (operation == null) return null;
+                var result = ViewOf(Find(db, scope, operation)?.Fact);
+                if (result?.Reference.Uri != reference.Uri || result.Reference.Revision != reference.Revision || result.View != view)
+                    throw new InvalidDataException("View locator mismatch.");
+                return result;
+            }
+        }
+
+        // One admission per bounded batch. Canonical facts are checked before the
+        // caller opens immutable metadata bodies outside the shared index lock.
+        internal IReadOnlyList<Tuple<ResourceHeadState, ResourceRevisionMetadata, ResourceRevisionView>> ReadArtifactBindings(
+            ResourceAuthorityScopeId scope, IReadOnlyList<ResourceRef> references, string recordView)
+        {
+            if (references.Count > 32) throw new ArgumentOutOfRangeException(nameof(references));
+            return Access((db, cursor) => references.Select(reference => Tuple.Create(
+                Head(db, scope, reference.Identity), RevisionOf(FindRevision(db, scope, reference)?.Fact),
+                SelectedView(db, scope, reference, recordView))).ToArray(), CancellationToken.None);
         }
 
         public ResourceRevisionViewPage ReadViews(ResourceAuthorityScopeId scope, ResourceRef reference, int offset, int limit, int? snapshotCount = null)

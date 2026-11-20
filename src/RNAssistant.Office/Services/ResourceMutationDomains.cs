@@ -174,7 +174,7 @@ namespace RNAssistant.Office.Services
                     yield return head.Identity;
         }
 
-        private static ResourceIdentity SourceComponent(ResourceIdentity identity)
+        internal static ResourceIdentity SourceComponent(ResourceIdentity identity)
         {
             ResourceAddress address;
             if (!ResourceUri.TryParse(identity.Uri, out address) || address.Provider != "vba") return null;

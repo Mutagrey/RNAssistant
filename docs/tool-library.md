@@ -1,5 +1,9 @@
 # Tool Library and capability truth
 
+## Продолжение поиска — 2026-11-20
+
+Курсор `core.search` принадлежит конкретному обработчику, запуску и параметрам поиска. Последующий запрос получает `next` только пока тот же обработчик владеет продолжением. Успешный новый поиск с теми же параметрами разрешает использовать свежий курсор. Runtime проверяет точные ревизии источников при продолжении.
+
 ## Local Browser input — 2026-11-13
 
 Use semantic element names for browser input. Optional CSS point input is a fallback

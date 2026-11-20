@@ -47,7 +47,8 @@ namespace RNAssistant.Core.Storage
             "tools", "skills", "vendors", "attachments"
         };
         private static readonly string[] ExcludedRootDirectories = {
-            "locks", "webview", "logs", "plugin-staging", "plugin-preview-data", "plugin-results"
+            "locks", "webview", "logs", "plugin-staging", "plugin-preview-data", "plugin-results",
+            ModelDiagnosticCaptureStore.DirectoryName
         };
 
         public ApplicationBackupResult BackupApplication(string destination)

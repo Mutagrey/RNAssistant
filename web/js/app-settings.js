@@ -364,6 +364,12 @@ function renderSettings(options) {
   $("enableAgentJavaScriptInput").checked = compatibilityValue(s, "EnableAgentJavaScript", "enableAgentJavaScript", agentSettingsDefaults.enableAgentJavaScript) === true;
   $("autoCompressContextInput").checked = compatibilityValue(s, "AutoCompressContext", "autoCompressContext", agentSettingsDefaults.autoCompressContext) !== false;
   $("debugModelTrafficInput").checked = !!(s.DebugModelTraffic || s.debugModelTraffic);
+  $("persistModelTrafficInput").checked = !!(s.PersistModelTraffic || s.persistModelTraffic);
+  $("persistModelTrafficInput").disabled = !$("debugModelTrafficInput").checked;
+  $("debugModelTrafficInput").onchange = function () {
+    $("persistModelTrafficInput").disabled = !this.checked;
+    if (!this.checked) $("persistModelTrafficInput").checked = false;
+  };
   $("screenCaptureProtectionInput").checked = compatibilityValue(s, "ScreenCaptureProtectionEnabled", "screenCaptureProtectionEnabled", true) !== false;
   $("historyHmacInput").checked = String(compatibilityValue(s, "HistoryIntegrityMode", "historyIntegrityMode", "sha256")).toLowerCase() === "hmac_sha256";
   $("historyEncryptionInput").checked = String(compatibilityValue(s, "HistoryEncryptionMode", "historyEncryptionMode", "none")).toLowerCase() === "aes256_cbc_hmac_sha256";
@@ -439,6 +445,7 @@ function readSettings() {
     EnableAgentJavaScript: $("enableAgentJavaScriptInput").checked,
     AutoCompressContext: $("autoCompressContextInput").checked,
     DebugModelTraffic: $("debugModelTrafficInput").checked,
+    PersistModelTraffic: $("debugModelTrafficInput").checked && $("persistModelTrafficInput").checked,
     ScreenCaptureProtectionEnabled: $("screenCaptureProtectionInput").checked,
     HistoryIntegrityMode: $("historyHmacInput").checked ? "hmac_sha256" : "sha256",
     HistoryEncryptionMode: $("historyEncryptionInput").checked ? "aes256_cbc_hmac_sha256" : "none",

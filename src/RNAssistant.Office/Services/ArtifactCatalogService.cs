@@ -62,7 +62,8 @@ namespace RNAssistant.Office.Services
             // Read-only context for exact saved content. Never passed to live Office tools.
             return new ChatSession { Id = actor.Id, DocumentAuthorityId = entry.AuthorityId, Host = entry.Host, DocumentTitle = Title(entry) };
         }
-        internal ArtifactCatalogResponse List(ChatSession actor, ArtifactCatalogRequest request)
+        internal ArtifactCatalogResponse List(ChatSession actor, ArtifactCatalogRequest request, IReadOnlyList<ResourceRef> membership = null,
+            CancellationToken token = default(CancellationToken))
         {
             if (request.ChatId != actor.Id || request.Scope != "chat" && request.Scope != "document" && request.Scope != "all" || (request.Query?.Length ?? 0) > 200)
                 throw new InvalidOperationException("Некорректный запрос каталога.");
@@ -71,6 +72,18 @@ namespace RNAssistant.Office.Services
                 throw new InvalidOperationException("Некорректная сортировка каталога.");
             var descending = request.SortDescending ?? sortBy == "updated";
             var documents = Documents(actor);
+            var native = _authority as ResourceJournal;
+            if (native != null)
+            {
+                var indexed = IndexedPage(native, actor, request, documents, sortBy, descending, membership, token);
+                if (indexed != null) return indexed;
+                if (membership != null)
+                {
+                    var metadata = ConversationMetadata.From(actor);
+                    actor.Artifacts = membership.Where(reference => DocumentArtifactStore.Owns(metadata, reference))
+                        .Select(reference => _artifacts.InspectMetadata(metadata, reference)).ToList();
+                }
+            }
             var items = new List<ArtifactCatalogItem>();
             foreach (var doc in documents.Where(d => (request.Scope == "all" || d.AuthorityId == actor.DocumentAuthorityId) &&
                 (string.IsNullOrEmpty(request.DocumentId) || d.AuthorityId == request.DocumentId)))
@@ -82,13 +95,7 @@ namespace RNAssistant.Office.Services
                     var linked = doc.AuthorityId == actor.DocumentAuthorityId && ArtifactWorkingSet.IsLinked(actor, item);
                     if (request.Scope == "chat" && !linked || !string.IsNullOrEmpty(request.Kind) && request.Kind != item.Kind && !(request.Kind == "file" && item.Kind == ChatArtifactKinds.Attachment) ||
                         !string.IsNullOrEmpty(request.Query) && (item.Title ?? "").IndexOf(request.Query.Trim(), StringComparison.OrdinalIgnoreCase) < 0) continue;
-                    items.Add(new ArtifactCatalogItem { DocumentId = doc.AuthorityId, DocumentTitle = Title(doc),
-                        SourceChatId = item.SourceChatId, SourceChatTitle = item.SourceChatId == actor.Id ? actor.Title : null,
-                        ResourceUri = ChatResourceUri.CreateArtifactRevisionUri(source, item), Title = item.Title ?? "Недоступный ресурс",
-                        Kind = item.Kind, MimeType = item.MimeType, Revision = Math.Max(1, item.Revision), ByteLength = item.ContentByteLength, UpdatedUtc = item.CreatedUtc, Linked = linked,
-                        Selected = linked && (item.Id == actor.ActiveHtmlArtifactId || item.Id == actor.ActivePlanDocumentArtifactId ||
-                            MarkdownDocumentIdentity.LogicalId(item.Id) != null && actor.ArtifactLinks.Any(l => !l.Detached && l.Reference.Uri == ChatResourceUri.CreateArtifactRevisionUri(actor, item))), AvailabilityIssue = item.AvailabilityIssue,
-                        CanTransfer = CanTransfer(item), CanDelete = doc.AuthorityId == actor.DocumentAuthorityId });
+                    items.Add(CatalogItem(actor, source, doc, item, linked));
                 }
             }
             IOrderedEnumerable<ArtifactCatalogItem> ordered;
@@ -104,7 +111,8 @@ namespace RNAssistant.Office.Services
                 ordered = descending ? items.OrderByDescending(key, comparer) : items.OrderBy(key, comparer);
             }
             items = ordered.ThenBy(i => i.ResourceUri, StringComparer.Ordinal).ToList();
-            var stamp = TextPatternEngine.Sha256(JsonConvert.SerializeObject(new object[] { actor.Id, actor.Revision,
+            var stamp = TextPatternEngine.Sha256(JsonConvert.SerializeObject(new object[] { actor.Id, actor.DocumentAuthorityId, actor.Title,
+                documents.Select(doc => new { doc.AuthorityId, Name = Title(doc) }).OrderBy(doc => doc.AuthorityId, StringComparer.Ordinal),
                 request.Scope, request.Query, request.Kind, request.DocumentId, sortBy, descending, items }));
             var offset = 0;
             if (!string.IsNullOrEmpty(request.Cursor))
@@ -117,6 +125,71 @@ namespace RNAssistant.Office.Services
                 Items = items.Skip(offset).Take(50).ToArray(), NextCursor = items.Count > offset + 50 ? stamp + "." + (offset + 50) : null,
                 Documents = documents.Select(d => new ArtifactCatalogDocument { Id = d.AuthorityId, Title = Title(d) }).ToArray() };
         }
+        private static ArtifactCatalogItem CatalogItem(ChatSession actor, ChatSession source, DocumentAuthorityEntry doc,
+            ChatArtifact item, bool linked)
+        {
+            return new ArtifactCatalogItem { DocumentId = doc.AuthorityId, DocumentTitle = Title(doc),
+                        SourceChatId = item.SourceChatId, SourceChatTitle = item.SourceChatId == actor.Id ? actor.Title : null,
+                        ResourceUri = ChatResourceUri.CreateArtifactRevisionUri(source, item), Title = item.Title ?? "Недоступный ресурс",
+                        Kind = item.Kind, MimeType = item.MimeType, Revision = Math.Max(1, item.Revision), ByteLength = item.ContentByteLength, UpdatedUtc = item.CreatedUtc, Linked = linked,
+                        Selected = linked && (item.Id == actor.ActiveHtmlArtifactId || item.Id == actor.ActivePlanDocumentArtifactId ||
+                            MarkdownDocumentIdentity.LogicalId(item.Id) != null && actor.ArtifactLinks.Any(l => !l.Detached && l.Reference.Uri == ChatResourceUri.CreateArtifactRevisionUri(actor, item))), AvailabilityIssue = item.AvailabilityIssue,
+                        CanTransfer = CanTransfer(item), CanDelete = doc.AuthorityId == actor.DocumentAuthorityId };
+        }
+
+        private ArtifactCatalogResponse IndexedPage(ResourceJournal journal, ChatSession actor, ArtifactCatalogRequest request,
+            IReadOnlyList<DocumentAuthorityEntry> documents, string sort, bool descending, IReadOnlyList<ResourceRef> membership, CancellationToken token)
+        {
+            var metadata = ConversationMetadata.From(actor);
+            var selected = documents.Where(d => (request.Scope == "all" || d.AuthorityId == actor.DocumentAuthorityId) &&
+                (string.IsNullOrEmpty(request.DocumentId) || request.DocumentId == d.AuthorityId)).ToDictionary(d => d.AuthorityId, StringComparer.Ordinal);
+            var linked = new HashSet<string>(StringComparer.Ordinal);
+            var references = membership ?? actor.Artifacts.Select(item => ChatResourceUri.CreateArtifactRevision(actor, item)).ToArray();
+            foreach (var reference in references.Where(reference => DocumentArtifactStore.Owns(metadata, reference)))
+                linked.Add(ArtifactWorkingSet.Identity(metadata, reference).Uri);
+            foreach (var link in actor.ArtifactLinks)
+            {
+                if (link.Detached) linked.Remove(link.Identity.Uri);
+                else linked.Add(link.Identity.Uri);
+            }
+            var offset = 0; string priorStamp = null;
+            if (!string.IsNullOrEmpty(request.Cursor))
+            {
+                var parts = request.Cursor.Split('.');
+                if (parts.Length != 2 || !int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out offset) ||
+                    offset < 50 || offset % 50 != 0)
+                    throw new InvalidOperationException("Каталог изменился. Обновите список.");
+                priorStamp = parts[0];
+            }
+            var result = journal.ReadMaterialPage(selected.ToDictionary(d => d.Key, d => Title(d.Value)), linked,
+                actor.DocumentAuthorityId, request.Scope == "chat", request.Query, request.Kind, sort, descending, offset,
+                (kind, title) => CatalogFormat(new ArtifactCatalogItem { Kind = kind, Title = title }), token);
+            if (result == null) return null;
+            var stamp = TextPatternEngine.Sha256(JsonConvert.SerializeObject(new object[] { actor.Id, actor.DocumentAuthorityId, actor.Title,
+                actor.ActivePlanDocumentArtifactId, actor.ActiveHtmlArtifactId, actor.ArtifactLinks, linked.OrderBy(key => key, StringComparer.Ordinal),
+                documents.OrderBy(doc => doc.AuthorityId, StringComparer.Ordinal).Select(doc => new[] { doc.AuthorityId, Title(doc) }),
+                request.Scope, request.Query, request.Kind, request.DocumentId, sort, descending, result.Generation }));
+            if (priorStamp != null && (priorStamp != stamp || result.References.Count == 0))
+                throw new InvalidOperationException("Каталог изменился. Обновите список.");
+            var items = new List<ArtifactCatalogItem>();
+            foreach (var reference in result.References.Take(50))
+            {
+                token.ThrowIfCancellationRequested();
+                string owner, id; int version;
+                if (!ChatResourceUri.TryParseArtifactRevision(reference, out owner, out id, out version) || !selected.ContainsKey(owner))
+                    throw new InvalidDataException("Material catalog locator belongs to another document.");
+                var doc = selected[owner];
+                var source = doc.AuthorityId == actor.DocumentAuthorityId ? actor : new ChatSession {
+                    Id = actor.Id, DocumentAuthorityId = doc.AuthorityId, Host = doc.Host, DocumentTitle = Title(doc) };
+                var item = _artifacts.InspectMetadata(ConversationMetadata.From(source), reference);
+                if (item.AvailabilityIssue != null || item.RemovedFromDocument) return null;
+                items.Add(CatalogItem(actor, source, doc, item, linked.Contains(ArtifactWorkingSet.Identity(source, item).Uri)));
+            }
+            return new ArtifactCatalogResponse { ChatId = actor.Id, DocumentId = actor.DocumentAuthorityId, SessionRevision = actor.Revision,
+                Items = items, NextCursor = result.References.Count > 50 ? stamp + "." + (offset + 50) : null,
+                Documents = documents.Select(doc => new ArtifactCatalogDocument { Id = doc.AuthorityId, Title = Title(doc) }).ToArray() };
+        }
+
         private static bool CanTransfer(ChatArtifact item)
         { return string.IsNullOrEmpty(item.AvailabilityIssue) && (item.Kind == ChatArtifactKinds.HtmlWorkspace || item.Kind == ChatArtifactKinds.Markdown || item.Kind == ChatArtifactKinds.File || item.OriginalAttachment != null); }
 

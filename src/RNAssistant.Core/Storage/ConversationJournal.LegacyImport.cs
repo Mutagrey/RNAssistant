@@ -127,16 +127,16 @@ namespace RNAssistant.Core.Storage
                 fact = new ConversationChatCommit(card, 0, entries.Length, new ConversationTextEntry[0], context, source.UpdatedUtc,
                     resources: resources, legacyImport: new ConversationLegacyImport { SourceId = sourceId, SourceRevision = sourceRevision,
                         Snapshot = sourceBody, Manifest = PayloadRef.FromBlob(_bodies.StoreText(manifestText, "application/json")) });
-                ReadLegacyManifest(fact);
                 ValidatePublishedArtifacts(source, entries);
             }
             catch (LegacyChatImportException) { throw; }
             catch (Exception error) when (LegacyRecoveryFiles.ReadFailure(error) || error is NotSupportedException)
             { throw ChatStore.LegacyImportFailure("unavailable", "История не перенесена: " + LegacyRecoveryFiles.Error(error)); }
             var record = DeliveryRecord(operation, "chat.imported", fact, ChatFingerprint(fact));
+            var projection = PrepareLegacyProjection(record, fact, token);
             // Verify the complete closure before append. A missing embedded CAS
             // reference must not become a valid-looking, partially restored chat.
-            foreach (var reference in LegacyImportReferences(fact))
+            foreach (var reference in LegacyImportReferences(fact, projection.Manifest))
             {
                 token.ThrowIfCancellationRequested();
                 if (!_bodies.HasVerifiedReference(reference.ToBlobReference()))
@@ -145,14 +145,13 @@ namespace RNAssistant.Core.Storage
             return Access((db, cursor) => {
                 var prior = FindChatWrite(db, operation, source.Id);
                 if (prior != null) return LegacyImportResult(prior, sourceId, sourceRevision, true, CurrentChat(db, source.Id) == null);
-                RequireUnusedLegacyTarget(db, source.Id);
-                ValidateLegacyImport(db, record, fact);
+                RequireLegacyAdmission(db, record, fact);
                 token.ThrowIfCancellationRequested();
                 var position = Journal.Append(cursor, operation, record.Fingerprint, record.Kind, record.Data);
                 // Once append has started, failures are unknown to the caller and
                 // can only be reconciled by the read-only import receipt query.
                 Fault?.Invoke("after_legacy_import_append");
-                ApplyLegacyImport(db, record, position);
+                SaveLegacyProjection(db, record, position, fact, projection);
                 return LegacyImportResult(new ConversationChatReceipt(fact, operation, position), sourceId, sourceRevision, false, false);
             }, token);
         }
@@ -221,9 +220,9 @@ namespace RNAssistant.Core.Storage
             return value;
         }
 
-        private IEnumerable<PayloadRef> LegacyImportReferences(ConversationChatCommit fact)
+        private IEnumerable<PayloadRef> LegacyImportReferences(ConversationChatCommit fact, ConversationLegacyManifest manifest = null)
         {
-            var manifest = ReadLegacyManifest(fact);
+            manifest = manifest ?? ReadLegacyManifest(fact);
             return new[] { fact.Context, fact.Resources, fact.LegacyImport.Manifest }.Where(item => item != null).Concat(manifest.References);
         }
 
@@ -238,19 +237,36 @@ namespace RNAssistant.Core.Storage
 
         private IEnumerable<PayloadRef> ValidateLegacyImport(SqliteConnection db, JournalRecord record, ConversationChatCommit fact)
         {
+            RequireLegacyAdmission(db, record, fact);
+            return LegacyImportReferences(fact, PrepareLegacyProjection(record, fact, CancellationToken.None).Manifest);
+        }
+
+        private void RequireLegacyAdmission(SqliteConnection db, JournalRecord record, ConversationChatCommit fact)
+        {
+            if (OperationExists(db, record.Operation)) throw new InvalidDataException("Import operation is already in use.");
+            RequireUnusedLegacyTarget(db, fact.Card.ChatId);
+        }
+
+        private sealed class LegacyProjection
+        {
+            internal ConversationLegacyManifest Manifest;
+            internal ConversationTextEntry[][] Chunks;
+        }
+
+        private LegacyProjection PrepareLegacyProjection(JournalRecord record, ConversationChatCommit fact, CancellationToken token)
+        {
             ValidateChatAddress(fact.Card);
             if (record.Kind != "chat.imported" || fact.ExpectedRevision != 0 || fact.Messages.Count != 0 || fact.Run != null ||
                 fact.RunState != null || fact.Checkpoint != null || fact.Tools != null || fact.Control != null || fact.Input != null ||
                 fact.Fork != null || fact.Card.AgentCreation != null || fact.ModelEvent != null || fact.ContextReceipt != null ||
-                fact.History != null || fact.Snapshots != null || fact.References != null || OperationExists(db, record.Operation))
+                fact.History != null || fact.Snapshots != null || fact.References != null)
                 throw new InvalidDataException("An import is historical presentation, never native execution evidence.");
-            RequireUnusedLegacyTarget(db, fact.Card.ChatId);
             var manifest = ReadLegacyManifest(fact);
             if (record.Operation != LegacyImportOperation(fact.Card.ChatId, fact.LegacyImport.SourceId, fact.LegacyImport.SourceRevision))
                 throw new InvalidDataException("Import operation does not identify its source.");
             var ids = new HashSet<string>(StringComparer.Ordinal); var attachments = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var chunk in manifest.Chunks)
-            foreach (var entry in ReadLegacyChunk(fact, chunk))
+            var chunks = manifest.Chunks.Select(chunk => { token.ThrowIfCancellationRequested(); return ReadLegacyChunk(fact, chunk); }).ToArray();
+            foreach (var entry in chunks.SelectMany(chunk => chunk))
             {
                 if (!ids.Add(entry.Header.Id)) throw new InvalidDataException("Duplicate imported occurrence.");
                 foreach (var attachment in entry.Header.Attachments)
@@ -259,13 +275,19 @@ namespace RNAssistant.Core.Storage
             if (ids.Count != fact.MessageCount) throw new InvalidDataException("Import omitted messages.");
             ReadResourceSet(fact.Resources, fact.Card.Address);
             foreach (var artifact in manifest.Snapshots) RequireSnapshotHeader(fact.Card.Address, artifact);
-            return LegacyImportReferences(fact);
+            return new LegacyProjection { Manifest = manifest, Chunks = chunks };
         }
 
         private void ApplyLegacyImport(SqliteConnection db, JournalRecord record, JournalCursor position)
         {
-            var fact = DecodeChatCommit(record); ValidateLegacyImport(db, record, fact);
-            var manifest = ReadLegacyManifest(fact); var chunks = manifest.Chunks.Select(chunk => ReadLegacyChunk(fact, chunk)).ToArray();
+            var fact = DecodeChatCommit(record);
+            RequireLegacyAdmission(db, record, fact);
+            SaveLegacyProjection(db, record, position, fact, PrepareLegacyProjection(record, fact, CancellationToken.None));
+        }
+
+        private void SaveLegacyProjection(SqliteConnection db, JournalRecord record, JournalCursor position, ConversationChatCommit fact, LegacyProjection projection)
+        {
+            var manifest = projection.Manifest; var chunks = projection.Chunks;
             var activity = chunks.SelectMany(chunk => chunk).Select(item => item.Header.CreatedUtc.Ticks).DefaultIfEmpty(fact.Card.CreatedUtc.Ticks).Max();
             using (var tx = db.BeginTransaction())
             {

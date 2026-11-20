@@ -13,6 +13,7 @@ namespace RNAssistant.Core.Storage
         private static readonly UTF8Encoding Utf8 = new UTF8Encoding(false);
         private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
         private readonly string _rootDirectory;
+        internal ModelDiagnosticCaptureStore DiagnosticCaptures { get; private set; }
         private readonly Func<StorageProtector> _protectionProvider;
 
         public ChatBlobStore(AppDataPaths paths)
@@ -24,6 +25,7 @@ namespace RNAssistant.Core.Storage
         {
             if (paths == null) throw new ArgumentNullException("paths");
             _rootDirectory = paths.ChatBlobDirectory;
+            DiagnosticCaptures = new ModelDiagnosticCaptureStore(paths);
             _protectionProvider = protectionProvider ?? new Func<StorageProtector>(new SettingsService(paths).LoadStorageProtector);
         }
 
@@ -135,6 +137,7 @@ namespace RNAssistant.Core.Storage
                 new Dictionary<string, Dictionary<string, long>>(StringComparer.Ordinal);
 
             internal StorageSizeSnapshot(string root) { _root = root; }
+            internal int DirectoryScans { get { return _prefixes.Count; } }
 
             internal bool TryGetStoredByteLength(string sha256, out long byteLength)
             {
@@ -449,6 +452,9 @@ namespace RNAssistant.Core.Storage
                 return false;
             }
         }
+
+        internal bool MatchesCurrentProtection(ChatBlobReference reference)
+        { return ProtectionMatches(reference, Protection()); }
 
         private static bool ProtectionMatches(ChatBlobReference reference, StorageProtector protector)
         {

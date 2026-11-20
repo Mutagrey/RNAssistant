@@ -113,7 +113,7 @@ namespace RNAssistant.Office
             _conversationStore = _conversationRouter;
             _eventStore = _conversationRouter;
             _inbox = ConversationInboxService.AcquireShared(_paths.Root, _eventStore);
-            _modelTracePersistence = new ModelTracePersistenceService(_eventStore, RuntimeLog.Info);
+            _modelTracePersistence = new ModelTracePersistenceService(_eventStore, RuntimeLog.Info, _paths);
             _attachmentStore = new AttachmentStore(_paths, () => _settingsService.LoadStorageProtector());
             _chatResourceIngestion = new ChatResourceIngestionService(_attachmentStore, _artifacts);
             _toolStore = new ToolStore(_paths);
@@ -196,7 +196,7 @@ namespace RNAssistant.Office
             }
             LlmCompletionDelegate completion = async (settings, messages, requestOptions, streamProgress, cancellationToken) =>
             {
-                ConfigureModelTrace(requestOptions, settings.DebugModelTraffic);
+                _modelTracePersistence.Configure(requestOptions, settings.DebugModelTraffic, settings.PersistModelTraffic);
                 var result = await rawCompletion(
                     settings,
                     messages,
@@ -248,11 +248,6 @@ namespace RNAssistant.Office
         }
 
         internal WorkspaceFileService WorkspaceFiles { get { return _workspaceFiles; } }
-
-        private void ConfigureModelTrace(LlmRequestOptions options, bool captureRaw)
-        {
-            _modelTracePersistence.Configure(options, captureRaw);
-        }
 
         private void EnsureStartupRecovery()
         {

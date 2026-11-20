@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using RNAssistant.Core.Persistence;
 using System;
 using RNAssistant.Core.Storage;
@@ -41,8 +42,13 @@ namespace RNAssistant.Office
                 _artifactWorkingSet, _resourceAuthorityStore, _toolExecutor.Payloads, _resourceAuthorityStore);
         }
 
-        public ArtifactCatalogResponse ListArtifactCatalog(ArtifactCatalogRequest request)
-        { return ArtifactCatalog().List(LoadArtifactViewerSession(request?.ChatId), request); }
+        public ArtifactCatalogResponse ListArtifactCatalog(ArtifactCatalogRequest request, CancellationToken token = default(CancellationToken))
+        {
+            IReadOnlyList<ResourceRef> membership;
+            var actor = _conversationRouter.ReadCatalogActor(request?.ChatId, out membership) ??
+                _chatSessions.AddressedDraft(request?.ChatId) ?? throw new ChatSessionNotFoundException(request?.ChatId);
+            return ArtifactCatalog().List(actor, request, actor.Revision > 0 ? membership : null, token);
+        }
 
         public ArtifactTransferDownload ExportArtifact(ArtifactTransferRequest request, CancellationToken token)
         {
@@ -193,7 +199,7 @@ namespace RNAssistant.Office
         {
             if (string.IsNullOrWhiteSpace(chatId))
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required for artifact text reads.");
-            return _artifactViewer.ReadPage(LoadArtifactViewerSession(chatId, documentId), resourceUri, cursor, _resourceData, cancellationToken);
+            return _artifactViewer.ReadPage(ReadArtifactActor(chatId, documentId, resourceUri), resourceUri, cursor, _resourceData, cancellationToken);
         }
 
         public ArtifactImageViewerDto ReadArtifactImage(string chatId, string resourceUri, CancellationToken cancellationToken = default(CancellationToken), string documentId = null)
@@ -217,7 +223,7 @@ namespace RNAssistant.Office
 
         public ArtifactPdfViewerDto ReadArtifactPdfInfo(string chatId, string resourceUri, string documentId = null)
         {
-            return _artifactViewer.ReadPdfInfo(LoadArtifactViewerSession(chatId, documentId), resourceUri);
+            return _artifactViewer.ReadPdfInfo(ReadArtifactActor(chatId, documentId, resourceUri), resourceUri);
         }
 
         public ArtifactPdfPageDto ReadArtifactPdfPage(string chatId, string resourceUri, int pageIndex, CancellationToken cancellationToken = default(CancellationToken), string documentId = null)
@@ -233,7 +239,7 @@ namespace RNAssistant.Office
         private ResourceDataOpenResponse OpenArtifactView(string chatId, string resourceUri, string view, string path = null,
             CancellationToken cancellationToken = default(CancellationToken), string documentId = null)
         {
-            var session = LoadArtifactViewerSession(chatId, documentId);
+            var session = ReadArtifactActor(chatId, documentId, resourceUri);
             var artifact = _toolExecutor.ResourceGateway.ResolveArtifact(session, resourceUri);
             return _resourceData.Open(session, "viewer", ChatResourceUri.CreateArtifactRevision(session, artifact), view, path, cancellationToken);
         }
@@ -247,6 +253,14 @@ namespace RNAssistant.Office
                 Width = data.Binary.Width, Height = data.Binary.Height,
                 ImageMimeType = data.Binary.Payload.ContentType, ImageContentSha256 = data.Binary.Payload.Sha256,
                 ImageByteLength = data.Binary.Payload.ByteLength, Data = data };
+        }
+
+        private ChatSession ReadArtifactActor(string chatId, string documentId, string resourceUri)
+        {
+            if (string.IsNullOrWhiteSpace(chatId)) throw new ArgumentException("An exact viewer chat is required.");
+            var actor = _conversationRouter.ReadArtifactActor(chatId, resourceUri) ?? _chatSessions.AddressedDraft(chatId) ??
+                throw new ChatSessionNotFoundException(chatId);
+            return string.IsNullOrEmpty(documentId) ? actor : ArtifactCatalog().Source(actor, documentId);
         }
 
         private ChatSession LoadArtifactViewerSession(string chatId, string documentId = null)

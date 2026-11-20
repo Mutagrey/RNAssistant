@@ -89,13 +89,13 @@ namespace RNAssistant.Office.Services
             return descriptor;
         }
 
-        private string ReadOutlookSearch(string key)
+        private string ReadOutlookSearch(string key, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
             var includeBody = key.EndsWith("+body", StringComparison.Ordinal);
             var number = key.Substring(14);
             if (includeBody) number = number.Substring(0, number.Length - 5);
             OutlookSearchSnapshot snapshot;
-            try { snapshot = OutlookReader().CaptureSearch(int.Parse(number, CultureInfo.InvariantCulture), includeBody, CancellationToken.None); }
+            try { snapshot = OutlookReader().CaptureSearch(int.Parse(number, CultureInfo.InvariantCulture), includeBody, cancellationToken); }
             catch (OutlookBackendException error) { throw new ResourceRequestException(error.Message, error.ErrorCode, error.Retryable); }
             var json = new JObject { ["maximumItems"] = snapshot.MaximumItems, ["bodyCaptured"] = includeBody,
                 ["maximumBodyCharacters"] = includeBody ? OutlookService.MaxSearchBodyChars : 0,
@@ -168,7 +168,7 @@ namespace RNAssistant.Office.Services
             { throw new ResourceRequestException(error.Message, error.ErrorCode, error.Retryable); }
         }
 
-        private OutlookMailReadSnapshot CaptureOutlookMail(string target, bool includeBody)
+        private OutlookMailReadSnapshot CaptureOutlookMail(string target, bool includeBody, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
             string entryId = null;
             if (target != "root" && target != "selection" && !TryOutlookMailKey(target, out entryId))
@@ -177,13 +177,13 @@ namespace RNAssistant.Office.Services
             {
                 return OutlookReader().CaptureMail(new OutlookReadMailRequest { EntryId = entryId,
                     BoundMailOnly = target == "mail-bound", Content = includeBody ? "both" : "attachments",
-                    MaxChars = OutlookService.MaxBodyChars }, CancellationToken.None);
+                    MaxChars = OutlookService.MaxBodyChars }, cancellationToken);
             }
             catch (OutlookBackendException error)
             { throw new ResourceRequestException(error.Message, error.ErrorCode, error.Retryable); }
         }
 
-        private string ReadOutlookSource(string target, string representation)
+        private string ReadOutlookSource(string target, string representation, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
             string archiveId; int archivePage;
             if (TryOutlookArchivePageKey(target, out archiveId, out archivePage))
@@ -194,9 +194,9 @@ namespace RNAssistant.Office.Services
             if (TryOutlookArchiveMailKey(target, out archiveId, out archivePage, out archiveRow))
                 return ReadOutlookArchiveMail(archiveId, archivePage, archiveRow);
             if (TryOutlookCollectionLimit(target, out var collectionLimit))
-                return ReadOutlookCollection(collectionLimit);
-            if (IsOutlookSearch(target)) return ReadOutlookSearch(target);
-            var snapshot = CaptureOutlookMail(target, representation != ResourceRepresentations.Structure);
+                return ReadOutlookCollection(collectionLimit, cancellationToken);
+            if (IsOutlookSearch(target)) return ReadOutlookSearch(target, cancellationToken);
+            var snapshot = CaptureOutlookMail(target, representation != ResourceRepresentations.Structure, cancellationToken);
             var mail = snapshot.Mail;
             var content = representation == ResourceRepresentations.Text ? mail.Body : new JObject
             {
@@ -236,10 +236,10 @@ namespace RNAssistant.Office.Services
             return descriptor;
         }
 
-        private string ReadOutlookCollection(int maxItems)
+        private string ReadOutlookCollection(int maxItems, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
             OutlookFolderSnapshot snapshot;
-            try { snapshot = OutlookReader().CaptureCollection(maxItems, CancellationToken.None); }
+            try { snapshot = OutlookReader().CaptureCollection(maxItems, cancellationToken); }
             catch (OutlookBackendException error)
             { throw new ResourceRequestException(error.Message, error.ErrorCode, error.Retryable); }
             var content = new JObject {

@@ -47,7 +47,7 @@ namespace RNAssistant.Office
 
         private bool ResourceOwnerIsActive(string chatId, string workspaceId)
         {
-            if (Volatile.Read(ref _disposed) != 0 || string.IsNullOrWhiteSpace(chatId)) return false;
+            if (Volatile.Read(ref _disposed) != 0 || string.IsNullOrWhiteSpace(chatId) || string.IsNullOrWhiteSpace(workspaceId)) return false;
             var diagnosticOwners = new[] { ResourceDataPlaneService.UploadOwner, ModelContextInspectorService.Owner,
                 TrajectoryPayloadService.Owner, TrajectoryExportDownloadService.Owner };
             var diagnosticOwner = diagnosticOwners.FirstOrDefault(owner => workspaceId != null && workspaceId.StartsWith(owner + ":", StringComparison.Ordinal));
@@ -66,15 +66,15 @@ namespace RNAssistant.Office
                 // Lease checks never select a different chat or fall back to the active one.
                 if (diagnosticOwners.Contains(workspaceId, StringComparer.Ordinal))
                     return LoadDiagnosticsMetadata(chatId, null) != null;
-                var session = LoadAddressedSession(chatId);
-                return session != null && (workspaceId == "viewer" || workspaceId == "browser" || workspaceId == ArtifactCatalogService.Owner ||
+                if (workspaceId == "viewer" || workspaceId == "browser" || workspaceId == ArtifactCatalogService.Owner ||
                     workspaceId == PromptContextInspectorDownloadService.Owner ||
                     workspaceId == VbaEditorResourceService.Owner ||
                     workspaceId == SkillEditorResourceService.Owner ||
                     workspaceId == ToolEditorResourceService.Owner ||
                     workspaceId == PromptEditorResourceService.Owner ||
-                    workspaceId == HtmlWorkspaceEditorResourceService.Owner ||
-                    string.Equals(session.ActiveHtmlArtifactId, workspaceId, StringComparison.Ordinal));
+                    workspaceId == HtmlWorkspaceEditorResourceService.Owner) return _chatSessions.LoadDiagnosticsMetadata(chatId) != null;
+                var draft = _chatSessions.AddressedDraft(chatId);
+                return draft != null ? draft.ActiveHtmlArtifactId == workspaceId : _conversationRouter.HasActiveHtml(chatId, workspaceId);
             }
             catch (InvalidOperationException) { return false; }
         }

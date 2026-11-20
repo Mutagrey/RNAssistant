@@ -68,7 +68,7 @@ namespace RNAssistant.Core.Storage
                 new ResourceJournalFact { Kind = "resource.view", Scope = scope, View = view }, CancellationToken.None);
         }
 
-        public AuthorityCommitResult Publish(ResourceAuthorityCommit commit)
+        public AuthorityCommitResult Publish(ResourceAuthorityCommit commit, bool includeAllHeads = true)
         {
             if (commit == null) throw new ArgumentNullException(nameof(commit));
             using (RuntimeStorageActivity.Acquire(_paths, CancellationToken.None))
@@ -85,7 +85,7 @@ namespace RNAssistant.Core.Storage
                 var receipt = Commit(operation, new ResourceJournalFact { Kind = "resource.authority", Scope = commit.ScopeId, Authority = commit }, CancellationToken.None);
                 var duplicate = receipt.Duplicate;
                 if (!duplicate) NotifyAuthority(JournalStorageRoot.ResourceDirectory(_paths), commit);
-                return new AuthorityCommitResult(!duplicate, duplicate, Capture(commit.ScopeId));
+                return new AuthorityCommitResult(!duplicate, duplicate, includeAllHeads ? Capture(commit.ScopeId) : CaptureAddressed(commit.ScopeId, new ResourceIdentity[0]));
             }
         }
 

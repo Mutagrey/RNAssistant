@@ -33,6 +33,10 @@ namespace RNAssistant.Core.Storage
             _paths = paths; _scope = scope;
             _protector = protector ?? StorageProtector.None;
             _bodies = new ChatBlobStore(paths, () => protector ?? StorageProtector.None);
+            _artifactPublications = new Lazy<DocumentArtifactStore>(() => {
+                var resources = new ResourceJournal(_paths, _protector);
+                return new DocumentArtifactStore(resources, resources, _bodies);
+            });
             Journal = new StorageJournal(JournalStorageRoot.ConversationDirectory(paths, scope), scope, protector);
         }
 

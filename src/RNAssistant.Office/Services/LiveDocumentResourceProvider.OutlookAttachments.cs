@@ -81,11 +81,11 @@ namespace RNAssistant.Office.Services
             return descriptor;
         }
 
-        private ResourceDescriptor DescribeAttachment(ChatSession session, string key)
+        private ResourceDescriptor DescribeAttachment(ChatSession session, string key, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
             string mailKey; int index;
             if (!TryAttachmentKey(key, out mailKey, out index)) throw AttachmentError("Invalid attachment target.");
-            var snapshot = CaptureOutlookMail(mailKey, false);
+            var snapshot = CaptureOutlookMail(mailKey, false, cancellationToken);
             var attachment = snapshot.Attachments.SingleOrDefault(item => item.Index == index);
             if (attachment == null || AttachmentKey(mailKey, attachment) != key) throw AttachmentError("Attachment was removed or replaced; rediscover its current target.");
             return DescribeAttachment(session, key, snapshot.Mail, attachment);
@@ -140,17 +140,17 @@ namespace RNAssistant.Office.Services
             });
         }
 
-        private ResourceReadSelection CaptureAttachmentSource(ChatSession session, string key)
+        private ResourceReadSelection CaptureAttachmentSource(ChatSession session, string key, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
             string mailKey; int index; string entryId;
             if (_payloads == null || !TryAttachmentKey(key, out mailKey, out index) || !TryOutlookMailKey(mailKey, out entryId))
                 throw AttachmentError("Attachment source is unavailable.");
-            var mail = CaptureOutlookMail(mailKey, false);
+            var mail = CaptureOutlookMail(mailKey, false, cancellationToken);
             var attachment = mail.Attachments.SingleOrDefault(item => item.Index == index);
             if (attachment == null || AttachmentKey(mailKey, attachment) != key) throw AttachmentError("Attachment changed after target resolution.");
             OutlookAttachmentContentSnapshot capture;
             try { capture = OutlookReader().CaptureAttachment(new OutlookAttachmentReadRequest {
-                EntryId = entryId, BoundMailOnly = mailKey == "mail-bound", Expected = attachment }, CancellationToken.None); }
+                EntryId = entryId, BoundMailOnly = mailKey == "mail-bound", Expected = attachment }, cancellationToken); }
             catch (OutlookBackendException error) { throw new ResourceRequestException(error.Message, error.ErrorCode, error.Retryable); }
             AttachmentContent content;
             try { content = AttachmentStore.ReadContent(attachment.FileName, capture.Bytes); }

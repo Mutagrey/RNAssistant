@@ -4,6 +4,7 @@
   var generation = 0, pending = false, response = null, next = null, chat = null;
   var selected = null, editorNavigation = false, collapsed = {}, loading = false;
   var overviewLoading = false, overviewError = "", queryDirty = false, catalogNotice = "";
+  var observedCatalog = null, authorityEpoch = 0;
   var maximumCatalogItems = 500;
   var catalogRenderStep = 50, renderLimit = catalogRenderStep;
   var overviewSort = { key: "updated", descending: true };
@@ -147,6 +148,22 @@
     selected = editorItem(artifact); editorNavigation = true;
     if (!preserveOverview) renderOverview();
   }
+  function catalogKey() {
+    var library = state.artifactLibrary || {}, card = sourceChatTitles()[state.activeChatId] || {};
+    return JSON.stringify([state.activeChatId, card.title || card.Title, card.documentTitle || card.DocumentTitle,
+      state.activeHtmlArtifactId, state.activePlanDocumentArtifactId, library.catalogStamp || library.CatalogStamp,
+      library.removedResourceUris || library.RemovedResourceUris, authorityEpoch]);
+  }
+  function authorityChanged(notice) {
+    if (!notice || !chat || !notice.scope || notice.scope.indexOf("document:") !== 0 ||
+        response && el("Scope").value !== "all" && notice.scope !== "document:" + response.documentId) return;
+    if (!notice.allInScope && !(notice.resources || []).some(function (uri) {
+      return /\/artifact\/|\/(plan_doc_|html_ws_|artifact_md_|artifact_ctx_)/.test(uri);
+    })) return;
+    authorityEpoch++;
+    queryDirty = true;
+    sync();
+  }
   function sync() {
     if (chat !== state.activeChatId) {
       chat = state.activeChatId; generation++; response = null; selected = null; next = null;
@@ -155,14 +172,14 @@
       if (typeof isPanelActive === "function" && isPanelActive("artifacts")) load();
     } else if (queryDirty && !loading && typeof isPanelActive === "function" && isPanelActive("artifacts")) {
       load();
-    } else if (response && !loading && !pending && state.chatProjectionRevisions &&
-        state.chatProjectionRevisions[chat] > response.sessionRevision &&
-        typeof isPanelActive === "function" && isPanelActive("artifacts")) {
-      load();
+    } else if (response && !loading && !pending && typeof isPanelActive === "function" && isPanelActive("artifacts")) {
+      if (observedCatalog !== catalogKey()) load();
+      else if (state.chatProjectionRevisions && state.chatProjectionRevisions[chat] > response.sessionRevision)
+        response.sessionRevision = state.chatProjectionRevisions[chat];
     }
   }
   async function load(cursor) {
-    var id = state.activeChatId, nav = state.chatNavigationVersion, version = ++generation;
+    var id = state.activeChatId, nav = state.chatNavigationVersion, version = ++generation, requestedCatalog = catalogKey();
     if (!id) { response = null; next = null; loading = false; selected = null; overviewError = ""; overviewLoading = false; catalogNotice = "";
        renderOverview(); status("Откройте или создайте чат документа."); render(); return; }
     if (!cursor) { next = null; renderLimit = catalogRenderStep; }
@@ -177,6 +194,7 @@
       if (cursor && response) result.items = response.items.concat(result.items);
       var limited = result.items.length > maximumCatalogItems || result.items.length === maximumCatalogItems && !!result.nextCursor;
       result.items = result.items.slice(0, maximumCatalogItems);
+      observedCatalog = requestedCatalog;
       response = result; next = limited ? null : result.nextCursor;
       // A filter changes the tree, never the already opened exact resource.
       if (selected) selected = result.items.find(function (item) { return item.resourceUri === selected.resourceUri; }) || selected;
@@ -192,7 +210,8 @@
         status(overviewError);
       }
     } finally {
-      if (version === generation) { loading = false; overviewLoading = false; navigationState(); renderOverview(); }
+      if (version === generation) { loading = false; overviewLoading = false; navigationState(); renderOverview();
+        if (response && !overviewError && (queryDirty || requestedCatalog !== catalogKey())) sync(); }
     }
   }
   function canMutate() {
@@ -386,7 +405,7 @@
       event.preventDefault(); select(row.dataset.artifactUri);
     });
   }
-  window.RNAssistantArtifactCatalog = { show: show, editor: editor, sync: sync, changeLink: changeLink,
+  window.RNAssistantArtifactCatalog = { show: show, editor: editor, sync: sync, authorityChanged: authorityChanged, changeLink: changeLink,
     commands: function (target) {
       var item = response && target.chatId === state.activeChatId && response.chatId === target.chatId &&
         response.items.find(function (entry) { return entry.resourceUri === target.resourceUri; });

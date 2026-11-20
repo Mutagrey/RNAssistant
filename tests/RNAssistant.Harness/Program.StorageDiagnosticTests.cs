@@ -88,6 +88,32 @@ namespace RNAssistant.Harness
                 AssertTrue(buffer.RetainedBytes <= 256 && buffer.Read(session.Id, captured) == null, "byte/count saturation evicts optional bytes without blocking semantic writes");
                 now = now.AddSeconds(11);
                 AssertEqual(0L, buffer.RetainedBytes, "expired optional bytes leave no CAS roots");
+                // Inject a reversible test protector. Production only accepts CurrentUser DPAPI.
+                Func<byte[], byte[]> codec = value => value.Select(b => (byte)(b ^ 0x95)).ToArray();
+                Func<ModelDiagnosticCaptureStore> reopen = () => new ModelDiagnosticCaptureStore(paths, codec, codec, () => now, 4096, 2);
+                var disk = reopen();
+                var protectedTrace = new ModelTracePersistenceService(events, buffer, protectedCaptures: disk);
+                var protectedOptions = new LlmRequestOptions { TraceSession = session };
+                protectedTrace.Configure(protectedOptions, true, true);
+                Func<string, LlmTraceRecord> capture = id => {
+                    now = now.AddSeconds(1);
+                    protectedOptions.TraceSink(new LlmTraceRecord { Type = "response", RequestId = id, PayloadUtf8Bytes = bytes, Streaming = true });
+                    return store.ReadEvents(session.Host, session.DocumentKey, session.Id).Last(item => item.Type == SessionEventTypes.LlmResponse && (string)item.Data["RequestId"] == id).Data.ToObject<LlmTraceRecord>();
+                };
+                var first = capture("protected-first");
+                AssertTrue(first.ProtectedDiagnosticCapture, "protected mode recorded");
+                AssertEqual(ModelDiagnosticCaptureStatus.Retained, first.DiagnosticCapture.Value, "protected body saved");
+                AssertEqual(ModelPayloadRepresentation.NormalizedStreamJson, first.PayloadRepresentation.Value, "normalized stream representation recorded");
+                AssertTrue(bytes.SequenceEqual(reopen().Read(session.Id, first)), "protected bytes survive reopening the profile");
+                AssertTrue(reopen().Read("other", first) == null, "foreign chat cannot open a protected capture");
+                var copied = first.CopyMetadata(); copied.RequestId = "foreign";
+                AssertTrue(reopen().Read(session.Id, copied) == null, "protected content authenticates its request");
+                capture("protected-second"); var last = capture("protected-third");
+                AssertTrue(!disk.Contains(session.Id, first) && disk.Contains(session.Id, last), "protected retention evicts oldest at quota");
+                now = now.AddDays(1);
+                reopen().Prune();
+                AssertTrue(!disk.Contains(session.Id, last) && !Directory.EnumerateFiles(Path.Combine(paths.Root, "model-diagnostics"), "*.capture").Any(),
+                    "expiry removes protected files independently of chat history");
                 AssertTrue(store.ReadEvents(session.Host, session.DocumentKey, session.Id).Where(item => item.Type == SessionEventTypes.LlmRequest).All(item => item.Payload == null),
                     "opt-in captures also stay outside immutable semantic history");
             });

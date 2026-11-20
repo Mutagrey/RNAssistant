@@ -156,34 +156,44 @@ namespace RNAssistant.Runtime
             if (observed.Session.WorkspaceId != workspace.WorkspaceId)
                 throw new InvalidDataException("The session is not associated with this workspace.");
             if (!ConversationRecoveryService.NeedsInterruption(observed.Session.LastRun)) return observed;
-            var recovered = RefreshSession(workspace, sessionId);
-            return recovered == null ? null : new ConversationStateWindow(recovered, null, recovered.Messages.Count);
-        }
-
-        // Chat activation may reconcile a stopped owner; plain inspection stays read-only.
-        internal ChatSession RefreshSession(WorkspaceDescriptor workspace, string sessionId)
-        {
-            var observed = GetSession(workspace, sessionId);
-            if (observed == null || !observed.UsesCurrentProtocol ||
-                !ConversationRecoveryService.NeedsInterruption(observed.LastRun)) return observed;
-
             IDisposable lease;
             try { lease = AcquireSessionLease(sessionId, wait: false); }
             catch (WorkspaceSessionLeaseUnavailableException) { return observed; }
             using (lease)
             {
-                // Missing IPC is not proof of abandonment. The exclusive run lease
-                // and a fresh canonical cursor fence this recovery from a live/new run.
-                var current = GetSession(workspace, sessionId);
-                if (current != null && current.UsesCurrentProtocol &&
-                    current.LastRun?.RunId == observed.LastRun.RunId &&
-                    ConversationEventFeed.Cursor(current) == ConversationEventFeed.Cursor(observed))
-                {
-                    current = ConversationRecoveryService.ReconcileFenced(observed, current, currentRun => InterruptAbandonedRun(currentRun, _conversationStore));
-                    _conversationInbox.ReconcileAcceptedDelivery(current);
-                }
-                return current;
+                var current = _conversationRouter.ReadStateWindow("Workspace", workspace.WorkspaceId, sessionId, pageSize);
+                if (current == null || !SameInterruptedRun(observed.Session, current.Session)) return current;
+                RecoverCurrent(workspace, sessionId, current.Session);
+                return _conversationRouter.ReadStateWindow("Workspace", workspace.WorkspaceId, sessionId, pageSize);
             }
+        }
+
+        private static bool SameInterruptedRun(ChatSession observed, ChatSession current)
+        {
+            return current != null && current.UsesCurrentProtocol && current.WorkspaceId == observed.WorkspaceId &&
+                current.Id == observed.Id && current.LastRun?.RunId == observed.LastRun?.RunId &&
+                ConversationEventFeed.Cursor(current) == ConversationEventFeed.Cursor(observed) &&
+                ConversationRecoveryService.NeedsInterruption(current.LastRun);
+        }
+
+        private ChatSession RecoverCurrent(WorkspaceDescriptor workspace, string sessionId, ChatSession observed)
+        {
+            var current = GetSession(workspace, sessionId);
+            if (!SameInterruptedRun(observed, current)) return current;
+            current = ConversationRecoveryService.ReconcileFenced(observed, current, run => InterruptAbandonedRun(run, _conversationStore));
+            _conversationInbox.ReconcileAcceptedDelivery(current);
+            return current;
+        }
+
+        internal ChatSession RefreshSession(WorkspaceDescriptor workspace, string sessionId)
+        {
+            var observed = GetSession(workspace, sessionId);
+            if (observed == null || !observed.UsesCurrentProtocol ||
+                !ConversationRecoveryService.NeedsInterruption(observed.LastRun)) return observed;
+            IDisposable lease;
+            try { lease = AcquireSessionLease(sessionId, wait: false); }
+            catch (WorkspaceSessionLeaseUnavailableException) { return observed; }
+            using (lease) return RecoverCurrent(workspace, sessionId, observed);
         }
 
         public ChatSession PrepareResume(WorkspaceDescriptor workspace, string sessionId)
@@ -1276,7 +1286,8 @@ namespace RNAssistant.Runtime
 
                 _taskLists = new WorkspaceTaskListObserver(paths, conversations, payloads, session, authorityStore, mutations, mutationOrigin);
                 _plans = new WorkspacePlanService(paths, conversations, payloads, workspace, session, artifacts, authorityStore, mutations, mutationOrigin);
-                _modelTrace = new ModelTracePersistenceService(events);
+                _modelTrace = new ModelTracePersistenceService(events, message =>
+                    new DiagnosticLogStore(paths.Root).Append("rnassistant.log", new[] { message }), paths);
                 _resources = new ResourceProviderRouter<WorkspaceFileResourceProvider>(new[]
                     { new WorkspaceFileResourceProvider(files, workspace) });
                 _chatAttachments = session == null ? null : new WorkspaceChatAttachmentResourceProvider(paths, session);
@@ -1287,7 +1298,7 @@ namespace RNAssistant.Runtime
                 {
                     options.TraceStepId = _session.LastRun.RunId + ":" + _session.LastRun.KernelState.Summary.IterationsUsed;
                     options.TraceModelAttemptId = "attempt_" + Guid.NewGuid().ToString("N");
-                    _modelTrace.Configure(options, _settings.DebugModelTraffic);
+                    _modelTrace.Configure(options, _settings.DebugModelTraffic, _settings.PersistModelTraffic);
                     return client.CompleteAsync(configuration, messages, options, stream, token);
                 }, payloads, projection);
                 _protocol = new ModelProtocolClient(client.CompleteAsync);
@@ -1754,7 +1765,7 @@ namespace RNAssistant.Runtime
                 options.TraceContextReceipt = receipt;
                 options.TraceSession = _session;
                 options.TracePurpose = "conversation";
-                _modelTrace.Configure(options, _settings.DebugModelTraffic);
+                _modelTrace.Configure(options, _settings.DebugModelTraffic, _settings.PersistModelTraffic);
                 _session.LastContextReceipt = receipt;
                 _conversations.Commit(_session, new ConversationCommit());
                 options.ContextPreparation = new LlmContextPreparationTiming

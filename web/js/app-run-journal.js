@@ -799,9 +799,20 @@
     var choice = appendText(controls, "select", "rna-form-control compact rn-run-journal-data-kind", "");
     choice.setAttribute("aria-label", "Содержимое события");
     var payload = createPayloadView(row, options);
-    if (!payload && /^(llm\.request|llm\.response|model\.request\.prepared|model\.attempt\.rejected|agent\.response\.rejected)$/.test(rowKind(row)))
-      appendText(host, "p", "rn-run-journal-detail-meta",
-        "Точные байты этой попытки не сохранены. Доступны метаданные события; сохранённое семантическое содержимое показано в истории попытки.");
+    if (!payload && (isRequest(row) || isReply(row))) {
+      var attemptId = correlation(row, "ModelAttemptId"), runId = correlation(row, "RunId");
+      var requests = isRequest(row) ? [row] : (options.sourceRows || []).filter(function (candidate) {
+        return isRequest(candidate) && attemptId && runId &&
+          correlation(candidate, "ModelAttemptId") === attemptId && correlation(candidate, "RunId") === runId;
+      });
+      if (requests.length === 1 && sourceIds(requests[0]).length === 1 && typeof options.onOpenModelContext === "function") {
+        host.appendChild(actionButton("Открыть содержимое в Inspector", function () {
+          options.onOpenModelContext({ runId: runId, requestEventId: sourceIds(requests[0])[0] });
+        }));
+      } else {
+        appendText(host, "p", "rn-run-journal-note", "В журнале доступны только метаданные. Для открытия содержимого нужен точный запрос из Inspector.");
+      }
+    }
     [["data", "Данные"], ["evidence", "Связи"]].concat(payload ? [["payload", "Содержимое"]] : []).forEach(function (item) {
       var option = appendText(choice, "option", "", item[1]); option.value = item[0];
     });

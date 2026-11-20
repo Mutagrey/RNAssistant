@@ -15,6 +15,7 @@ using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
+using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
 using RNAssistant.Runtime;
 
@@ -196,6 +197,52 @@ namespace RNAssistant.Harness
                                 .Where(item => item.Type == SessionEventDescriptors.For(SessionEventKind.ModelRequestPrepared).Type).ToArray();
                             AssertEqual((turn == 0 ? 2 : 3) + (tools ? 1 : 0), manifests.Length, "each actual HTTP request has a durable manifest");
                             AssertTrue(manifests.All(item => item.Payload == null && item.Data["Manifest"] != null), "raw traffic remains outside durable history");
+                            if (tools && turn == 0)
+                            {
+                                var events = ((IEventStore)new ConversationJournal(paths, scope)).Read(ConversationMetadata.From(retained), SessionEventReadMode.RequireComplete);
+                                var rawQuery = new TrajectoryQueryRequest { PageSize = 4 };
+                                var indexed = journal.ReadRawPage(ConversationMetadata.From(retained), rawQuery, CancellationToken.None);
+                                var reference = new EventStreamTrajectoryQuery().Query(events, rawQuery);
+                                AssertEqual(reference.TotalEvents, indexed.TotalEvents, "raw page retains the complete snapshot count");
+                                AssertEqual(reference.NextCursor, indexed.NextCursor, "raw page retains sequence pagination");
+                                AssertTrue(indexed.Records.Select(row => row.Event.EventId + row.Visibility)
+                                    .SequenceEqual(reference.Records.Select(row => row.Event.EventId + row.Visibility)), "indexed raw visibility agrees with full reconstruction");
+                                using (var plane = new ResourceDataPlaneService(new ResourceGatewayService()))
+                                {
+                                    var inspector = new ModelContextInspectorService(journal, new ChatBlobStore(paths), plane);
+                                    var page = inspector.Query(ConversationMetadata.From(retained), new ModelContextQuery {
+                                        ChatId = retained.Id, WorkspaceId = retained.WorkspaceId }, CancellationToken.None);
+                                    AssertEqual(manifests.Length, page.Events.Count, "production Inspector reads bounded request locators");
+                                    AssertEqual("Q1", page.Events.Last().Alias, "request ordinals do not change with pagination");
+                                    var exact = journal.ReadModelEvent(ConversationMetadata.From(retained), manifests[0].EventId, CancellationToken.None);
+                                    AssertEqual(manifests[0].Data.ToString(), exact.Data.ToString(), "one exact manifest matches the full query");
+                                }
+                                var rows = new EventStreamTrajectoryQuery().QueryView(events, new TrajectoryViewQueryRequest { View = TrajectoryViews.ToolExecution });
+                                var scopedRequest = new TrajectoryViewQueryRequest { View = TrajectoryViews.RunCausal, RunId = retained.LastRun.RunId, PageSize = 5 };
+                                var scoped = journal.ReadRunTrajectory(ConversationMetadata.From(retained), scopedRequest, CancellationToken.None);
+                                var full = new EventStreamTrajectoryQuery().QueryView(events, scopedRequest);
+                                AssertTrue(scoped.Rows.Select(row => row.Id).SequenceEqual(full.Rows.Select(row => row.Id)) &&
+                                    scoped.TotalMatches == full.TotalMatches, "selected-run projection preserves causal rows and missing-evidence counts");
+                                scopedRequest.Cursor = scoped.NextCursor; scopedRequest.RunId = "different-run";
+                                RuntimeThrows<ArgumentException>(() => journal.ReadRunTrajectory(ConversationMetadata.From(retained), scopedRequest, CancellationToken.None));
+                                AssertEqual(1, rows.Rows.Count, "native tool execution appears once after reload");
+                                var acceptedRequest = manifests.First();
+                                var acceptedTrace = acceptedRequest.Data.ToObject<LlmTraceRecord>();
+                                AssertEqual(1, ModelContextEvidenceProjection.AcceptedMessages(events, acceptedRequest, acceptedTrace, CancellationToken.None).Count(),
+                                    "Inspector correlates an accepted native call with the source model attempt");
+                                var finishes = manifests.Select(item => ModelContextEvidenceProjection.Describe(events, item, item.Data.ToObject<LlmTraceRecord>(), CancellationToken.None)).ToArray();
+                                AssertEqual(0, finishes[1].Finishes.Count, "rejected finish is not projected as accepted");
+                                AssertEqual("E1", finishes.Last().Finishes.Single().Claims.Single().Evidence.Single(), "accepted finish reads exact semantic body and evidence");
+                                var causal = new CausalTraceRecord(SessionEventKind.UiProjected) { SessionId = retained.Id, RunId = retained.LastRun.RunId,
+                                    TurnId = retained.LastRun.TurnId, Boundary = "conversation" };
+                                var write = new SessionEventWrite(SessionEventDescriptors.For(causal.Kind), causal, null,
+                                    new SessionEventCorrelation(causal.RunId, causal.TurnId, null));
+                                var recorded = ((IEventStore)journal).Append(retained, write);
+                                AssertEqual("conversation", (string)((IEventStore)journal).Read(ConversationMetadata.From(retained), SessionEventReadMode.RequireComplete)
+                                    .Single(item => item.EventId == recorded.EventId).Data["Boundary"], "native causal record survives reload");
+                                causal.SessionId = "foreign";
+                                RuntimeThrows<InvalidOperationException>(() => ((IEventStore)journal).Append(retained, write));
+                            }
                             chat = retained; journal = new ConversationJournal(paths, scope); store = journal;
                         }
                     }

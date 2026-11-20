@@ -102,6 +102,19 @@ namespace RNAssistant.Office.Runtime
 
         internal static ToolRecoveryContract ResourceRecovery(string code)
         {
+            switch (code)
+            {
+                case "RESOURCE_SNAPSHOT_OWNER_MISSING":
+                case "RESOURCE_SNAPSHOT_METADATA_MISSING":
+                case "RESOURCE_SNAPSHOT_UNPUBLISHED":
+                case "RESOURCE_SNAPSHOT_INTEGRITY":
+                case "RESOURCE_SNAPSHOT_ENCODING":
+                case "RESOURCE_SNAPSHOT_PROTECTION":
+                case "RESOURCE_SNAPSHOT_MISSING":
+                case "RESOURCE_SNAPSHOT_IO":
+                    return new ToolRecoveryContract(ToolFailureKind.ToolDefect, ToolRetryPolicy.None);
+            }
+            if (code == "resource_search_stale") return new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.FreshContinuation);
             if (string.Equals(code, "tool_mutation_busy", StringComparison.Ordinal))
                 return LockRecovery(true);
             if (string.Equals(code, "tool_mutation_lock_unavailable", StringComparison.Ordinal) ||

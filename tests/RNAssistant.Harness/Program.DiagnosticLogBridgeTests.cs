@@ -117,6 +117,35 @@ namespace RNAssistant.Harness
                 }
             });
         }
+        private static void ArtifactViewerBridgeCancellation()
+        {
+            WithTempPaths(paths => {
+                var controller = new AssistantController(paths);
+                using (var bridge = new AssistantWebBridge(controller, null))
+                using (var started = new ManualResetEventSlim())
+                {
+                    var token = BridgeToken(bridge);
+                    controller.ArtifactReadWork = cancellation => {
+                        started.Set();
+                        if (!cancellation.WaitHandle.WaitOne(5000)) throw new TimeoutException("Viewer cancellation did not reach the worker.");
+                        cancellation.ThrowIfCancellationRequested();
+                    };
+                    var read = bridge.HandleMessageAsync(JsonConvert.SerializeObject(new {
+                        contractVersion = BridgeOperationCatalog.Version, id = "held-viewer", type = "readArtifactViewerPage", bridgeToken = token,
+                        payload = new { chatId = "chat", resourceUri = "rna://chat/doc/artifact/fixture/revision/1" }
+                    }));
+                    AssertTrue(started.Wait(3000) && !read.IsCompleted, "source read returned control to the WebView");
+                    var cancel = JObject.Parse(bridge.HandleMessageAsync(JsonConvert.SerializeObject(new {
+                        contractVersion = BridgeOperationCatalog.Version, id = "close-viewer", type = "cancelRequest", bridgeToken = token,
+                        payload = new { requestId = "held-viewer" }
+                    })).GetAwaiter().GetResult());
+                    AssertTrue((bool)cancel["payload"]["cancelled"], "bridge services an independent request while the viewer is held");
+                    var response = JObject.Parse(read.GetAwaiter().GetResult());
+                    AssertTrue(!(bool)response["ok"] && response["payload"] == null, "closing a reader returns no stale viewer payload");
+                }
+            });
+        }
+
         private static void DiagnosticMaintenanceBridgeDoesNotBlockCaller()
         {
             WithTempPaths(paths =>

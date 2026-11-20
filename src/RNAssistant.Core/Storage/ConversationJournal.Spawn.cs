@@ -129,6 +129,7 @@ namespace RNAssistant.Core.Storage
         private void SaveSpawn(SqliteConnection db, SqliteTransaction tx, JournalRecord record, JournalCursor position)
         {
             var fact = DecodeSpawn(record);
+            SaveDiagnosticRunEvent(db, tx, record, position, fact.Sender, fact.RunId);
             using (var command = Command(db, "INSERT INTO agent_spawn VALUES($stream,$operation,$sender,$run,$call,$child,$fingerprint,$segment,$start,$end,$sequence,$hash,$first)", tx))
             {
                 command.Parameters.AddWithValue("$sender", fact.Sender); command.Parameters.AddWithValue("$run", fact.RunId);

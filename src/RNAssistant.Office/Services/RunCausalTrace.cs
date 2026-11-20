@@ -1,6 +1,5 @@
 using System;
 using System.Threading;
-using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
 using RNAssistant.Office.Diagnostics;
@@ -55,11 +54,11 @@ namespace RNAssistant.Office.Services
                     null,
                     new SessionEventCorrelation(scope._runId, scope._turnId, record.StepId)));
             }
-            catch (Exception)
+            catch (Exception error)
             {
                 // Optional observation must not change a tool result or hide an execution exception.
                 // Do not log payloads, paths, exception text or model/tool content here.
-                RuntimeLog.Error("Causal trace append failed at " + record.Stage + ".");
+                RuntimeLog.Error("causal_trace_append_failed " + record.Stage + " / " + error.GetType().Name + " / " + record.RunId);
             }
         }
 
@@ -82,46 +81,5 @@ namespace RNAssistant.Office.Services
             Interlocked.Exchange(ref _disposed, 1);
             if (ReferenceEquals(Current.Value, this)) Current.Value = _previous;
         }
-    }
-
-    internal sealed class CausalTraceRecord
-    {
-        public CausalTraceRecord(SessionEventKind kind)
-        {
-            var descriptor = SessionEventDescriptors.For(kind);
-            if (descriptor.Lane != SessionEventLane.DomainDiagnostic ||
-                descriptor.Authority != SessionEventAuthority.Diagnostic ||
-                descriptor.Durability != SessionEventDurability.BestEffort)
-            {
-                throw new ArgumentOutOfRangeException(nameof(kind), kind,
-                    "Causal trace accepts only best-effort Domain Diagnostic events.");
-            }
-            Kind = kind;
-        }
-
-        [JsonIgnore]
-        public SessionEventKind Kind { get; private set; }
-        public string Stage
-        {
-            get
-            {
-                return Kind == SessionEventKind.Unknown
-                    ? null
-                    : SessionEventDescriptors.For(Kind).Type;
-            }
-        }
-        public string SessionId { get; set; }
-        public string RunId { get; set; }
-        public string TurnId { get; set; }
-        public string StepId { get; set; }
-        public string ModelAttemptId { get; set; }
-        public string ToolCallId { get; set; }
-        public string DocumentRuntimeId { get; set; }
-        public string MutationId { get; set; }
-        public string JournalRunId { get; set; }
-        public string ToolId { get; set; }
-        public string Status { get; set; }
-        public string Code { get; set; }
-        public string Boundary { get; set; }
     }
 }

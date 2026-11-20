@@ -60,7 +60,18 @@ namespace RNAssistant.Office.Services
                 string.IsNullOrEmpty(query.Alias) &&
                 query.KnownRevision == session.Revision)
             { response.Unchanged = true; return response; }
-            var all = _events.Read(session, SessionEventReadMode.RequireComplete);
+            var indexedEvents = _events as IIndexedModelEventReader;
+            if (indexedEvents != null && string.IsNullOrEmpty(query.RequestEventId) && string.IsNullOrEmpty(query.Alias))
+            {
+                var candidates = indexedEvents.ReadRequestPage(session, string.IsNullOrEmpty(query.RunId) ? null : query.RunId,
+                    query.BeforeSequence, token, string.IsNullOrEmpty(query.StepId) ? null : query.StepId);
+                response.Events = candidates.Take(50).Select(row => Describe(row.Value, false,
+                    ModelReference.Create(ModelReferenceKind.Request, row.Key).Alias)).ToArray();
+                if (candidates.Count > 50) response.NextBeforeSequence = candidates[49].Value.Sequence;
+                return response;
+            }
+            var all = indexedEvents != null ? indexedEvents.ReadEvents(session, SessionEventReadMode.RequireComplete, token)
+                : _events.Read(session, SessionEventReadMode.RequireComplete);
             token.ThrowIfCancellationRequested();
             response.Revision = all.LastOrDefault()?.Sequence ?? session.Revision;
             var requestEventId = query.RequestEventId;
@@ -90,7 +101,7 @@ namespace RNAssistant.Office.Services
                     e.Sequence > request.Sequence && (next == null || e.Sequence < next.Sequence) && IsModelEvent(e.Type) &&
                     !string.IsNullOrEmpty(trace.RequestId) && e.RunId == request.RunId && Trace(e).RequestId == trace.RequestId)
                     .Select(e => Describe(e, true, aliases.Request(e.EventId))).ToArray();
-                response.Summary = ModelContextRequestProjection.Summary(all, request, response.Events, token);
+                response.Summary = ModelContextRequestProjection.Summary(all, request, response.Events, token, _payloads);
                 if (!string.IsNullOrEmpty(query.CompareRequestEventId))
                 {
                     var previous = all.SingleOrDefault(e => e.EventId == query.CompareRequestEventId &&
@@ -137,9 +148,11 @@ namespace RNAssistant.Office.Services
         {
             token.ThrowIfCancellationRequested();
             ChatDiagnosticsScope.Require(session, query.ChatId, query.WorkspaceId);
-            var item = _events.Read(session, SessionEventReadMode.RequireComplete)
-                .SingleOrDefault(e => e.SessionId == session.Id && e.EventId == query.EventId && IsModelEvent(e.Type));
-            if (item == null) throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: exact model event required.");
+            var indexedEvents = _events as IIndexedModelEventReader;
+            var item = indexedEvents == null ? _events.Read(session, SessionEventReadMode.RequireComplete)
+                .SingleOrDefault(e => e.SessionId == session.Id && e.EventId == query.EventId) :
+                indexedEvents.ReadModelEvent(session, query.EventId, token);
+            if (item == null || !IsModelEvent(item.Type)) throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: exact model event required.");
             var source = item.Payload;
             byte[] diagnostic = null;
             if (query.OriginalIndex.HasValue)
@@ -150,7 +163,7 @@ namespace RNAssistant.Office.Services
                     throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: exact context source required.");
                 source = entries[index].OriginalPayload?.ToBlobReference();
             }
-            else if (source == null) diagnostic = ModelDiagnosticBuffer.Shared.Read(session.Id, Trace(item));
+            else if (source == null) diagnostic = ModelContextRequestProjection.ReadCapture(session.Id, Trace(item), _payloads);
             if (source == null && diagnostic == null) throw new InvalidOperationException("RESOURCE_SNAPSHOT_UNAVAILABLE: точные байты не сохранены или срок временной диагностики истёк; manifest не восстанавливает исходный wire.");
             var owner = ChatDiagnosticsScope.DownloadOwner(Owner, session.WorkspaceId);
             var lease = _data.OpenDownload(session, owner, Math.Max(1, source?.ByteLength ?? diagnostic.LongLength), cancellation =>
@@ -182,10 +195,10 @@ namespace RNAssistant.Office.Services
             type == SessionEventTypes.AgentResponseRejected || type == SessionEventTypes.ModelResponseAccepted; }
         private static LlmTraceRecord Trace(SessionEvent item)
         { return item.Data?.ToObject<LlmTraceRecord>() ?? new LlmTraceRecord(); }
-        private static ModelContextEventDto Describe(SessionEvent item, bool detail, string alias)
+        private ModelContextEventDto Describe(SessionEvent item, bool detail, string alias)
         {
             var trace = Trace(item);
-            var available = item.Payload != null || ModelDiagnosticBuffer.Shared.Contains(item.SessionId, trace);
+            var available = item.Payload != null || ModelContextRequestProjection.Available(item.SessionId, trace, _payloads);
             if (!available && trace.DiagnosticCapture == ModelDiagnosticCaptureStatus.Retained) trace.DiagnosticCapture = ModelDiagnosticCaptureStatus.Unavailable;
             if (!detail) trace.ContextMessages = null;
             return new ModelContextEventDto { EventId = item.EventId, Sequence = item.Sequence, CreatedUtc = item.CreatedUtc,
@@ -439,8 +452,8 @@ namespace RNAssistant.Office.Services
                             foreach (var message in item.Data?["Messages"] as JArray ?? new JArray()) RegisterCanonical(message, item.Sequence);
                             RegisterResourceBindings(item.Data?["ResourceReferenceIndex"]);
                         }
-                        else if (item.Type == SessionEventTypes.SessionCommit)
-                            foreach (var operation in item.Data?["Operations"] as JArray ?? new JArray())
+                        else if (item.IsConversationCommit)
+                            foreach (var operation in item.CommitOperations ?? new JArray())
                                 RegisterCanonical(operation["Data"]?["Value"], item.Sequence);
                         else if (item.Type == SessionEventTypes.LlmRequest)
                             RegisterResourceBindings(item.Data?["ResourceModelReferences"]);

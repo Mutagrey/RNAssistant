@@ -857,9 +857,13 @@
                 </div>
                 <div class="setting-note">HMAC проверяет целостность, шифрование скрывает тела событий. Метаданные остаются видимыми. Изменить режим или ключ можно только после очистки данных.</div>
               </section>
+              <section class="model-compatibility-panel" aria-labelledby="modelCaptureTitle">
+                <div class="model-compatibility-head"><h3 id="modelCaptureTitle">Диагностика запросов модели</h3></div>
+                <label class="checkline"><input id="debugModelTrafficInput" type="checkbox"><span>Сохранять содержимое запросов и ответов для Inspector</span></label>
+                <label class="checkline"><input id="persistModelTrafficInput" type="checkbox"><span>Хранить в профиле Windows до 24 часов (DPAPI)</span></label>
+                <div class="setting-note">В памяти содержимое доступно до 10 минут. Лимиты каждого режима — 8 МиБ на запись, 64 МиБ и 256 записей суммарно. Для потокового ответа сохраняется итоговый JSON.</div>
+              </section>
             </section>
-
-            <input id="debugModelTrafficInput" type="checkbox" hidden>
           </div>
           <div class="settings-actions-row" hidden>
             <span role="status" id="settingsSaveStatus">Есть неприменённые изменения</span>

@@ -124,7 +124,7 @@ namespace RNAssistant.Core.Services
         private static List<TrajectoryViewRow> BuildToolRows(IReadOnlyList<SessionEvent> events)
         {
             var tools = new Dictionary<string, ToolAggregate>(StringComparer.OrdinalIgnoreCase);
-            foreach (var item in events.Where(value => string.Equals(value.Type, SessionEventTypes.SessionCommit, StringComparison.OrdinalIgnoreCase)))
+            foreach (var item in events.Where(value => value.IsConversationCommit))
             {
                 foreach (var operation in Operations(item))
                 {
@@ -222,7 +222,7 @@ namespace RNAssistant.Core.Services
         private static List<TrajectoryViewRow> BuildArtifactRows(IReadOnlyList<SessionEvent> events)
         {
             var artifacts = new Dictionary<string, ArtifactAggregate>(StringComparer.OrdinalIgnoreCase);
-            foreach (var item in events.Where(value => string.Equals(value.Type, SessionEventTypes.SessionCommit, StringComparison.OrdinalIgnoreCase)))
+            foreach (var item in events.Where(value => value.IsConversationCommit))
             {
                 foreach (var operation in Operations(item))
                 {
@@ -398,7 +398,7 @@ namespace RNAssistant.Core.Services
         private static MessageUsageTotals MessageUsage(IEnumerable<SessionEvent> events)
         {
             var messages = new Dictionary<string, JObject>(StringComparer.OrdinalIgnoreCase);
-            foreach (var item in events.Where(value => string.Equals(value.Type, SessionEventTypes.SessionCommit, StringComparison.OrdinalIgnoreCase)))
+            foreach (var item in events.Where(value => value.IsConversationCommit))
             {
                 foreach (var operation in Operations(item))
                 {
@@ -482,7 +482,7 @@ namespace RNAssistant.Core.Services
 
         private static IEnumerable<JObject> Operations(SessionEvent item)
         {
-            var operations = Property(item == null ? null : item.Data, "Operations") as JArray;
+            var operations = item?.CommitOperations;
             return operations == null ? new List<JObject>() : operations.OfType<JObject>();
         }
 

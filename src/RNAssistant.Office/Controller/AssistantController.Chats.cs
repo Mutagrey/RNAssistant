@@ -29,11 +29,11 @@ namespace RNAssistant.Office
             return session;
         }
 
-        public ChatTrajectoryResponse GetChatTrajectory(ChatTrajectoryRequest request)
+        public ChatTrajectoryResponse GetChatTrajectory(ChatTrajectoryRequest request, CancellationToken token = default(CancellationToken))
         {
             request = request ?? new ChatTrajectoryRequest();
             var session = LoadDiagnosticsMetadata(request.ChatId, request.WorkspaceId);
-            var events = _eventStore.Read(session, SessionEventReadMode.Validated);
+            token.ThrowIfCancellationRequested();
             if (!string.IsNullOrWhiteSpace(request.View) && !TrajectoryViews.IsSupported(request.View))
             {
                 throw new InvalidOperationException("Unsupported trajectory view: " + request.View + ".");
@@ -41,7 +41,9 @@ namespace RNAssistant.Office
             var view = TrajectoryViews.Normalize(request.View);
             if (!string.Equals(view, TrajectoryViews.Raw, StringComparison.OrdinalIgnoreCase))
             {
-                var derived = _trajectoryQuery.QueryView(events, request.ToViewQueryRequest(view));
+                var query = request.ToViewQueryRequest(view);
+                var derived = request.ScopeToRun ? _conversationRouter.ForAddress(session).ReadRunTrajectory(session, query, token) :
+                    _trajectoryQuery.QueryView(_conversationRouter.ReadEvents(session, SessionEventReadMode.Validated, token), query);
                 return new ChatTrajectoryResponse
                 {
                     ChatId = session.Id,
@@ -58,7 +60,11 @@ namespace RNAssistant.Office
                     Rows = derived.Rows.Select(TrajectoryViewRowDto.From).Where(item => item != null).ToList()
                 };
             }
-            var page = _trajectoryQuery.Query(events, request.ToQueryRequest());
+            var raw = request.ToQueryRequest();
+            var unfiltered = (raw.EventTypes == null || raw.EventTypes.Count == 0) && !raw.MinSequence.HasValue && !raw.MaxSequence.HasValue &&
+                new[] { raw.Search, raw.RunId, raw.TurnId, raw.StepId, raw.ResourceUri, raw.ToolCallId, raw.ArtifactId, raw.Status, raw.Visibility }.All(string.IsNullOrWhiteSpace);
+            var page = unfiltered && session.Revision > 0 ? _conversationRouter.ReadRawPage(session, raw, token) :
+                _trajectoryQuery.Query(_conversationRouter.ReadEvents(session, SessionEventReadMode.Validated, token), raw);
             return new ChatTrajectoryResponse
             {
                 ChatId = session.Id,
@@ -86,7 +92,7 @@ namespace RNAssistant.Office
             // Reservation precedes complete stream validation and ZIP construction; no UI/COM
             // work runs in the producer, and the captured stream never changes during delivery.
             return Task.Run(() => new TrajectoryExportDownloadService(_trajectoryExportService, _resourceData).Open(
-                source, () => _eventStore.Read(source, SessionEventReadMode.RequireComplete), selection, token), token);
+                source, () => _conversationRouter.ReadEvents(source, SessionEventReadMode.RequireComplete, token), selection, token), token);
         }
 
         public Task<ChatEventPayloadResponse> GetChatEventPayloadAsync(ChatEventPayloadRequest request, CancellationToken token)

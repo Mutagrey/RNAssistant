@@ -105,10 +105,10 @@ namespace RNAssistant.Office.Services
             });
         }
 
-        private ResourceDescriptor Describe(ChatSession session, string target)
+        private ResourceDescriptor Describe(ChatSession session, string target, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
             string attachmentMail; int attachmentIndex;
-            if (IsOutlook && TryAttachmentKey(target, out attachmentMail, out attachmentIndex)) return DescribeAttachment(session, target);
+            if (IsOutlook && TryAttachmentKey(target, out attachmentMail, out attachmentIndex)) return DescribeAttachment(session, target, cancellationToken);
             if (IsOutlook && TryOutlookCollectionLimit(target, out var collectionLimit))
                 return DescribeOutlookCollection(session, target);
             string archiveId; int archivePage;
@@ -145,7 +145,7 @@ namespace RNAssistant.Office.Services
             string outlookEntryId;
             if (IsOutlook && TryOutlookMailKey(target, out outlookEntryId))
             {
-                var mail = CaptureOutlookMail(target, false).Mail;
+                var mail = CaptureOutlookMail(target, false, cancellationToken).Mail;
                 return DescribeOutlookMail(session, target, new RNAssistant.Office.Domains.Outlook.OutlookMailSummarySnapshot {
                     EntryId = mail.EntryId, Subject = mail.Subject, Sender = mail.Sender, Received = mail.Received });
             }

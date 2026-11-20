@@ -304,6 +304,14 @@ namespace RNAssistant.Core.Persistence
         ResourceEvidence ReadOperationResolution(ConversationMetadata session, ToolOperationReference operation);
     }
 
+    internal interface IIndexedModelEventReader
+    {
+        IReadOnlyList<KeyValuePair<int, SessionEvent>> ReadRequestPage(ConversationMetadata chat, string run,
+            long? before, System.Threading.CancellationToken token, string step = null);
+        SessionEvent ReadModelEvent(ConversationMetadata chat, string eventId, System.Threading.CancellationToken token);
+        IReadOnlyList<SessionEvent> ReadEvents(ConversationMetadata chat, SessionEventReadMode mode, System.Threading.CancellationToken token);
+    }
+
     public interface IEventStore
     {
         // Explicit migration capability. The old backend uses transcript guards;

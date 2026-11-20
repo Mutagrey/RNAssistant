@@ -230,10 +230,10 @@ namespace RNAssistant.Harness
             public ResourceHeadState GetHead(ResourceAuthorityScopeId scope, ResourceIdentity identity) { return _inner.GetHead(scope, identity); }
             public ResourceHeadPage ReadHeads(ResourceAuthorityScopeId scope, IReadOnlyList<ResourceHeadRange> ranges, int offset, int limit)
             { return _inner.ReadHeads(scope, ranges, offset, limit); }
-            public AuthorityCommitResult Publish(ResourceAuthorityCommit commit)
+            public AuthorityCommitResult Publish(ResourceAuthorityCommit commit, bool includeAllHeads = true)
             {
                 if (ConflictNext) { ConflictNext = false; throw new ResourceAuthorityConflictException("injected before publication"); }
-                var result = _inner.Publish(commit);
+                var result = _inner.Publish(commit, includeAllHeads);
                 if (LoseNext) { LoseNext = false; throw new IOException("lost committed receipt"); }
                 return result;
             }

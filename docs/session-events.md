@@ -1884,11 +1884,12 @@ Every `SessionEvent` contains `SchemaVersion`, `SessionId`, contiguous `Sequence
   `OmittedContext` counts transfer to the manifest without reconstructing entries.
   Existing source `OriginalPayload` references keep their semantic owner. A manifest
   is not exact-wire replay: changed prompts/renderers cannot reconstruct old bytes.
-- Raw request/response capture is off by default. `DebugModelTraffic` opts into one
-  bounded process buffer: 64 MiB total, 8 MiB per body, 256 entries, 10 minutes.
-  These are defensive caps, not measured optimal settings. Exact bytes are frozen;
-  eviction/drop/capture failure is explicit and never changes semantic acceptance.
-  Restart loses this optional capture. No raw CAS ownership or disk queue is added.
+- Raw capture is opt-in. `DebugModelTraffic` enables a ten-minute process buffer.
+  `PersistModelTraffic` additionally selects a DPAPI CurrentUser profile store for
+  newly captured bodies, with a 24-hour deadline. Both policies cap one body at
+  8 MiB and the store at 64 MiB / 256 entries. Manifests retain the event kind,
+  correlation, byte length, hash, expiry and capture status. The optional bytes
+  have a separate lifetime from semantic history and CAS. Profile backup excludes them.
 - `llm.response`, `llm.failure`, `agent.response.rejected` and accepted verdicts are
   compact best-effort diagnostic metadata. Raw non-stream responses and normalized
   streaming JSON are identified separately. Numeric usage survives without a copy

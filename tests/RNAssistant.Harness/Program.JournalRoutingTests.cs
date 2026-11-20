@@ -10,6 +10,28 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void OfficeCatalogSizeSnapshot()
+        {
+            WithTempPaths(paths => {
+                var router = new ConversationJournalRouter(paths, (host, key) => (host == "Workspace" ? "workspace:" : "document:") + key);
+                var blobs = new ChatBlobStore(paths); var isolated = 0;
+                foreach (var key in new[] { "alpha", "beta", "workspace" })
+                {
+                    var chat = router.CreateTransient(key == "workspace" ? "Workspace" : "Word", key, key, key);
+                    var message = new ChatMessage { Role = "user", Content = "shared storage size probe" };
+                    chat.Messages.Add(message); router.Commit(chat, ConversationCommit.UserInput(message));
+                    if (key == "workspace") continue;
+                    var sizes = blobs.CreateStorageSizeSnapshot();
+                    router.ForAddress(ConversationMetadata.From(chat)).ReadChatHeaders(includeStorageUsage: true, sharedSizes: sizes);
+                    isolated += sizes.DirectoryScans;
+                }
+                var combined = blobs.CreateStorageSizeSnapshot(); var timer = System.Diagnostics.Stopwatch.StartNew();
+                var headers = router.ReadHeaders(true, combined);
+                AssertTrue(headers.Count == 2 && headers.All(header => header.Host == "Word"), "Office header selection excludes Workspace");
+                AssertTrue(combined.DirectoryScans > 0 && combined.DirectoryScans < isolated, "shared prefixes are scanned once per Office list");
+                Console.WriteLine("Office headers: prefix scans separate={0} shared={1} ms={2}", isolated, combined.DirectoryScans, timer.ElapsedMilliseconds);
+            });
+        }
         private static void JournalScopeRoutingConsumers()
         {
             WithTempPaths(paths => {

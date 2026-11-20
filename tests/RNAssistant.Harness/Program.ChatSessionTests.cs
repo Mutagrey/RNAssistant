@@ -2022,12 +2022,12 @@ namespace RNAssistant.Harness
 
             public ConversationMessageWindow ReadMessageWindow(string id, int before, int count)
             { RequireFullLoad(); return _inner.ReadMessageWindow(id, before, count); }
-            public IReadOnlyList<ChatSessionHeader> ListHeaders(bool includeStorageUsage = true)
+            public IReadOnlyList<ChatSessionHeader> ListHeaders(bool includeStorageUsage = true, bool documentsOnly = false)
             {
                 RequireHeaders();
                 if (includeStorageUsage && ForbidStorageUsage) throw new InvalidOperationException("Unexpected CAS size scan.");
                 if (!includeStorageUsage) MetadataReads++;
-                return _inner.ListHeaders(includeStorageUsage);
+                return _inner.ListHeaders(includeStorageUsage, documentsOnly);
             }
             public IReadOnlyList<ChatSessionHeader> ListHeaders(string host, string key, string title)
             { RequireHeaders(); return _inner.ListHeaders(host, key, title); }

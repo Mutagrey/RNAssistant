@@ -4,6 +4,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using RNAssistant.Core.Tools;
+using RNAssistant.Core.Storage;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
@@ -15,21 +16,25 @@ namespace RNAssistant.Core.Services
         private readonly IEventStore _eventStore;
         private readonly ModelDiagnosticBuffer _diagnostics;
         private readonly Action<string> _diagnosticLog;
+        private readonly ModelDiagnosticCaptureStore _protectedCaptures;
 
-        public ModelTracePersistenceService(IEventStore eventStore, Action<string> diagnosticLog = null)
-            : this(eventStore, ModelDiagnosticBuffer.Shared, diagnosticLog)
+        public ModelTracePersistenceService(IEventStore eventStore, Action<string> diagnosticLog = null, AppDataPaths paths = null)
+            : this(eventStore, ModelDiagnosticBuffer.Shared, diagnosticLog, paths == null ? null : new ModelDiagnosticCaptureStore(paths))
         {
         }
 
         internal ModelTracePersistenceService(IEventStore eventStore, ModelDiagnosticBuffer diagnostics,
-            Action<string> diagnosticLog = null)
+            Action<string> diagnosticLog = null, ModelDiagnosticCaptureStore protectedCaptures = null)
         {
+            _protectedCaptures = protectedCaptures;
             _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
             _diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
             _diagnosticLog = diagnosticLog;
+            try { _protectedCaptures?.Prune(); }
+            catch (Exception) { ReportDiagnosticFailure("MODEL_CAPTURE_PRUNE_FAILED"); }
         }
 
-        public void Configure(LlmRequestOptions options, bool captureRaw = false)
+        public void Configure(LlmRequestOptions options, bool captureRaw = false, bool persistRaw = false)
         {
             if (options == null || options.TraceSession == null || options.TraceSinkConfigured) return;
             var session = options.TraceSession;
@@ -45,7 +50,7 @@ namespace RNAssistant.Core.Services
                 {
                     options.TraceRequestId = record.RequestId;
                 }
-                Persist(session, options, record, runId, turnId, documentRuntimeId, captureRaw);
+                Persist(session, options, record, runId, turnId, documentRuntimeId, captureRaw, persistRaw);
                 if (previousSink != null)
                     try { previousSink(record); }
                     catch (Exception) { ReportDiagnosticFailure("Optional model observer failed."); }
@@ -54,7 +59,7 @@ namespace RNAssistant.Core.Services
         }
 
         private void Persist(ChatSession session, LlmRequestOptions options, LlmTraceRecord source,
-            string runId, string turnId, string documentRuntimeId, bool captureRaw)
+            string runId, string turnId, string documentRuntimeId, bool captureRaw, bool persistRaw)
         {
             // UI streaming already owns transient text. SSE frames have no durable
             // consumer and never enter the semantic event stream or a write queue.
@@ -80,15 +85,22 @@ namespace RNAssistant.Core.Services
             {
                 record.WireBytes = bytes.LongLength;
                 using (var hash = SHA256.Create()) record.WireSha256 = BitConverter.ToString(hash.ComputeHash(bytes)).Replace("-", "").ToLowerInvariant();
-                if (captureRaw)
+                if ((request || record.Type == "response") && captureRaw)
                 {
                     try
                     {
-                        record.DiagnosticCaptureId = _diagnostics.Retain(record, bytes);
+                        record.ProtectedDiagnosticCapture = persistRaw;
+                        record.DiagnosticCaptureId = persistRaw
+                            ? (_protectedCaptures ?? throw new InvalidOperationException("Protected diagnostics unavailable.")).Retain(record, bytes)
+                            : _diagnostics.Retain(record, bytes);
                         record.DiagnosticCapture = record.DiagnosticCaptureId == null ? ModelDiagnosticCaptureStatus.SizeLimit : ModelDiagnosticCaptureStatus.Retained;
-                        record.DiagnosticDropped = _diagnostics.Dropped; record.DiagnosticEvicted = _diagnostics.Evicted;
+                        if (!persistRaw)
+                        {
+                            record.DiagnosticDropped = _diagnostics.Dropped;
+                            record.DiagnosticEvicted = _diagnostics.Evicted;
+                        }
                     }
-                    catch (Exception) { record.DiagnosticCapture = ModelDiagnosticCaptureStatus.CaptureFailed; ReportDiagnosticFailure("Optional model capture failed."); }
+                    catch (Exception) { record.DiagnosticCapture = ModelDiagnosticCaptureStatus.CaptureFailed; ReportDiagnosticFailure("MODEL_CAPTURE_FAILED run=" + Clip(runId, 64) + " request=" + Clip(record.RequestId, 64)); }
                 }
             }
             if (request)
