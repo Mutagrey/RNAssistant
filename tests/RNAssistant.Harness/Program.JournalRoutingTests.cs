@@ -55,10 +55,20 @@ namespace RNAssistant.Harness
                     "event reads route to the addressed canonical journal");
 
                 File.Delete(paths.JournalIndexFile);
+                AssertEqual("B", store.Load(chatB.Id)?.Messages.Single().Content,
+                    "a previous miss cannot hide a chat after index replacement on the same router");
+                var writer = new ConversationJournal(paths, "workspace:" + workspace.WorkspaceId);
+                IConversationStore source = writer;
+                var late = source.CreateTransient("Workspace", workspace.WorkspaceId, "Project", "Late");
+                late.WorkspaceId = workspace.WorkspaceId;
+                writer.Fault = stage => { if (stage == "before_index") throw new IOException("delayed card"); };
+                source.Commit(late, new ConversationCommit());
+                AssertEqual(late.Id, store.Load(late.Id)?.Id,
+                    "a flushed create with delayed indexing is immediately addressable on the same router");
                 var restarted = new ConversationJournalRouter(paths, resolve);
                 AssertEqual("B", ((IConversationStore)restarted).Load(chatB.Id).Messages.Single().Content,
                     "scope discovery rebuilds the shared index before routing an addressed chat");
-                AssertEqual(3, ((IConversationStore)restarted).ListHeaders(false).Count,
+                AssertEqual(4, ((IConversationStore)restarted).ListHeaders(false).Count,
                     "restart discovers every canonical stream independently");
             });
         }

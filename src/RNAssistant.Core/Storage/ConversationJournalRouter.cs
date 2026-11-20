@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using Microsoft.Data.Sqlite;
@@ -23,7 +24,6 @@ namespace RNAssistant.Core.Storage
         private readonly Func<string, string, string> _resolveScope;
         private readonly ConcurrentDictionary<string, ConversationJournal> _journals =
             new ConcurrentDictionary<string, ConversationJournal>(StringComparer.Ordinal);
-        private int _indexDiscoveryAttempted;
         internal string RootPath { get { return _paths.Root; } }
 
         internal ConversationJournalRouter(AppDataPaths paths, Func<string, string, string> resolveScope,
@@ -84,9 +84,7 @@ namespace RNAssistant.Core.Storage
             {
                 try
                 {
-                    // Read the disposable projection under the same cross-process
-                    // sections gate that excludes atomic index replacement by Repair.
-                    // Release it before inventory/repair to avoid lock inversion.
+                    var indexed = new Dictionary<string, JournalCursor>(StringComparer.Ordinal);
                     using (JournalIndexAdmission.Enter(_paths, CancellationToken.None))
                     using (var db = JournalIndex.Open(_paths))
                     using (var command = db.CreateCommand())
@@ -95,22 +93,29 @@ namespace RNAssistant.Core.Storage
                         command.Parameters.AddWithValue("$chat", chatId);
                         var scope = command.ExecuteScalar() as string;
                         if (scope != null) return scope;
+                        command.Parameters.Clear();
+                        command.CommandText = "SELECT stream,segment,start_offset,end_offset,sequence,hash,first_sequence FROM stream_cursor";
+                        using (var rows = command.ExecuteReader())
+                            while (rows.Read()) indexed.Add(rows.GetString(0), JournalIndex.ReadCursor(rows, 1));
                     }
-                    if (repaired) return null;
-                    if (Interlocked.Exchange(ref _indexDiscoveryAttempted, 1) != 0) return null;
-                    if (!StorageJournal.Inventory(_paths).Any(stream => !stream.Resources)) return null;
-                    JournalIndex.Repair(_paths, _protector ?? StorageProtector.None, true, System.Threading.CancellationToken.None);
-                    repaired = true;
+                    // A durable append may precede its index transaction in any process.
+                    // Catch up only tails absent from the projection used for this miss.
+                    foreach (var stream in StorageJournal.ConversationInventory(_paths))
+                    {
+                        JournalCursor cursor;
+                        if (indexed.TryGetValue(stream.Identity, out cursor) && cursor.Segment == stream.Segments.Length &&
+                            cursor.End == new FileInfo(stream.Segments[cursor.Segment - 1]).Length) continue;
+                        if (Conversations(Journal(stream.Identity)).ReadMetadata(chatId) != null) return stream.Identity;
+                    }
+                    return null;
                 }
                 catch (SqliteException error) when (!repaired && JournalIndex.IsDamaged(error))
                 {
-                    Interlocked.Exchange(ref _indexDiscoveryAttempted, 1);
                     JournalIndex.Repair(_paths, _protector ?? StorageProtector.None, true, System.Threading.CancellationToken.None);
                     repaired = true;
                 }
                 catch (JournalIndex.IndexVersionMismatch) when (!repaired)
                 {
-                    Interlocked.Exchange(ref _indexDiscoveryAttempted, 1);
                     JournalIndex.Repair(_paths, _protector ?? StorageProtector.None, true, System.Threading.CancellationToken.None);
                     repaired = true;
                 }
@@ -119,7 +124,7 @@ namespace RNAssistant.Core.Storage
 
         private IReadOnlyList<ConversationJournal> AllJournals()
         {
-            return StorageJournal.Inventory(_paths).Where(stream => !stream.Resources)
+            return StorageJournal.ConversationInventory(_paths)
                 .Select(stream => Journal(stream.Identity)).ToArray();
         }
 
