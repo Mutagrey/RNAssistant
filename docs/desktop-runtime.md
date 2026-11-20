@@ -11,6 +11,12 @@ In-process launcher использует `OfficeHosts.Windows.InProcessWindowHos
 RequestsDrained/ShutdownCompletion без Office UI wait. Вызов из другой книги после
 Web guard/flush создаёт новый exact session, не переназначая старый run.
 
+NativeHostCli сначала показывает окно со статусом запуска. Привязка документа и
+монтаж панели выполняются на Office STA. Создание runtime и чтение настроек
+выполняются в фоне, включая перестроение SQLite по журналу при смене схемы.
+Окно показывает версию и причину ошибки подготовки. Alt+F4 закрывает окно
+во время подготовки. Уже начатое перестроение может завершиться в фоне.
+
 FullNormal/FullMaximized/Compact/Companion, независимые return points, focus и
 геометрия описаны в [Screen Map](ui/UI_SCREEN_MAP.md#native-window--in-review-2026-11-11).
 Native UI preferences не используют SaveSettings/maintenance и доступны во время

@@ -53,10 +53,13 @@ public:
                 Type^ type = Assembly::LoadFrom(path)->GetType("RNAssistant.OfficeHosts.Windows.InProcessWindowHost", true);
                 _host = type->GetMethod("Create", BindingFlags::Public | BindingFlags::Static)->Invoke(nullptr, arguments);
             }
-            // Validate profile in the managed owner before changing resolver/root or target.
-            Invoke("Show", arguments);
+            else
+            {
+                // The managed owner validates the profile before resuming or switching documents.
+                Invoke("Show", arguments);
+            }
             _officeHwnd = officeHwnd;
-            Log("Panel resumed by launcher.");
+            Log("Panel open request accepted.");
             ClearError(); return 0;
         }
         catch (Exception^ ex) { return Fail(-1, "Could not show RN Assistant panel.", ex, officeHwnd); }

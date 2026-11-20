@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using RNAssistant.Core.Models;
@@ -21,6 +22,9 @@ namespace RNAssistant.OfficeHosts
 
     public sealed class InProcessPanelSession : IDisposable
     {
+        // A closed or replaced window can leave an admitted storage repair draining.
+        // Serialize runtime construction in this Office process, without blocking its STA.
+        private static readonly SemaphoreSlim RuntimeStartup = new SemaphoreSlim(1, 1);
         private readonly IOfficeApplicationAdapter _adapter;
         private readonly OfficeUiDispatcher _officeDispatcher;
         private bool _screenCaptureProtectionEnabled;
@@ -68,8 +72,10 @@ namespace RNAssistant.OfficeHosts
         public event Action<bool> ScreenCaptureProtectionChanged;
         public event Action<int> PanelWindowWidthChanged;
 
-        public static InProcessPanelSession Create(int hostKind, long officeHwnd, string rootPath, IAssistantWindowHost windowHost = null)
+        internal static async Task<InProcessPanelSession> CreateAsync(int hostKind, long officeHwnd, string rootPath,
+            IAssistantWindowHost windowHost, CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var kind = (OfficeHostKind)hostKind;
             var host = HostName(kind);
             if (officeHwnd == 0)
@@ -107,13 +113,30 @@ namespace RNAssistant.OfficeHosts
                 officeDispatcher = new OfficeUiDispatcher();
                 innerAdapter = new OfficeComAdapterProvider().Create(host, target, officeDispatcher);
                 var adapter = new UiThreadOfficeApplicationAdapter(innerAdapter, officeDispatcher);
-                runtime = new AssistantRuntime(adapter, rootPath);
+                SettingsControlsDto settings;
+                await RuntimeStartup.WaitAsync(cancellationToken).ConfigureAwait(true);
+                try
+                {
+                    // Resource recovery and catalog publication can rebuild the shared SQLite index.
+                    // The bound adapter marshals any Office reads back to the owning STA.
+                    settings = await Task.Run(() =>
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        runtime = new AssistantRuntime(adapter, rootPath);
+                        cancellationToken.ThrowIfCancellationRequested();
+                        return runtime.Controller.GetSettings().Settings;
+                    }, cancellationToken).ConfigureAwait(true);
+                }
+                finally { RuntimeStartup.Release(); }
+
+                cancellationToken.ThrowIfCancellationRequested();
+                if (adapter.DocumentSession?.IsAlive == false)
+                    throw new InvalidOperationException("Документ Office был закрыт во время запуска.");
                 runtime.WindowHost = windowHost;
                 runtime.OfficeHostChatRequested = requestedHost => OfficeHostChatCoordinator.CreateFromPanelAsync(runtime, requestedHost);
                 runtime.OfficeChatSelectionRequested = chatId => OfficeHostChatCoordinator.SelectFromPanelAsync(runtime, chatId);
                 var control = runtime.CreatePaneControl();
                 control.Dock = DockStyle.Fill;
-                var settings = runtime.Controller.GetSettings().Settings;
                 return new InProcessPanelSession(
                     kind,
                     officeHwnd,

@@ -531,6 +531,8 @@ NativeHostCli — экспортный ABI/reflection loader. Один акти�
 `InProcessPanelSession` для точного документа. OfficeHosts разрешает старый
 `Application.Hwnd` и прямой `ActiveWindow.Hwnd` в окно активной книги; VBA launcher
 не меняется. Форма показывается с владельцем Office и без taskbar entry.
+Форма показывает статус до монтирования панели. Office STA привязывает точный
+документ, runtime готовится в фоне, а закрытие отсекает позднее монтирование.
 `AssistantHostForm.CreateParams` удаляет системный caption до создания HWND;
 готовность WebView2 не управляет стилем формы. `nativeDragRegions` — отдельная
 capability переноса: при её отсутствии trusted Shell вызывает typed `BeginMove`.

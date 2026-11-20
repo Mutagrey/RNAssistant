@@ -96,8 +96,10 @@ Host_SetPanelVisible(visible)
 Host_GetLastErrorMessage(buffer, bufferChars)
 ```
 
-Host kinds are Excel=1, Word=2, PowerPoint=3 and Outlook=4. Lifecycle calls
-return zero on success. `Host_GetLastErrorMessage` returns copied UTF-16
+Host kinds are Excel=1, Word=2, PowerPoint=3 and Outlook=4. The show calls return
+zero when the launch request is accepted. The window displays progress while the
+runtime prepares storage and settings. Startup failures after acceptance appear
+in the window. `Host_GetLastErrorMessage` returns copied UTF-16
 characters excluding the null terminator; call it with a null/zero buffer to get
 the required size including the terminator.
 

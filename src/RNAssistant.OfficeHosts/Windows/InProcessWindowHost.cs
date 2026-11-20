@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Diagnostics;
@@ -17,6 +18,7 @@ namespace RNAssistant.OfficeHosts.Windows
     {
         private readonly AssistantHostForm _form;
         private readonly CompanionForm _companion;
+        private readonly Label _startupStatus;
         private readonly AssistantWindowPolicy _policy = new AssistantWindowPolicy();
         private readonly CancellationTokenSource _lifetime = new CancellationTokenSource();
         private readonly System.Windows.Forms.Timer _focus = new System.Windows.Forms.Timer { Interval = 150 };
@@ -69,6 +71,17 @@ namespace RNAssistant.OfficeHosts.Windows
             _anchorThread = WindowNative.GetWindowThreadProcessId(anchor, out _anchorProcess);
             if (_anchorThread == 0) throw new ArgumentException("Office HWND is unavailable.");
             _form = new AssistantHostForm(); _companion = new CompanionForm();
+            _startupStatus = new Label
+            {
+                Dock = DockStyle.Fill,
+                BackColor = SystemColors.Window,
+                ForeColor = SystemColors.WindowText,
+                Padding = new Padding(20),
+                TextAlign = ContentAlignment.MiddleCenter,
+                UseMnemonic = false,
+                Text = "RNAssistant " + ApplicationVersionService.Current +
+                    "\r\n\r\nПодготовка истории и настроек…\r\n\r\nAlt+F4 — закрыть"
+            };
             try
             {
                 Publish();
@@ -83,10 +96,6 @@ namespace RNAssistant.OfficeHosts.Windows
                 _companion.Command = NativeCommand;
                 _companion.PlacementChanged = CaptureCompanion;
                 _companion.ShutdownRequested = () => { Resume(); ShutdownRequested?.Invoke(); };
-                _session = InProcessPanelSession.Create(hostKind, anchor.ToInt64(), _root, this);
-                _session.ScreenCaptureProtectionChanged += SetProtection;
-                _session.PanelWindowWidthChanged += SetInitialWidth;
-                SetProtection(_session.ScreenCaptureProtectionEnabled);
                 _store = new AssistantWindowPreferenceStore(AppDataPaths.CreateDefault(), "inprocess-" + hostKind);
                 try
                 {
@@ -95,13 +104,47 @@ namespace RNAssistant.OfficeHosts.Windows
                     _fullPlaced = _preferences.Full != null && _preferences.Full.Valid;
                 }
                 catch (Exception error) { _preferences = new AssistantWindowPreferences(); Diagnostic("Оконные настройки сброшены", error); }
-                _form.Controls.Add(_session.PanelControl);
+                _form.Controls.Add(_startupStatus);
                 _focus.Tick += CheckFocus;
                 _save.Tick += (s, e) => { _save.Stop(); SavePreferences(); };
-                ApplyPresentation(false);
-                _focus.Start();
+                Resume();
+                _form.BeginInvoke(new Action(StartSession));
             }
             catch { Dispose(); throw; }
+        }
+
+        private async void StartSession()
+        {
+            if (_disposed) return;
+            var token = _lifetime.Token;
+            try
+            {
+                if (!AnchorAvailable()) throw new InvalidOperationException("Окно документа Office уже закрыто.");
+                var session = await InProcessPanelSession.CreateAsync(_hostKind, _anchor.ToInt64(), _root, this, token);
+                if (_disposed) { session.Dispose(); return; }
+                _session = session;
+                if (!AnchorAvailable()) throw new InvalidOperationException("Окно документа Office закрыто во время запуска.");
+                session.ScreenCaptureProtectionChanged += SetProtection;
+                session.PanelWindowWidthChanged += SetInitialWidth;
+                SetProtection(session.ScreenCaptureProtectionEnabled);
+                SetInitialWidth(session.PanelWindowWidth);
+                _form.Controls.Add(session.PanelControl);
+                if (_disposed) return;
+                _focus.Start();
+                _startupStatus.Dispose();
+                RuntimeLog.Info("In-process panel attached.");
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+            catch (Exception error)
+            {
+                if (_disposed) { RuntimeLog.Error("In-process panel startup did not finish.", error); return; }
+                _focus.Stop();
+                try { DisposeSession(); }
+                catch (Exception cleanup) { RuntimeLog.Error("In-process panel startup cleanup failed.", cleanup); }
+                _startupStatus.Text = "Не удалось запустить RNAssistant " + ApplicationVersionService.Current +
+                    "\r\n\r\n" + error.GetBaseException().Message + "\r\n\r\nAlt+F4 — закрыть";
+                Diagnostic("Не удалось запустить RNAssistant", error);
+            }
         }
 
         // A new exact Office HWND requests a new document session; never retarget a live run.
@@ -122,7 +165,7 @@ namespace RNAssistant.OfficeHosts.Windows
                     throw new InvalidOperationException("Новая книга должна принадлежать тому же процессу и UI-потоку Office.");
                 _switchAnchor = next;
                 Resume();
-                if (SwitchRequested == null) ReplaceSession(next);
+                if (_session == null || SwitchRequested == null) ReplaceSession(next);
                 else SwitchRequested();
                 return;
             }
@@ -167,7 +210,7 @@ namespace RNAssistant.OfficeHosts.Windows
                         throw new InvalidOperationException("Окно сейчас недоступно для перемещения.");
                     if (request.Command == HostWindowCommand.Shutdown || request.Command == HostWindowCommand.SwitchDocument)
                     {
-                        var pane = _session.PanelControl as IAssistantWindowPane;
+                        var pane = _session?.PanelControl as IAssistantWindowPane;
                         var canClose = request.Command == HostWindowCommand.Shutdown
                             ? pane != null && pane.CanShutdownWindow
                             : pane != null && pane.CanSwitchWindow;
@@ -209,9 +252,7 @@ namespace RNAssistant.OfficeHosts.Windows
             {
                 Dispose();
                 if (!WindowNative.IsWindow(next)) throw new InvalidOperationException("Окно новой книги уже закрыто.");
-                var successor = new InProcessWindowHost(_hostKind, next, _root);
-                successor.Show(_hostKind, next.ToInt64(), _root);
-                Successor = successor;
+                Successor = new InProcessWindowHost(_hostKind, next, _root);
             }
             catch (Exception error)
             {
@@ -310,7 +351,7 @@ namespace RNAssistant.OfficeHosts.Windows
             if (WindowNative.PerMonitorAware(_form.Handle) && Screen.FromControl(_form).DeviceName != screen.DeviceName)
                 _form.Location = area.Location;
             var scale = WindowNative.Scale(_form.Handle);
-            var width = compact ? (int)(420 * scale) : _session == null ? 1100 : _session.PanelWindowWidth;
+            var width = compact ? (int)(420 * scale) : _session?.PanelWindowWidth ?? AppSettings.DefaultDesktopWindowWidth;
             var height = (int)((compact ? 520 : 720) * scale);
             var bounds = new Rectangle(area.Right - width - (int)(20 * scale), area.Top + (int)(80 * scale), width, height);
             if (saved != null && saved.Valid) bounds = new Rectangle(area.Left + (int)(saved.X * scale), area.Top + (int)(saved.Y * scale),
@@ -334,7 +375,7 @@ namespace RNAssistant.OfficeHosts.Windows
         private void RecordPlacement(bool userPlaced)
         {
             if (_disposed || _applying || !_form.Visible || _form.WindowState != FormWindowState.Normal ||
-                _policy.Visibility != HostWindowVisibility.Visible) return;
+                _policy.Visibility != HostWindowVisibility.Visible || (_session == null && !userPlaced)) return;
             if (_policy.Presentation == HostWindowPresentation.Compact) _preferences.Compact = Record(_form);
             else if (_policy.Presentation == HostWindowPresentation.FullNormal) { _preferences.Full = Record(_form); _fullPlaced |= userPlaced; }
             _policy.Touch(); Publish(); ScheduleSave();
@@ -487,6 +528,15 @@ namespace RNAssistant.OfficeHosts.Windows
             catch (Exception error) { Diagnostic("Оконные настройки не сохранены", error); if (!_disposed) { _policy.Touch(); Publish(); } }
             finally { _saveRunning = false; }
         }
+        private void DisposeSession()
+        {
+            var session = _session;
+            _session = null;
+            if (session == null) return;
+            session.ScreenCaptureProtectionChanged -= SetProtection;
+            session.PanelWindowWidthChanged -= SetInitialWidth;
+            session.Dispose();
+        }
         public void Dispose()
         {
             if (_disposed) return;
@@ -494,17 +544,10 @@ namespace RNAssistant.OfficeHosts.Windows
             if (_policy.Alive) _policy.Apply(new HostWindowCommandPayload { Command = HostWindowCommand.Shutdown });
             _disposed = true; _lifetime.Cancel(); Publish(); _focus.Stop(); _save.Stop(); SavePreferences();
             _focus.Dispose(); _save.Dispose();
-            try
-            {
-                if (_session != null)
-                {
-                    _session.ScreenCaptureProtectionChanged -= SetProtection; _session.PanelWindowWidthChanged -= SetInitialWidth;
-                    _session.Dispose();
-                }
-            }
+            try { DisposeSession(); }
             finally
             {
-                _session = null; _lifetime.Dispose();
+                _lifetime.Dispose();
                 StateChanged = null; ShutdownRequested = null; SwitchRequested = null;
                 try { _companion.Dispose(); }
                 finally { _form.ShuttingDown = true; _form.Dispose(); }
