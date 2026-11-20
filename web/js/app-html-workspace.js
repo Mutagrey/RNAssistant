@@ -126,7 +126,7 @@
       if (state.chatNavigationVersion !== generation || RNAssistantDockWorkspace.activeTarget() !== placement) return false;
       var value = RNAssistantBrowserTarget.accept(response.browserTarget, { chatId: chatId }, "HtmlWorkspace");
       if (value.state !== "Ready") throw new Error(value.message || "Сначала создайте HTML-проект.");
-      return RNAssistantBrowser.open(value.displayLocator, value.ownerScope, { reuse: true, title: value.title });
+      return RNAssistantBrowser.open(value.displayLocator, value.ownerScope, { title: value.title });
     } catch (error) { RNAssistantShellLayout.notice(error.detail || error.message); return false; }
   }
   function selectHtmlWorkspaceItem(type, id) {

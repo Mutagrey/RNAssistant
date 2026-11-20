@@ -176,7 +176,8 @@
         var index = candidates.findIndex(function (fence) { return fence.language === language && fence.renderedText === code.textContent; });
         if (index >= 0) {
           var fence = candidates.splice(index, 1)[0];
-          visuals.mount(code.parentNode, language, fence.text);
+          visuals.mount(code.parentNode, language, fence.text,
+            options.visualMessageId && options.visualMessageId + ":" + fences.indexOf(fence));
         }
       });
     }

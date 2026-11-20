@@ -9,10 +9,10 @@
     return panel && panel.target.source === "workspace" ? panel : null;
   }
   function currentSnapshot() { var panel = currentPanel(); return panel ? panel.snapshot() : null; }
-  function acceptSnapshot(snapshot, options) {
+  function acceptSnapshot(snapshot, placement) {
     var target = { source: "workspace", workspaceId: snapshot.project.workspaceId, sessionId: snapshot.sessionId };
-    RNAssistantConversationPanel.open(target);
-    return RNAssistantConversationPanel.find(target).accept(snapshot, options);
+    if (!RNAssistantConversationPanel.open(target, placement)) return false;
+    return RNAssistantConversationPanel.find(target).accept(snapshot);
   }
   function el(id) {
     return window.RNAssistantWorkspaceChat.node(id) || document.getElementById("projectChat" + id);
@@ -188,9 +188,10 @@
         RNAssistantChatGroups.select(item);
         if (item.kind === "parent" && item.workspaceId && !item.sessionId) return selectProject(item.workspaceId);
         var entry = projects().find(function (project) { return project.workspaceId === item.workspaceId; });
+        var placement = RNAssistantDockWorkspace.chatNavigationPlacement();
         if (entry && entry.pluginId && window.RNAssistantPlugins)
-          window.RNAssistantPlugins.select(entry.pluginId, item.sessionId);
-        else window.RNAssistantProjectChats.open(item.workspaceId, item.sessionId);
+          window.RNAssistantPlugins.select(entry.pluginId, item.sessionId, placement);
+        else window.RNAssistantProjectChats.open(item.workspaceId, item.sessionId, placement);
       },
       onToggle: function (item, isExpanded) { if (item.chatGroupBranch) RNAssistantChatGroups.toggle(item, isExpanded);
         else expanded[item.workspaceId] = isExpanded; }
@@ -206,7 +207,7 @@
     renderTree(); updateControls();
     var panel = currentPanel(); if (panel) panel.render(options);
   }
-  async function refresh(target) {
+  async function refresh(target, placement) {
     var version = ++serial;
     try { if (!await refreshCatalog(function () { return version === serial; })) return; }
     catch (error) { if (version === serial) notice(error.detail || error.message, true); return; }
@@ -228,7 +229,7 @@
       wanted = null;
     }
     wanted = wanted || chats[0] && chats[0].Id;
-    if (wanted && project().available) await open(projectId(), wanted);
+    if (wanted && project().available) await open(projectId(), wanted, placement);
     else if (!wanted) render();
   }
   function selectProject(workspaceId) {
@@ -239,27 +240,28 @@
     if (!entry.available || !entry.chats || !entry.chats.length) return false;
     var remembered = window.RNAssistantWorkspaceChat.selectedSession(workspaceId);
     var chat = entry.chats.find(function (item) { return item.Id === remembered; }) || entry.chats[0];
-    switchTab("chat");
-    return setScope("projects", { workspaceId: workspaceId, sessionId: chat.Id });
+    switchTab("chat", { preserveDockPanel: true });
+    return setScope("projects", { workspaceId: workspaceId, sessionId: chat.Id }, RNAssistantDockWorkspace.chatNavigationPlacement());
   }
-  async function open(workspaceId, sessionId) {
+  async function open(workspaceId, sessionId, placement) {
     selectedWorkspaceId = workspaceId;
     if (!project() || !project().available) return;
     window.RNAssistantWorkspaceChat.rememberSession(workspaceId, sessionId);
-    RNAssistantConversationPanel.open({ source: "workspace", workspaceId: workspaceId, sessionId: sessionId });
+    RNAssistantConversationPanel.open({ source: "workspace", workspaceId: workspaceId, sessionId: sessionId }, placement);
     renderTree();
   }
-  async function create(workspaceId) {
+  async function create(workspaceId, placement) {
     if (catalogBusy) return;
     if (workspaceId) selectedWorkspaceId = workspaceId;
     if (catalogBusy || !project() || !project().available) return;
+    placement = placement || RNAssistantConversationPanel.newPlacement();
     var version = ++serial, pid = projectId(); catalogBusy = true; render();
     try {
       var result = await send("createProjectChat", { workspaceId: pid, title: "Новый чат" });
       window.RNAssistantWorkspaceChat.snapshotSource({ workspaceId: pid, sessionId: result && result.sessionId }).accept(result);
       var selected = version === serial && projectId() === pid;
       if (selected) {
-        acceptSnapshot(result); window.RNAssistantWorkspaceChat.rememberSession(pid, result.sessionId);
+        acceptSnapshot(result, placement); window.RNAssistantWorkspaceChat.rememberSession(pid, result.sessionId);
         notice(statusText()); render();
       }
       try { await refreshCatalog(); render(); }
@@ -342,7 +344,7 @@
       await refresh(selected ? null : { workspaceId: projectId(), sessionId: currentId() });
       if (selected) notice(error.detail || error.message, true); }
   }
-  function setScope(next, target) {
+  function setScope(next, target, placement) {
     RNAssistantChatGroups.dismissDialog();
     ++serial;
     if (next === "projects") window.RNAssistantWorkspaceChat.mount("project");
@@ -357,12 +359,12 @@
       if (known) {
         // Explicit navigation can read the addressed chat immediately. Refresh
         // the tree independently; a slow catalog must not gate the detail read.
-        loaded = open(target.workspaceId, target.sessionId);
+        loaded = open(target.workspaceId, target.sessionId, placement);
         var version = serial;
         refreshCatalog(function () { return version === serial; })
           .then(function (refreshed) { if (refreshed && version === serial) render(); })
           .catch(function () { /* The addressed chat read reports its own error. */ });
-      } else loaded = refresh(target);
+      } else loaded = refresh(target, placement);
     }
     if (window.RNAssistantShellLayout) window.RNAssistantShellLayout.refresh();
     window.RNAssistantDockWorkspace.refreshPresentation();
@@ -447,5 +449,8 @@
         target: { view: "conversation", source: "workspace", workspaceId: entry.workspaceId, sessionId: chat.Id } }; });
     }); },
     isBusy: function () { return catalogBusy || chatBusy(); },
-    open: function (workspaceId, sessionId) { switchTab("chat"); return setScope("projects", { workspaceId: workspaceId, sessionId: sessionId }); } };
+    open: function (workspaceId, sessionId, placement) {
+      switchTab("chat", { preserveDockPanel: true });
+      return setScope("projects", { workspaceId: workspaceId, sessionId: sessionId }, placement || RNAssistantDockWorkspace.chatNavigationPlacement());
+    } };
 }());

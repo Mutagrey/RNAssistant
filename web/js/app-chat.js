@@ -33,7 +33,7 @@ async function createOfficeHostChat(host) {
   state.officeHostChatError = "";
   renderChatSessions();
   try {
-    var result = await navigateChat("createOfficeHostChat", { host: host });
+    var result = await navigateChat("createOfficeHostChat", { host: host }, RNAssistantConversationPanel.newPlacement());
     log("Чат создан: " + host + (result.documentTitle ? " — " + result.documentTitle : "") + ".");
   } catch (error) {
     // The bridge keeps the exception message in `error`; its generic detail is

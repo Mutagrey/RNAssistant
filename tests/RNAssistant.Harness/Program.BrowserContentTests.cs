@@ -199,6 +199,15 @@ namespace RNAssistant.Harness
         }
         private static void BrowserExactLocalContent()
         {
+            var document = new BrowserTargetDescriptor { DisplayLocator = "/resources/document~1" };
+            using (var content = new BrowserContentSession(document, new[] { "pages/start.html", "other.html" },
+                "pages/start.html", (path, token) => Stream.Null, () => { })) {
+                var displayed = new BrowserPageStateDto { Target = new BrowserTargetDescriptor() };
+                content.UpdateLocation(displayed, content.InitialUrl(document.DisplayLocator + "#section"));
+                AssertEqual(document.DisplayLocator + "#section", displayed.Url, "native history retains the admitted default resource address");
+                AssertEqual("pages/start.html", displayed.Target.RelativePath, "default address retains the exact entry member");
+                AssertEqual(document.DisplayLocator + "/files/other.html", content.LocalLocator("other.html"), "other members stay distinct");
+            }
             WithPluginPaths(paths => {
                 var imported = new HtmlProjectImportService(paths).Import(HtmlProjectSourceFixture(), CancellationToken.None);
                 var service = WorkspaceHtmlVersionsFixture(paths);

@@ -109,6 +109,7 @@ const {chromium} = require('playwright');
         }, null, 'inbox:' + id));
       }, 20);
     });
+    if (await page.evaluate(() => !RNAssistantShellLayout.isNavigationOpen())) await page.locator('#productMobileMenuButton').click();
     await page.locator('#chatSessionList [data-tree-key="chat:preview-chat"] .navigation-tree-row').click();
     assert.equal(await page.evaluate(() => RNAssistantConversationPanel.selected().target.sessionId), 'preview-chat');
     assert.equal(await page.evaluate(() => parallelTree === document.querySelector('#chatSessionList .chat-navigation-tree')), true,

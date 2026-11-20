@@ -50,5 +50,12 @@
       return path;
     } catch (_) { return null; }
   }
-  window.RNAssistantBrowserTarget = { accept: accept, preferenceLocator: preferenceLocator };
+  function navigationKey(locator) {
+    var path = preferenceLocator(locator);
+    if (!path) return null;
+    // Compare encoded path segments by their contents. Query and fragment still
+    // distinguish navigation targets.
+    return path.split("/").map(decodeURIComponent).join("/") + locator.slice(path.length);
+  }
+  window.RNAssistantBrowserTarget = { accept: accept, preferenceLocator: preferenceLocator, navigationKey: navigationKey };
 }());

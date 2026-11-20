@@ -73,7 +73,7 @@ namespace RNAssistant.Office.WebView
             } else {
                 if (!BrowserLocalLocator.TryParse(locator, out parsed)) throw new InvalidOperationException("Invalid Browser address.");
                 if (locator == State.Url) return;
-                url = Content.Url(parsed.RelativePath) + parsed.Query + parsed.Fragment;
+                url = Content.Url(parsed.RelativePath ?? Content.EntryPath) + parsed.Query + parsed.Fragment;
                 if (Content.Location(url) != locator) throw new InvalidOperationException("Address outside the current Browser content.");
             }
             var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);

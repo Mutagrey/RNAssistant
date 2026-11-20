@@ -608,7 +608,7 @@ function appendChatMessageText(node, message) {
   var content = messageContent(message);
   body.innerHTML = markdown(content, { preserveLineBreaks: messageRole(message) === "user" });
   node.appendChild(body);
-  enhanceMarkdown(body, { enableVisuals: true, enableJsonViewer: true, sourceText: content });
+  enhanceMarkdown(body, { enableVisuals: true, enableJsonViewer: true, sourceText: content, visualMessageId: messageId(message) });
 }
 
 function liveAgentTailActivities(presentation) {

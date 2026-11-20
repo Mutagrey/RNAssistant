@@ -2,6 +2,7 @@
 const assert=require('node:assert/strict');
 const {withPreviewPage}=require('./preview-session');
 (async()=>withPreviewPage(async({page,errors})=>{
+  page.setDefaultTimeout(8000);
   await page.setViewportSize({width:1440,height:900});
   await page.waitForFunction(()=>state.activeChatId==='preview-chat'&&!state.initializePromise);
   const chat=page.locator('[data-tab-panel-id^="chat:"]').first(), inspector=page.locator('[data-tab-panel-id=inspector]');
@@ -35,5 +36,37 @@ const {withPreviewPage}=require('./preview-session');
   await page.waitForFunction(()=>!!JSON.parse(localStorage.getItem('rnassistant.ui.dock.s1.v1'))?.layout.panels.inspector);
   await page.reload();await page.waitForFunction(()=>state.activeChatId==='preview-chat'&&!state.initializePromise);
   assert.equal(await page.locator('.dock-group-actions').count(),2);assert.equal(await inspector.count(),1);
+  const groupOf = id => page.evaluate(id => {
+    const key = RNAssistantConversationPanel.key({source:'office',sessionId:id});
+    return document.querySelector('[data-tab-panel-id="' + key + '"]')?.closest('.dv-groupview')
+      ?.querySelector('.dock-group-actions')?.dataset.groupId;
+  }, id);
+  await page.evaluate(() => createChat());
+  const second = await page.evaluate(() => state.activeChatId);
+  assert.notEqual(second, 'preview-chat');
+  assert.notEqual(await groupOf(second), await groupOf('preview-chat'), 'new chat opens beside its origin');
+  await page.evaluate(() => createChat());
+  const third = await page.evaluate(() => state.activeChatId);
+  assert.notEqual(third, second);
+  assert.equal(await groupOf(third), await groupOf('preview-chat'), 'next chat reuses a neighboring conversation group');
+  await page.setViewportSize({width:420,height:800});
+  await page.waitForFunction(() => document.querySelectorAll('.dock-group-actions').length === 1);
+  await page.evaluate(second => {
+    RNAssistantDockWorkspace.show('settings');
+    RNAssistantDockWorkspace.close(RNAssistantConversationPanel.key({source:'office',sessionId:second}));
+  }, second);
+  await page.setViewportSize({width:1440,height:900});
+  await page.waitForFunction(() => document.querySelectorAll('.dock-group-actions').length > 1);
+  assert.equal(await page.locator('[data-tab-panel-id=settings]').count(), 1, 'narrow additions survive expansion');
+  assert.equal(await groupOf(second), undefined, 'narrow close survives expansion');
+  assert.ok(await groupOf(third));
+  await split(page.locator('[data-tab-panel-id=settings]'), 'Открыть экран снизу');
+  const chosenGroup = await page.locator('[data-tab-panel-id^="choose-"]').evaluate(tab =>
+    tab.closest('.dv-groupview').querySelector('.dock-group-actions').dataset.groupId);
+  await page.locator('.dock-screen-chooser').getByRole('button', {name:'Открыть чат',exact:true}).click();
+  assert.equal(await page.locator('[data-tab-panel-id^="choose-"]').count(), 1);
+  await page.locator('#chatSessionList [data-tree-key="chat:' + third + '"] .navigation-tree-row').click();
+  await page.waitForFunction(() => !document.querySelector('[data-tab-panel-id^="choose-"]'));
+  assert.equal(await groupOf(third), chosenGroup, 'choosing from the tree honors the explicit Dock group');
   assert.deepEqual(errors,[]);console.log('PASS Dock direct commands, split, singleton movement, group close, retained draft/DOM, narrow focus and restore');
 }))().catch(e=>{console.error(e);process.exitCode=1;});

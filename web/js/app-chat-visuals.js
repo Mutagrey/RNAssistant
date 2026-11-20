@@ -56,7 +56,7 @@
     frame.setAttribute("referrerpolicy", "no-referrer"); frame.srcdoc = content;
     return frame;
   }
-  function mount(pre, language, source) {
+  function mount(pre, language, source, blockId) {
     if (!pre.parentNode || pre.closest(".chat-visual")) return false;
     var wrap = document.createElement("section"); wrap.className = "chat-visual";
     if (language === "html") wrap.classList.add("kind-html");
@@ -121,7 +121,12 @@
         return;
       }
       showCode(false); play.disabled = true; status.textContent = "Открываю изолированный Browser…";
-      Promise.resolve().then(function () { return window.RNAssistantBrowser.openHtmlPreview(source, { title: "HTML из чата" }); })
+      var conversation = wrap.closest(".conversation-panel");
+      var reference = conversation ? RNAssistantConversationPanel.key(JSON.parse(conversation.dataset.conversation)) :
+        window.RNAssistantDockWorkspace && RNAssistantDockWorkspace.activePanelId();
+      if (!blockId) blockId = crypto.randomUUID();
+      Promise.resolve().then(function () { return window.RNAssistantBrowser.openHtmlPreview(source, { title: "HTML из чата",
+        referencePanel: reference, blockId: JSON.stringify([reference, blockId]) }); })
         .then(function (opened) {
           if (disposed) return; play.disabled = false;
           status.textContent = opened === false

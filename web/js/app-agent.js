@@ -129,7 +129,7 @@ function appendAgentFinalAnswer(parent, finalMessage) {
   var content = messageContent(finalMessage.message);
   answer.innerHTML = markdown(content);
   parent.appendChild(answer);
-  enhanceMarkdown(answer, { enableVisuals: true, enableJsonViewer: true, sourceText: content });
+  enhanceMarkdown(answer, { enableVisuals: true, enableJsonViewer: true, sourceText: content, visualMessageId: messageId(finalMessage.message) });
 }
 
 function enhanceActivity(root) {
@@ -295,7 +295,8 @@ function appendAgentStepMessage(parent, text, marker) {
   message.agentReconcileSignature = text;
   message.innerHTML = markdown(text);
   parent.appendChild(message);
-  enhanceMarkdown(message, { enableVisuals: true, enableJsonViewer: true, sourceText: text });
+  enhanceMarkdown(message, { enableVisuals: true, enableJsonViewer: true, sourceText: text,
+    visualMessageId: marker && marker.message && messageId(marker.message) });
 }
 
 function appendAgentStepReason(parent, step) {

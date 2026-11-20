@@ -36,8 +36,14 @@ const { withPreviewPage } = require('./preview-session');
   const browser = id => page.locator('[data-browser-tab-id="' + id + '"]:visible');
   async function toolbar(id, name) {
     await browser(id).locator('.preview-surface-toolbar').waitFor({ state: 'visible' });
+    await page.waitForFunction(() => !document.querySelector('.shell.navigation-transition'));
     const button = browser(id).getByRole('button', { name, exact: true });
-    await button.click();
+    if (name === 'Обсудить в чате рядом' && !await button.isVisible()) {
+      await browser(id).getByRole('button', { name: 'Действия страницы', exact: true }).click();
+      const menuItem = page.getByRole('menuitem', { name, exact: true });
+      if (await menuItem.isVisible()) await menuItem.click();
+      else { await page.keyboard.press('Escape'); await button.click(); }
+    } else await button.click();
   }
   await browser('A').locator('.browser-document-source').waitFor({ state: 'visible' });
   assert.equal(await page.getByText(/Без привязки к чату/).count(), 0);
@@ -46,7 +52,7 @@ const { withPreviewPage } = require('./preview-session');
   const first = await page.evaluate(() => discussionProbe.pages.get('A').ownerScope.chatId);
   const selected = page.locator('#chatSessionList [role="treeitem"][aria-selected="true"]');
   assert.ok((await selected.getAttribute('data-tree-key')).endsWith(':' + first));
-  await page.screenshot({ path: 'docs/ui/review/browser-discussion-wide.png' });
+  if (process.env.RNA_DOCK_REVIEW) await page.screenshot({ path: process.env.RNA_DOCK_REVIEW + '/discussion-wide.png' });
   await page.evaluate(() => RNAssistantDockWorkspace.openTarget({ view: 'browser', browserTabId: 'A', ownerScope: discussionProbe.pages.get('A').ownerScope,
     locator: discussionProbe.pages.get('A').url }));
   await toolbar('A', 'Обсудить в чате рядом');
@@ -58,6 +64,16 @@ const { withPreviewPage } = require('./preview-session');
   await page.waitForFunction(first => RNAssistantConversationPanel.selected()?.target.source === 'workspace' && RNAssistantConversationPanel.selected().target.sessionId !== first, first);
   const other = await page.evaluate(() => RNAssistantConversationPanel.selected().target.sessionId);
   assert.equal(await page.evaluate(() => discussionProbe.pages.get('A').ownerScope.chatId), first);
+  await page.evaluate(other => {
+    const original = discussionProbe.pages.get('A');
+    RNAssistantBrowser.open(original.url, { ...original.ownerScope, chatId: other });
+  }, other);
+  assert.equal(await page.evaluate(() => RNAssistantDockWorkspace.activeTarget().browserTabId), 'A', 'manual opens share the page across project chats');
+  assert.equal(await page.evaluate(() => discussionProbe.pages.get('A').ownerScope.chatId), first, 'manual reuse preserves the bound chat');
+  if (await page.evaluate(() => !RNAssistantShellLayout.isNavigationOpen())) await page.locator('#productMobileMenuButton').click();
+  await page.locator('#chatSessionList [data-tree-key$=":' + other + '"] .navigation-tree-row').click();
+  await page.waitForFunction(other => RNAssistantConversationPanel.selected()?.target.sessionId === other, other);
+  assert.ok(await browser('A').isVisible(), 'opening a chat from the tree keeps the Browser group visible');
   await page.evaluate(() => RNAssistantBrowser.open('/projects/' + discussionProbe.projectId + '/source/index.html',
     { kind: 'Workspace', scopeId: discussionProbe.projectId }, { browserTabId: 'B' }));
   await toolbar('B', 'Обсудить в чате рядом');
@@ -84,7 +100,8 @@ const { withPreviewPage } = require('./preview-session');
   assert.ok((await selected.getAttribute('data-tree-key')).endsWith(':' + other));
   await page.setViewportSize({ width: 420, height: 800 });
   await page.evaluate(() => { document.documentElement.style.zoom = '1.25'; });
-  await page.evaluate(() => RNAssistantDockWorkspace.openTarget({ view: 'browser', browserTabId: 'A', ownerScope: discussionProbe.pages.get('A').ownerScope, locator: discussionProbe.pages.get('A').url }));
+  if (await page.evaluate(() => RNAssistantShellLayout.isNavigationOpen())) await page.locator('#productMobileMenuButton').click();
+  await page.locator('[data-tab-panel-id="browser:A"]').click();
   await toolbar('A', 'Обсудить в чате рядом');
   await page.waitForFunction(() => RNAssistantShellLayout.isNavigationOpen());
   assert.ok(await selected.isVisible(), 'narrow discussion reveals the exact chat in the navigation drawer');
@@ -92,7 +109,7 @@ const { withPreviewPage } = require('./preview-session');
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   assert.equal(await page.evaluate(() => RNAssistantConversationPanel.selected()?.target.sessionId), other, 'late page opens cannot steal the selected chat');
   assert.ok((await selected.getAttribute('data-tree-key')).endsWith(':' + other));
-  await page.screenshot({ path: 'docs/ui/review/browser-discussion-narrow.png' });
+  if (process.env.RNA_DOCK_REVIEW) await page.screenshot({ path: process.env.RNA_DOCK_REVIEW + '/discussion-narrow.png' });
 
   await page.setViewportSize({ width: 1280, height: 900 }); await page.evaluate(() => { document.documentElement.style.zoom = ''; });
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));

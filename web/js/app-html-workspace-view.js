@@ -163,7 +163,7 @@
     var value = state.browserTarget;
     if (!value || value.state !== "Ready") { log("Сохраните HTML-проект перед открытием Browser.", "error"); return false; }
     if (state.htmlWorkspaceDirty || sourceConflict) { log("Сначала сохраните правки или обновите исходники.", "error"); return false; }
-    return RNAssistantBrowser.open(value.displayLocator, value.ownerScope, { reuse: true, title: value.title, referencePanel: key(target) });
+    return RNAssistantBrowser.open(value.displayLocator, value.ownerScope, { title: value.title, referencePanel: key(target) });
   }
   function setHtmlWorkspaceMode(mode) {
     var selection = selectedItem();

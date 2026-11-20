@@ -48,10 +48,12 @@ namespace RNAssistant.Application.Contracts
         [JsonIgnore] public int? NativeHistoryEntryId { get; set; }
         [JsonIgnore] public string NativeLocator { get; set; }
         [JsonIgnore] public BrowserContentSession TransientContent { get; set; }
+        [JsonIgnore] public bool NativeAttachmentVisible { get; set; }
     }
 
     public sealed class BrowserPageStateDto
     {
+        [JsonProperty("visibleAttachment", NullValueHandling = NullValueHandling.Ignore)] public bool? VisibleAttachment { get; set; }
         [JsonProperty("browserTabId")] public string BrowserTabId { get; set; }
         [JsonProperty("operationId")] public string OperationId { get; set; }
         [JsonProperty("ownerScope")] public BrowserOwnerScope OwnerScope { get; set; }

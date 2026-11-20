@@ -3,9 +3,9 @@ function beginChatNavigation() {
   return state.chatNavigationVersion;
 }
 
-function applyChatNavigationState(response, version, type) {
+function applyChatNavigationState(response, version, type, placement) {
   if (version !== state.chatNavigationVersion) return false;
-  return applyChatState(response, type === "deleteChat");
+  return applyChatState(response, type === "deleteChat", { placement: placement });
 }
 
 function sendChatPreference(type, payload) {
@@ -22,7 +22,7 @@ function sendChatPreference(type, payload) {
   return request;
 }
 
-function navigateChat(type, payload) {
+function navigateChat(type, payload, placement) {
   var selectionSource = type === "selectChat" ? officeChatSource(payload.chatId) : null;
   var selectionView = selectionSource && window.RNAssistantConversationPanel ? RNAssistantConversationPanel.selected() : null;
   var clock = function () { return window.performance && window.performance.now ? window.performance.now() : Date.now(); };
@@ -68,11 +68,11 @@ function navigateChat(type, payload) {
     if (selectionSource) selectionSource.accept(selectedState);
     var selectionCurrent = selectionIsCurrent();
     var appliedNavigation = true;
-    if (type === "init" || response.init) applyInitState(response.init || response, { preserveSelection: !selectionCurrent });
+    if (type === "init" || response.init) applyInitState(response.init || response, { preserveSelection: !selectionCurrent, placement: placement });
     else if (!selectionCurrent) { applyChatCatalogState(selectedState); appliedNavigation = false; }
-    else if (response.state) appliedNavigation = applyChatNavigationState(selectedState, version, type);
+    else if (response.state) appliedNavigation = applyChatNavigationState(selectedState, version, type, placement);
     else if (response.activeChatId !== undefined)
-      appliedNavigation = applyChatNavigationState(selectedState, version, type);
+      appliedNavigation = applyChatNavigationState(selectedState, version, type, placement);
     if (type === "selectChat" && selectionCurrent && !appliedNavigation && state.chatDetailPending &&
         state.activeChatId === payload.chatId) {
       state.chatDetailPending = false;
@@ -122,13 +122,13 @@ function isOutlookMailboxKey(key) {
 async function attachOutlookMailbox(key, chatIdValue, createNew) {
   await navigateChat("attachOutlookMailbox", {
     documentKey: key, chatId: chatIdValue || "", createNew: !!createNew
-  });
+  }, createNew ? RNAssistantConversationPanel.newPlacement() : undefined);
 }
 
 async function createChat() {
   if (state.chatNavigationPending) return;
   try {
-    await navigateChat("createChat", { title: "Новый чат" });
+    await navigateChat("createChat", { title: "Новый чат" }, RNAssistantConversationPanel.newPlacement());
     clearSendError();
     log("Чат создан.");
   } catch (error) {
@@ -153,7 +153,7 @@ async function createDocumentChat(documentItem) {
       documentKey: documentItem.documentKey,
       documentTitle: documentItem.title,
       documentPath: documentItem.path || ""
-    });
+    }, RNAssistantConversationPanel.newPlacement());
     clearSendError();
     log("Чат для документа создан.");
   } catch (error) {
@@ -168,13 +168,15 @@ async function selectChat(id) {
   // Placement follows the clicked target immediately. Native selection still
   // serializes document binding/persistence, but does not block an existing view.
   var chat = (state.chats || []).find(function (item) { return chatId(item) === id; });
+  var placement = RNAssistantDockWorkspace.chatNavigationPlacement();
   if (window.RNAssistantConversationPanel && (alreadySelected || chat && chatIsCurrentDocument(chat))) {
-    if (!RNAssistantConversationPanel.open({ source: "office", sessionId: id })) return;
+    if (!RNAssistantConversationPanel.open({ source: "office", sessionId: id }, placement)) return;
+    placement = undefined;
   }
   if (alreadySelected) return;
 
   try {
-    if (!await navigateChat("selectChat", { chatId: id })) return;
+    if (!await navigateChat("selectChat", { chatId: id }, placement)) return;
     clearSendError();
     log("Чат открыт.");
   } catch (error) {
@@ -364,7 +366,7 @@ function applyInitState(init, options) {
   state.chats = [];
   state.htmlWorkspace = null;
   if (options && options.preserveSelection) applyChatCatalogState(init);
-  else { clearOfficeChatProjection(); applyChatState(init); }
+  else { clearOfficeChatProjection(); applyChatState(init, false, options); }
   $("toolsPath").textContent = state.toolsPath ? "Хранилище: " + state.toolsPath : "";
   if ($("skillsPath")) $("skillsPath").textContent = state.skillsPath ? "Хранилище: " + state.skillsPath : "";
   renderSettings();

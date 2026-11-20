@@ -385,7 +385,8 @@
           var result = await send(action.name === "fork" ? "forkProjectChat" : "deleteProjectChatMessage", {
             workspaceId: target.workspaceId, sessionId: target.sessionId, messageId: action.message.Id });
           if (!component.isCurrent()) return;
-          if (action.name === "fork") RNAssistantConversationPanel.open({ source: "workspace", workspaceId: target.workspaceId, sessionId: result.sessionId });
+          if (action.name === "fork") RNAssistantConversationPanel.open({ source: "workspace", workspaceId: target.workspaceId, sessionId: result.sessionId },
+            RNAssistantConversationPanel.newPlacement(RNAssistantConversationPanel.key(target)));
           else accept(result);
         } catch (error) { component.notice(error); }
       },

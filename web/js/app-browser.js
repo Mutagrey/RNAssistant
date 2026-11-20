@@ -39,8 +39,7 @@
   }
   function preferenceTarget(target) {
     if (!accepts(target)) return null;
-    if (target.inline) return { view: "browser", browserTabId: target.browserTabId, locator: "/",
-      ownerScope: { kind: "User", scopeId: "local", chatId: null }, title: "Browser", chatBound: false };
+    if (target.inline) return null;
     var scope = target.ownerScope;
     return { view: "browser", browserTabId: target.browserTabId, locator: RNAssistantBrowserTarget.preferenceLocator(target.locator),
       ownerScope: { kind: scope.kind, scopeId: scope.scopeId, chatId: typeof scope.chatId === "string" && scope.chatId.length <= 256 ? scope.chatId : null },
@@ -61,6 +60,7 @@
     var renderer = RNAssistantViewerRegistry.mount("browser", mount, { surface: root, portalHost: document.querySelector(".shell"), onLayout: layoutNative, onEnter: function () { if (session && selectedMode === "preview" && current.status === "Ready") { command("Focus").catch(fail); return true; } return false; } });
     var active = false, disposed = false, opening = null, session = null, current = null, generation = 0, recordedVisit = 0, pending = new Set();
     var sourcePage = null, sourceViewer = null, loadingSource = 0, selectedMode = "preview", targetGeneration = -1, homeView = null;
+    var agentAttachments = new Map(), restarting = null;
     var fileNavigation = createBrowserFileNavigation();
     shell.setNavigation({ element: fileNavigation.element, available: browserFilesAvailable });
     var operationId = target.operationId || id(), definitionDialog = null, targetInvalidated = false, sourceInvalidated = false, authorityRevision = -1, sourceRefreshEpoch = 0;
@@ -210,21 +210,47 @@
     function nativeBounds(attachment) {
       var fallback = attachment && current && current.status === "Unavailable";
       var rect = (fallback ? content : viewport).getBoundingClientRect(), overlay = nativeOverlayOpen(rect);
-      var visible = active && mount.isConnected && !root.hidden && selectedMode === "preview" && current &&
-        !["Home", "Removed", "Closed", "Unavailable", "Failed"].includes(current.status) && !overlay;
-      return { visible: !!(visible || fallback && active && mount.isConnected) && rect.width > 0 && rect.height > 0,
-        x: Math.max(0, rect.x), y: Math.max(0, rect.y), width: Math.max(0, Math.min(rect.width, innerWidth - Math.max(0, rect.x))),
-        height: Math.max(0, Math.min(rect.height, innerHeight - Math.max(0, rect.y))), viewportWidth: innerWidth, viewportHeight: innerHeight };
+      var visible = active && mount.isConnected && !root.hidden && getComputedStyle(root).visibility === "visible" &&
+        selectedMode === "preview" && current && !overlay &&
+        (fallback || ["Starting", "Ready"].includes(current.status));
+      var x = Math.max(0, rect.left), y = Math.max(0, rect.top);
+      var width = Math.max(0, Math.min(rect.right, innerWidth) - x), height = Math.max(0, Math.min(rect.bottom, innerHeight) - y);
+      return { visible: !!visible && width >= 1 && height >= 1, x: x, y: y, width: width, height: height,
+        viewportWidth: innerWidth, viewportHeight: innerHeight };
+    }
+    function attachAgentRequests(force) {
+      if (!agentAttachments.size) return;
+      var bounds = nativeBounds(true), geometry = current.status + ":" + JSON.stringify(bounds);
+      agentAttachments.forEach(function (request, operation) {
+        if (request.session !== session || request.generation !== current.documentGeneration || performance.now() >= request.expires) {
+          agentAttachments.delete(operation); return;
+        }
+        if (!bounds.visible) { request.geometry = null; return; }
+        if (request.complete || request.sending || request.geometry === geometry && !force) return;
+        request.sending = true;
+        request.geometry = geometry;
+        command("Attach", { operationId: operation, generation: request.generation, bounds: bounds }, true).then(function (result) {
+          if (result.status === "Failed" || result.status === "Unavailable" || result.status === "Ready" && result.visibleAttachment)
+            request.complete = true;
+        }, function (error) {
+          if (!disposed && session === request.session && current.documentGeneration === request.generation) fail(error);
+          request.complete = true;
+        }).finally(function () { request.sending = false; if (!request.complete) layoutNative(); });
+      });
     }
     function layoutNative(force) {
       if (disposed) return;
-      if (placementQueued) { placementForce = placementForce || !!force; return; }
+      placementForce = placementForce || !!force;
+      if (placementQueued) return;
       placementQueued = requestAnimationFrame(function () {
         placementQueued = 0;
-        if (disposed || !session || !current || !current.attached) return;
+        var forced = placementForce; placementForce = false;
+        if (disposed || !session || !current) return;
+        attachAgentRequests(forced);
+        if (!current.attached) return;
         var bounds = nativeBounds(), key = JSON.stringify(bounds);
-        if (key === placementKey && !placementForce) return;
-        placementForce = false; placementKey = key;
+        if (key === placementKey && !forced) return;
+        placementKey = key;
         command("Layout", { bounds: bounds }, true).catch(function (error) {
           if (placementKey === key) placementKey = "";
           fail(error);
@@ -548,14 +574,16 @@
         RNAssistantDockWorkspace.recordNavigation(value); recordedVisit = value.visitRevision;
       }
       annotationHost.update(value);
-      if (value.status === "Closed") { inlineHtmlPreviews.delete(target.browserTabId); session = null; sourcePage = null; fileNavigation.reset(); syncFileNavigationAvailability();
+      if (value.status === "Closed") { agentAttachments.clear(); session = null; sourcePage = null; fileNavigation.reset(); syncFileNavigationAvailability();
+        var inline = target.inline && inlineHtmlPreviews.get(target.browserTabId);
+        if (inline && !restarting) inline.html = null;
         loading.hidden = true; loading.textContent = "";
         stopReads(); fail(value.message || "Страница закрыта вместе с исходным контекстом."); return; }
       if (targetGeneration !== value.documentGeneration) { stopReads(); sourcePage = null; RNAssistantViewerRegistry.unmount(source); source.replaceChildren();
         clearHomeSuggestions();
         fileNavigation.reset();
         RNAssistantDockWorkspace.updateTarget({ view: "browser", browserTabId: target.browserTabId, ownerScope: value.ownerScope, chatBound: value.chatBound,
-          locator: value.url, title: value.title || "Browser" });
+          locator: value.url, title: value.title || "Browser", inline: target.inline });
         targetGeneration = value.documentGeneration; sourceViewer = null; updateSearchAdapter(); versionControls.reset(); versionControls.refresh();
         if (comparison) { comparison.dispose(); comparison.element.remove(); comparison = null; }
         var descriptor = value.target;
@@ -586,17 +614,19 @@
       return value;
     }
     async function open() {
-      if (session || opening || disposed || !active) return opening;
+      if (session || opening || disposed || !active || target.managedOpen || target.inline && current && current.status === "Closed") return opening;
       opening = (async function () {
         if (!state.bridgeToken && state.initializePromise) await state.initializePromise;
         if (disposed || !active) return;
-        var html = target.inline ? inlineHtmlPreviews.get(target.browserTabId) : null;
+        var preview = target.inline && inlineHtmlPreviews.get(target.browserTabId);
+        var html = preview && preview.html;
         if (target.inline && typeof html !== "string") throw new Error("Интерактивный HTML истёк. Нажмите Play в сообщении ещё раз.");
         var payload = { action: target.inline ? "OpenInline" : "Open", browserTabId: target.browserTabId, operationId: operationId,
           ownerScope: target.ownerScope, locator: target.locator, bindChat: target.chatBound !== false };
         if (target.inline) { payload.html = html; payload.title = target.title; }
         var value = await send("browserCommand", payload);
         if (disposed) { await send("browserCommand", { action: "Close", browserTabId: target.browserTabId, sessionId: value.sessionId }); return; }
+        if (session === value.sessionId) return; // An agent has already adopted this in-flight manual open.
         session = value.sessionId; apply(value);
         if (!mount.isConnected) throw new Error("Вкладка Browser не прикреплена к Dock.");
         renderer.layout(); await new Promise(function (resolve) { requestAnimationFrame(resolve); });
@@ -607,8 +637,40 @@
       }());
       try { await opening; } finally { opening = null; }
     }
+    function adoptAgentOpen(request) {
+      var value = request.page;
+      if (disposed || session && session !== value.sessionId || current && current.sessionId === value.sessionId &&
+          (current.documentGeneration !== value.documentGeneration || current.url !== value.url || current.status === "Closed")) return false;
+      if (agentAttachments.has(request.operationId)) return true;
+      session = value.sessionId; operationId = value.operationId;
+      agentAttachments.set(request.operationId, { session: session, generation: value.documentGeneration, expires: performance.now() + 10000 });
+      apply(value);
+      if (selectedMode !== "preview") selectMode("preview");
+      layoutNative();
+      return true;
+    }
+    function restartInline() {
+      if (!target.inline || disposed) return false;
+      if (restarting) return restarting;
+      restarting = (async function () {
+        if (opening) await opening;
+        if (disposed) return false;
+        if (session) {
+          var closing = session;
+          try { await command("Close"); }
+          catch (error) { if (session === closing) throw error; }
+        }
+        if (disposed || !active) return false;
+        current = null; targetGeneration = -1; recordedVisit = 0; placementKey = "";
+        operationId = id();
+        await open();
+        return !disposed && !!session;
+      }()).catch(function (error) { fail(error); throw error; }).finally(function () { restarting = null; });
+      return restarting;
+    }
     live.set(target.browserTabId, apply);
     return { element: mount, layout: renderer.layout, annotationHost: annotationHost, canClose: function () { return !annotationHost.busy(); },
+      adoptAgentOpen: adoptAgentOpen, restartInline: restartInline,
       bridgeReady: function () { if (active && !disposed && !session && !opening) open().catch(fail); },
       pluginImported: function (pluginId) {
         if (disposed || !pluginId) return;
@@ -632,10 +694,13 @@
         authorityRevision = notice.generation; sourceInvalidated = true; if (active) refreshSource();
         clearHomeSuggestions();
       },
-      route: function () { return { view: "browser", browserTabId: target.browserTabId, ownerScope: current && current.ownerScope || target.ownerScope, chatBound: current ? current.chatBound : target.chatBound, locator: current && current.url || target.locator, title: current && current.title || target.title }; },
+      route: function () { return { view: "browser", browserTabId: target.browserTabId, ownerScope: current && current.ownerScope || target.ownerScope,
+        chatBound: current ? current.chatBound : target.chatBound, locator: current && current.url || target.locator,
+        title: current && current.title || target.title, status: current && current.status, inline: target.inline, sessionId: session,
+        generation: current && current.documentGeneration, source: current && current.target }; },
       activate: function () { if (disposed || active) return; active = true; renderer.activate(); if (session) { if (targetInvalidated) reloadInvalidated(); else { render(); if (current) annotationHost.update(current); if (sourceInvalidated) refreshSource(); else versionControls.refresh(); } } else open().catch(fail); },
       deactivate: function () { if (!active) return; pageFind.deactivate(); annotationHost.deactivate(); active = false; stopReads(); versionControls.deactivate(); providerActions.deactivate(); if (comparison) comparison.deactivate(); if (homeView) homeView.deactivate(); surface.collapse(); renderer.deactivate(); layoutNative(); },
-      dispose: function () { if (disposed) return; disposed = true; active = false; inlineHtmlPreviews.delete(target.browserTabId); handoverListeners.abort(); stopOverlayWatch(); cancelAnimationFrame(placementQueued); nativeSize.disconnect(); stopReads();
+      dispose: function () { if (disposed) return; disposed = true; active = false; agentAttachments.clear(); inlineHtmlPreviews.delete(target.browserTabId); handoverListeners.abort(); stopOverlayWatch(); cancelAnimationFrame(placementQueued); nativeSize.disconnect(); stopReads();
         if (live.get(target.browserTabId) === apply) live.delete(target.browserTabId);
         if (versionViews.get(target.browserTabId) === versionView) versionViews.delete(target.browserTabId);
         versionControls.dispose(); providerActions.dispose(); if (comparison) comparison.dispose();
@@ -644,14 +709,36 @@
         RNAssistantViewerRegistry.unmount(source); RNAssistantViewerRegistry.unmount(mount); surface.clear(); shell.destroy(); root.replaceChildren(); }
     };
   }
-  function open(locator, owner, options) {
-    owner = owner || { kind: "User", scopeId: "local" }; options = Object.assign({}, options || {});
-    if (options.reuse && !options.browserTabId) RNAssistantDockWorkspace.eachView("browser", function (view) {
-      var route = view.route(); if (route.locator === locator && route.ownerScope.kind === owner.kind && route.ownerScope.scopeId === owner.scopeId &&
-        (route.ownerScope.chatId || "") === (owner.chatId || "") && (route.chatBound !== false || !owner.chatId)) options.browserTabId = route.browserTabId;
+  function sameScope(left, right) {
+    return left && right && left.kind === right.kind && left.scopeId === right.scopeId;
+  }
+  function reusableRoute(locator, owner, options) {
+    var address = RNAssistantBrowserTarget.navigationKey(locator), found, best = -1;
+    if (!address) return null;
+    RNAssistantDockWorkspace.eachView("browser", function (view) {
+      var route = view.route(), source = route.source;
+      if (route.inline || route.status === "Closed" || route.status === "Removed" ||
+          RNAssistantBrowserTarget.navigationKey(route.locator) !== address) return;
+      var sameOwner = sameScope(owner, route.ownerScope) && (owner.chatId || "") === (route.ownerScope.chatId || "");
+      if (options.background && (!sameOwner || route.chatBound === false)) return;
+      var sharedWorkspace = address.startsWith("/projects/") || address.startsWith("/plugins/");
+      var shared = sharedWorkspace && (sameScope(owner, route.ownerScope) || source && sameScope(owner, source.ownerScope) ||
+        owner.kind === "User" && source && source.ownerScope && source.ownerScope.kind === "Workspace");
+      var exactResource = options.resourceUri && source && source.resourceUri === options.resourceUri && sameScope(owner, source.ownerScope);
+      if (!sameOwner && !shared && !exactResource) return;
+      var score = (sameOwner ? 2 : 0) + (RNAssistantDockWorkspace.isVisible(key(route)) ? 1 : 0);
+      if (score > best) { best = score; found = route; }
     });
-    return RNAssistantDockWorkspace.openTarget({ view: "browser", browserTabId: options && options.browserTabId || id(),
-      operationId: options && options.operationId, locator: locator || "/", ownerScope: owner || { kind: "User", scopeId: "local" }, title: options && options.title || "Browser" }, options);
+    return found;
+  }
+  function open(locator, owner, options) {
+    if (window.RNAssistantWindow && RNAssistantWindow.inFull(function () { open(locator, owner, options); })) return true;
+    locator = locator || "/";
+    owner = owner || { kind: "User", scopeId: "local" };
+    options = options || {};
+    var existing = !options.browserTabId && reusableRoute(locator, owner, options);
+    return RNAssistantDockWorkspace.openTarget(existing || { view: "browser", browserTabId: options.browserTabId || id(),
+      locator: locator, ownerScope: owner, title: options.title || "Browser", chatBound: options.chatBound }, options);
   }
   function openResource(target, options) {
     // Format a local display address from the exact runtime reference. The native
@@ -659,28 +746,68 @@
     var match = /^rna:\/\/chat\/[^/]+\/artifact\/([^/]+)\/revision\/([1-9][0-9]*)$/.exec(target.resourceUri || "");
     if (!match || !target.documentId || !target.chatId) return false;
     var locator; try { locator = "/resources/" + encodeURIComponent(decodeURIComponent(match[1]) + "~" + match[2]); } catch (_) { return false; }
-    return open(locator, { kind: "Document", scopeId: target.documentId, chatId: target.chatId }, Object.assign({ reuse: true, title: target.title }, options || {}));
+    return open(locator, { kind: "Document", scopeId: target.documentId, chatId: target.chatId },
+      Object.assign({ resourceUri: target.resourceUri, title: target.title }, options || {}));
   }
   function openHtmlPreview(html, options) {
     if (typeof html !== "string" || !html.length || html.length > 200000) return false;
     if (!available) return false;
     options = options || {};
+    if (window.RNAssistantWindow && RNAssistantWindow.inFull(function () { openHtmlPreview(html, options); })) return true;
+    var placement = { referencePanel: options.referencePanel }, existing;
+    if (options.blockId) inlineHtmlPreviews.forEach(function (preview, tabId) {
+      if (!existing && preview.blockId === options.blockId) existing = RNAssistantDockWorkspace.getView(key({ browserTabId: tabId }));
+    });
+    if (existing) {
+      var route = existing.route();
+      if (!RNAssistantDockWorkspace.openTarget(route, placement)) return false;
+      inlineHtmlPreviews.get(route.browserTabId).html = html;
+      return existing.restartInline();
+    }
     var browserTabId = id(), keyValue = "inline-" + browserTabId;
-    inlineHtmlPreviews.set(browserTabId, html);
+    inlineHtmlPreviews.set(browserTabId, { html: html, blockId: options.blockId });
     var opened = false;
     try {
       opened = RNAssistantDockWorkspace.openTarget({ view: "browser", browserTabId: browserTabId,
         operationId: "html-" + crypto.randomUUID(), locator: "/resources/" + encodeURIComponent(keyValue) + "/files/index.html",
         ownerScope: { kind: "User", scopeId: "local" }, title: String(options.title || "HTML из чата").slice(0, 160),
-        inline: true, transient: true, chatBound: false }, { reuse: false });
+        inline: true, chatBound: false }, placement);
     } finally { if (!opened) inlineHtmlPreviews.delete(browserTabId); }
     return opened;
   }
+  function openRequested(request) {
+    if (!request || !request.ownerScope || !request.ownerScope.scopeId) return false;
+    if (window.RNAssistantWindow && RNAssistantWindow.inFull(function () { openRequested(request); })) return true;
+    if (request.origin === "PageLink" || request.origin === "AgentLink") {
+      var source = RNAssistantDockWorkspace.getView(key({ browserTabId: request.sourceBrowserTabId }));
+      var route = source && source.route();
+      if (!route || route.sessionId !== request.sourceSessionId || route.generation !== request.sourceGeneration ||
+          !sameScope(route.ownerScope, request.ownerScope) || route.ownerScope.chatId !== request.ownerScope.chatId) return false;
+      var background = request.origin === "AgentLink";
+      return open(request.locator, route.ownerScope,
+        { referencePanel: key(route), chatBound: route.chatBound, beside: background, background: background });
+    }
+    var page = request.page;
+    if (request.origin !== "Agent" || !request.operationId || !page || !page.sessionId || !page.operationId ||
+        page.browserTabId !== request.browserTabId || page.url !== request.locator || !page.chatBound ||
+        !sameScope(page.ownerScope, request.ownerScope) || page.ownerScope.chatId !== request.ownerScope.chatId) return false;
+    var owner = request.ownerScope, address = owner.kind === "Document" ? { source: "office", sessionId: owner.chatId } :
+      { source: "workspace", workspaceId: owner.scopeId, sessionId: owner.chatId };
+    var target = { view: "browser", browserTabId: request.browserTabId, ownerScope: owner, locator: request.locator,
+      title: request.title || "Browser", managedOpen: true };
+    var existing = RNAssistantDockWorkspace.getView(key(target));
+    if (existing && !existing.adoptAgentOpen(request)) return false;
+    var opened = RNAssistantDockWorkspace.openTarget(target, { referencePanel: RNAssistantConversationPanel.key(address), beside: true, background: true });
+    if (!opened && page.operationId === request.operationId) {
+      // Dock refused the newly allocated instance. Close its exact session so a
+      // tab the user could never reach does not occupy a slot in the runtime.
+      send("browserCommand", { action: "Close", browserTabId: page.browserTabId, sessionId: page.sessionId }).catch(function () {});
+    }
+    var view = opened && (existing || RNAssistantDockWorkspace.getView(key(target)));
+    return !!view && (!!existing || view.adoptAgentOpen(request));
+  }
   window.RNAssistantBrowser = { open: open, openResource: openResource, openHtmlPreview: openHtmlPreview, create: create, key: key, unavailable: unavailable,
-    openRequested: function (request) {
-      if (!request || !request.operationId || !request.browserTabId || !request.ownerScope || !request.ownerScope.scopeId) return false;
-      return open(request.locator, request.ownerScope, { browserTabId: request.browserTabId, operationId: request.operationId, title: request.title });
-    },
+    openRequested: openRequested,
     bootstrap: function (value) { available = value === true; },
     ready: function () { RNAssistantDockWorkspace.eachView("browser", function (view) { view.bridgeReady(); }); },
     pluginImported: function (pluginId) { RNAssistantDockWorkspace.eachView("browser", function (view) { view.pluginImported(pluginId); }); },

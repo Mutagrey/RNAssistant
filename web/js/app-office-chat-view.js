@@ -164,7 +164,10 @@
         deleting = true; component.controls();
         try {
           var response = await send(value.name === "fork" ? "forkChat" : "deleteMessage", { chatId: id, id: messageId(value.message), index: value.index });
-          if (value.name === "fork") { if (component.isCurrent()) applyChatState(response.state || response); }
+          if (value.name === "fork") {
+            if (component.isCurrent()) applyChatState(response.state || response, false, { placement:
+              RNAssistantConversationPanel.newPlacement(RNAssistantConversationPanel.key(target)) });
+          }
           else if (component.isCurrent()) accept(response);
         } catch (error) { component.notice(error); }
         finally { deleting = false; component.render(); }

@@ -121,6 +121,8 @@ metadata alone grants no execution capability. Attach waits for native readiness
 Native page responses use captured exact members; file/query/hash navigation never
 turns into arbitrary HTTP access. Document resource members may be addressed as
 `/resources/{key}[/versions/{id}]/files/{relativePath}`.
+The default member retains its admitted resource address when native history
+reports it. The descriptor carries the exact member path.
 
 RN.resources open/read/close/subscribe uses a per-page bounded lease owner over the
 existing ResourceDataPlane. It never holds its lock across host reads. HTML assembly
@@ -161,10 +163,14 @@ is being replaced by actual native delivery, not relabeled as a completed featur
 ## Agent open / local transport — F2b, 2026-11-13
 
 `browser.open` accepts an unambiguous semantic source delivered by `core.find` in
-this exact run. Runtime allocates tab/operation identity; success requires the exact
-visible Dock attachment, not merely a page allocation. Owner/run/call and receipts
-prevent cross-session reuse or duplicate dispatch. Timeout/cancellation/terminal
-failure leaves Unknown; manual close is required before another open of that source.
+this exact run. Runtime reuses a live page with the same bound owner, exact source,
+version and current address. Concurrent calls can share the tab and session.
+`browserOpenRequested` carries the typed origin. An agent request carries its
+operation ID and exact page snapshot. A link carries the originating tab, session
+and document generation. Each agent call completes on its own `Attach` after
+runtime verifies the operation, session, generation, and visible bounds. With
+WebView2 the native renderer confirms visibility. Timeout/cancellation/terminal
+failure after dispatch leaves Unknown. An unresolved page must be closed manually.
 Source-only success reports `executionAvailable:false`; it grants no live page read,
 input or media. Plan cannot mutate placement. Reset invalidates pending operations.
 

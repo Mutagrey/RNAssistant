@@ -106,13 +106,13 @@ function clearOfficeChatProjection() {
   if (selectedOfficeProjection && !component) selectedOfficeProjection.dispose();
   selectedOfficeProjection = null;
 }
-function selectOfficeChatProjection(chatId) {
+function selectOfficeChatProjection(chatId, placement) {
   if (selectedOfficeProjection && selectedOfficeProjection.isCurrent() &&
-      selectedOfficeProjection.target.sessionId === chatId) return selectedOfficeProjection;
+      selectedOfficeProjection.target.sessionId === chatId && !placement) return selectedOfficeProjection;
   clearOfficeChatProjection();
   if (!chatId) return null;
   if (window.RNAssistantConversationPanel) {
-    RNAssistantConversationPanel.open({ source: "office", sessionId: chatId });
+    RNAssistantConversationPanel.open({ source: "office", sessionId: chatId }, placement);
     var component = RNAssistantConversationPanel.office(chatId);
     if (component) { selectedOfficeProjection = component.projection(); return selectedOfficeProjection; }
     return null;
@@ -694,7 +694,7 @@ function applyChatState(response, skipDraftCapture, options) {
   state.chatStateApplyVersion = (state.chatStateApplyVersion || 0) + 1;
   var chatChanged = previousChatId !== nextChatId;
   prepareOfficeChatSelection(nextChatId, skipDraftCapture);
-  var projection = selectOfficeChatProjection(nextChatId);
+  var projection = selectOfficeChatProjection(nextChatId, options && options.placement);
   if (projection) projection.accept(hasResponseChatId ? response :
     Object.assign({ activeChatId: nextChatId }, response), Object.assign({}, options, { knownRevision: previousRevision }));
   var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.office(nextChatId);

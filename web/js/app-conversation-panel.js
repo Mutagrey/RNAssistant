@@ -314,6 +314,12 @@
       RNAssistantDockWorkspace.close(key(target));
     },
     selected: function () { return selected; },
+    newPlacement: function (referencePanel) {
+      var active = RNAssistantDockWorkspace.activeTarget();
+      return (!referencePanel && RNAssistantDockWorkspace.chatNavigationPlacement()) ||
+        { referencePanel: referencePanel || (active && ["conversation", "browser"].includes(active.view) ?
+          RNAssistantDockWorkspace.activePanelId() : selected && key(selected.target)), beside: true };
+    },
     open: function (target, options) { return RNAssistantDockWorkspace.openTarget(route(target), options); },
     each: function (callback) { RNAssistantDockWorkspace.eachView("conversation", callback); }
   };

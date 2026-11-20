@@ -22,7 +22,8 @@
     function place() {
       queued = 0;
       if (disposed) return;
-      var rect = anchor.getBoundingClientRect(), shown = active && anchor.isConnected && rect.width > 0 && rect.height > 0 && !anchor.closest("[inert]");
+      var rect = anchor.getBoundingClientRect(), shown = active && anchor.isConnected && rect.width > 0 && rect.height > 0 &&
+        !anchor.closest("[inert]") && getComputedStyle(container).visibility === "visible";
       var visibilityChanged = surface.hidden !== !shown; surface.hidden = !shown; surface.inert = !shown;
       if (!shown) { var restore = visibilityChanged || !!last; last = ""; if (restore && options.onLayout) options.onLayout(); return; }
       var box = container.getBoundingClientRect(), scale = box.width / container.clientWidth || 1;

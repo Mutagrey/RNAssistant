@@ -36,7 +36,7 @@ function switchTab(name, options) {
   }
   if (window.RNAssistantDockWorkspace) window.RNAssistantDockWorkspace.onTabChange(name);
   if (!changed) {
-    if (workspaceView) RNAssistantDockWorkspace.show(workspaceView);
+    if (workspaceView && !(options && options.preserveDockPanel)) RNAssistantDockWorkspace.show(workspaceView);
     return;
   }
   if (name === "chat") {
@@ -54,7 +54,7 @@ function switchTab(name, options) {
     renderVbaProject();
     if (typeof updateVbaMacroRunState === "function") updateVbaMacroRunState();
   }
-  if (workspaceView) RNAssistantDockWorkspace.show(workspaceView);
+  if (workspaceView && !(options && options.preserveDockPanel)) RNAssistantDockWorkspace.show(workspaceView);
 }
 
 document.addEventListener("DOMContentLoaded", function () {

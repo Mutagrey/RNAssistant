@@ -5,7 +5,7 @@
   var saveTimer, restoring = false, preservePreference = false;
   var compact = false, wideLayout = null, settingsVisible = false;
   var nativeVisible = true, hostCompact = false, compactChat = null, fullPresentation = null, compactEmpty;
-  var tabFrame;
+  var tabFrame, activation = 0, chatChooser = null;
   var objectViews = Object.create(null);
   var singletonContents = Object.create(null);
   var inspectorWidth, inspectorPinned = false, inspectorExit = null;
@@ -75,6 +75,54 @@
     if (views[id]) throw new Error("Workspace view already registered: " + id);
     views[id] = descriptor;
   }
+  function panelType(item) { return item && item.params && item.params.target && item.params.target.view; }
+  function canSplit(group, direction) {
+    if (hostCompact || !group || !group.api.isVisible) return false;
+    return direction === "right" ? !compact && group.api.width >= 560 :
+      group.api.height >= 420 && (!compact || api.groups.length < 2);
+  }
+  function recentGroup(type, except, protectedGroup) {
+    var group = null, latest = -1;
+    api.panels.forEach(function (item) {
+      if (panelType(item) !== type || item.id === "conversation" || item.group === except || item.group === protectedGroup ||
+          !item.group.api.isVisible) return;
+      var order = objectViews[item.id] && objectViews[item.id].lastActive || 0;
+      if (order > latest) { latest = order; group = item.group; }
+    });
+    return group;
+  }
+  function placement(target, item, options) {
+    var explicit = options.group && api.getGroup(options.group.id);
+    if (explicit) return { group: explicit, direction: options.direction || "within" };
+    var reference = panel(options.referencePanel) || api.activePanel;
+    var origin = reference && reference.group || api.activeGroup;
+    var protectedGroup = options.background && api.activeGroup;
+    var alongside = !hostCompact && (options.beside || target.view === "browser" && panelType(reference) !== "browser");
+    if (item && (!alongside || item.group !== origin) &&
+        (item.group !== protectedGroup || item === api.activePanel)) return { group: item.group, direction: "within" };
+    if (alongside && origin && (!reference || reference.id !== "conversation")) {
+      var neighbor = recentGroup(target.view, origin, protectedGroup);
+      if (neighbor) return { group: neighbor, direction: "within" };
+      if (canSplit(origin, "right")) return { group: origin, direction: "right" };
+      if (canSplit(origin, "below")) return { group: origin, direction: "below" };
+    }
+    // Links from a Browser tab normally share its group. When space runs out,
+    // leave an existing tab in place and reveal it there.
+    var fallback = target.view === "browser" && panelType(reference) !== "browser" && recentGroup("browser", null, protectedGroup);
+    return { group: item && item.group || fallback || origin, direction: options.direction || "within" };
+  }
+  function focusActivePanel() {
+    var item = api.activePanel, record = item && objectViews[item.id];
+    if (!record) return;
+    record.lastActive = ++activation;
+    if (record.view.focus) record.view.focus();
+  }
+  function chatNavigationPlacement() {
+    var chooser = panel(chatChooser);
+    var active = api && api.activePanel;
+    if (chooser && chooser === active) return { group: chooser.group, chooserId: chooser.id };
+    if (panelType(active) === "browser") return { referencePanel: active.id, beside: true };
+  }
   function openTarget(target, options) {
     if (target && target.view !== "conversation" && window.RNAssistantWindow && RNAssistantWindow.inFull(function () { openTarget(target, options); })) return true;
     var descriptor = target && views[target.view];
@@ -82,44 +130,47 @@
     target = Object.freeze(Object.assign({}, target));
     if (descriptor.targetRoute) return descriptor.open(target, options);
     if (!api || !descriptor.perObject) return false;
-    var chooser = api.activePanel && /^choose-\d+$/.test(api.activePanel.id) ? api.activePanel : null;
+    options = options || {};
     var id = descriptor.key(target), item = panel(id);
-    var reference = options && panel(options.referencePanel);
-    var direction = options && options.beside ? (compact || host.clientWidth < 560 ? "within" : "right") : options && options.direction || "within";
-    if (hostCompact) direction = "within";
-    if (item && options && options.group && item.group !== options.group) item.api.moveTo({ group: options.group, position: "center" });
-    if (item && reference && options.beside && direction === "right" && item.group === reference.group)
-      item.api.moveTo({ group: reference.group, position: "right" });
     if (!item) {
-      var count = api.panels.filter(function (p) { return p.params && p.params.target && p.params.target.view === target.view; }).length;
+      var count = api.panels.filter(function (p) { return p.id !== "conversation" && panelType(p) === target.view; }).length;
       if (count >= descriptor.maximumInstances) { notice("Открыто " + count + " просмотров. Закройте один перед открытием нового."); return false; }
-      item = api.addPanel({ id: id, component: target.view, title: descriptor.titleFor(target),
-        params: { target: target }, renderer: typeof descriptor.renderer === "function" ? descriptor.renderer(target) : descriptor.renderer || "always", minimumWidth: 150, minimumHeight: 120,
-        position: options && options.group ? { referenceGroup: options.group, direction: direction } :
-          (reference || api.activePanel) ? { referencePanel: reference || api.activePanel, direction: direction } : undefined });
     }
-    item.group.api.setVisible(true); item.api.setActive(); changed();
-    var record = objectViews[id]; if (record && record.view.focus) record.view.focus();
-    if (target.view === "conversation" && target.sessionId && panel("conversation")) panel("conversation").api.close();
-    if (chooser && panel(chooser.id)) chooser.api.close();
-    if (hostCompact && target.view === "conversation") {
-      compactChat = item.id; compactEmpty.hidden = !!target.sessionId; host.classList.toggle("host-compact-no-chat", !target.sessionId);
-      // Preserve synchronous selected-chat delivery, including a newly loaded exact chat.
-      // Only extend the existing Full placement; do not create another layout store.
-      if (fullPresentation && !fullPresentation.layout.panels[item.id]) {
-        var saved = fullPresentation.layout, leaf = null;
-        function findGroup(node) {
-          if (node.type === "branch") node.data.forEach(findGroup);
-          else if (node.data.id === item.group.id) leaf = node;
-        }
-        findGroup(saved.grid.root);
-        if (!leaf) { leaf = { type: "leaf", data: { id: item.group.id, views: [], activeView: item.id }, size: saved.grid.width }; saved.grid.root.data.push(leaf); }
-        saved.panels[item.id] = api.toJSON().panels[item.id]; leaf.data.views.push(item.id);
-        if (!panel(leaf.data.activeView)) leaf.data.activeView = item.id;
-        if (!panel(fullPresentation.active)) fullPresentation.active = item.id;
+    var previous = api.activePanel, focused = document.activeElement;
+    var wasRestoring = restoring;
+    restoring = true;
+    try {
+      if (!hostCompact && api.hasMaximizedGroup() && (!item || !item.api.isMaximized() ||
+          options.group && item.group !== options.group || options.beside && panel(options.referencePanel) &&
+          panel(options.referencePanel).group === item.group)) api.exitMaximizedGroup();
+      var position = placement(target, item, options);
+      var group = position.group, direction = hostCompact ? "within" : position.direction;
+      var background = options.background && previous && (group !== previous.group || direction !== "within");
+      if (!item) {
+        item = api.addPanel({ id: id, component: target.view, title: descriptor.titleFor(target),
+          params: { target: target }, inactive: !!background,
+          renderer: typeof descriptor.renderer === "function" ? descriptor.renderer(target) : descriptor.renderer || "always",
+          minimumWidth: 150, minimumHeight: 120, position: group ? { referenceGroup: group, direction: direction } : undefined });
+      } else if (group && (group !== item.group || direction !== "within")) {
+        item.api.moveTo({ group: group, position: direction === "within" ? "center" : direction === "below" ? "bottom" : direction });
       }
-      item.api.maximize(); sync();
+      item.group.api.setVisible(true);
+      if (!background || item.group.activePanel !== item) item.api.setActive();
+      if (background && api.activePanel !== previous && panel(previous.id) && previous.group !== item.group) previous.api.setActive();
+      if (target.view === "conversation" && target.sessionId && panel("conversation")) panel("conversation").api.close();
+      var chooser = panel(options.chooserId);
+      if (chooser && item.group === chooser.group) chooser.api.close();
+      if (hostCompact && target.view === "conversation") {
+        compactChat = item.id; compactEmpty.hidden = !!target.sessionId;
+        host.classList.toggle("host-compact-no-chat", !target.sessionId);
+        item.api.maximize();
+      }
+    } finally {
+      restoring = wasRestoring;
     }
+    if (!restoring && (!options.background || api.activePanel !== previous)) focusActivePanel();
+    changed(); revealActiveTab();
+    if (options.background && api.activePanel === previous) restoreFocus(focused);
     return true;
   }
   function sectionView(name) {
@@ -252,7 +303,7 @@
   function persist() {
     if (preservePreference) return;
     if (hostCompact) return; // transient group maximize never replaces the durable Full layout
-    try { localStorage.setItem(storageKey, JSON.stringify({ version: 2, layout: preferenceLayout(compact && wideLayout || api.toJSON()) })); }
+    try { localStorage.setItem(storageKey, JSON.stringify({ version: 2, layout: preferenceLayout(currentLayout(), true) })); }
     catch (error) { notice("Компоновка не сохранена: хранилище недоступно"); }
   }
   function changed() {
@@ -307,7 +358,7 @@
     }
     if (api.hasMaximizedGroup() && (!item || !item.api.isMaximized() || group && group !== item.group)) api.exitMaximizedGroup();
     if (compact && direction && direction !== "within") direction = "within";
-    if (item && group) item.api.moveTo({ group: group, position: direction === "within" ? "center" : direction === "below" ? "bottom" : direction });
+    if (item && group && (group !== item.group || direction !== "within")) item.api.moveTo({ group: group, position: direction === "within" ? "center" : direction === "below" ? "bottom" : direction });
     if (!item) {
       var ref = group || api.activeGroup;
       var position = ref ? { referenceGroup: ref, direction: direction || (compact ? "within" : "right") } : undefined;
@@ -387,8 +438,6 @@
   function close(id) {
     var item = panel(id); if (!item) return;
     if (!canClose([item])) return;
-    wideLayout = null;
-    if (!hostCompact) api.exitMaximizedGroup();
     item.api.close();
     if (hostCompact && compactChat === id) { compactChat = null; compactEmpty.hidden = false; host.classList.add("host-compact-no-chat"); }
     changed();
@@ -422,6 +471,11 @@
       onSelect: function (viewId) {
         var chooser = id && panel(id), view = views[viewId];
         if (id && !chooser) return;
+        if (chooser && viewId === "conversation") {
+          chatChooser = id;
+          view.discover();
+          return;
+        }
         var result = view.discover ? view.discover() : show(viewId, chooser && chooser.group, "within");
         if (result === false) throw new Error("Экран сейчас недоступен. Закройте лишнюю вкладку и повторите.");
         if (chooser && panel(id)) chooser.api.close(); changed();
@@ -432,11 +486,14 @@
   function createChooser(id) { return createStartChooser(id); }
   function openChooser(group, direction) {
     if (window.RNAssistantWindow && RNAssistantWindow.inFull(function () { openChooser(group, direction); })) return;
-    RNAssistantActionMenu.closeAll(); wideLayout = null; api.exitMaximizedGroup();
+    RNAssistantActionMenu.closeAll();
+    if (direction !== "within") api.exitMaximizedGroup();
+    if (direction !== "within" && !canSplit(group, direction)) return;
     while (panel("choose-" + nextChooser)) ++nextChooser;
     var item = api.addPanel({ id: "choose-" + nextChooser++, component: "chooser", title: "Выберите экран",
-      minimumWidth: 150, minimumHeight: 120, position: { referenceGroup: group, direction: direction } });
-    item.api.setActive(); requestAnimationFrame(function () { var input = host.querySelector('[data-chooser-id="' + item.id + '"] input'); if (input) input.focus(); }); changed();
+      minimumWidth: 150, minimumHeight: 120, position: group ? { referenceGroup: group, direction: direction } : undefined });
+    requestAnimationFrame(function () { if (api.activePanel === item) host.querySelector('[data-chooser-id="' + item.id + '"] input')?.focus(); });
+    changed();
   }
   function menu(trigger, items) {
     RNAssistantActionMenu.open(trigger, items.map(function (item) { return { label: item[0], icon: item[1], onSelect: item[2] }; }),
@@ -467,9 +524,8 @@
   function header(group) {
     var root = element("div", "dock-group-actions"), splitButtons = []; root.dataset.groupId = group.id;
     function updateSplitButtons() {
-      var canSplit = !compact && host.clientWidth >= 560;
       splitButtons.forEach(function (entry) {
-        entry.button.disabled = !canSplit || (entry.direction === "right" ? group.api.width < 560 : group.api.height < 420);
+        entry.button.disabled = !canSplit(group, entry.direction);
         entry.button.title = entry.button.disabled ? "Недостаточно места для ещё одной области" : entry.label;
       });
     }
@@ -486,11 +542,11 @@
           onSelect: function () { if (api.hasMaximizedGroup()) api.exitMaximizedGroup(); else if (group.activePanel) group.activePanel.api.maximize(); changed(); } },
         { separator: true }
       ].concat([
-        ["Собрать в одну группу", "layers", function () { join(); }],
+        ["Собрать в одну группу", "layers", function () { join(group); }],
         ["Закрыть вкладку", "close", function () { if (group.activePanel) close(group.activePanel.id); }],
         ["Закрыть группу", "close", function () {
           var items = group.panels.slice(); if (!canClose(items)) return;
-          wideLayout = null; api.exitMaximizedGroup(); items.forEach(function (item) { item.api.close(); }); changed();
+          items.forEach(function (item) { item.api.close(); }); changed();
         }]
       ].map(function (item) { return { label: item[0], icon: item[1], onSelect: item[2] }; })), { className: "dock-group-menu" });
     }); actions.setAttribute("aria-haspopup", "menu"); root.appendChild(actions);
@@ -535,7 +591,8 @@
       if (!data.views.includes(data.activeView)) data.activeView = data.views[0];
       groups.add(data.id); return node;
     }
-    layout.grid.root = visit(layout.grid.root, 0);
+    var wasEmpty = !Object.keys(layout.panels).length && layout.grid.root.type === "branch" && !layout.grid.root.data.length;
+    layout.grid.root = visit(layout.grid.root, 0) || (wasEmpty && layout.grid.root);
     if (!layout.grid.root) throw new Error("В раскладке не осталось доступных панелей");
     Object.keys(layout.panels).forEach(function (id) { if (!seen.has(id)) { delete layout.panels[id]; pruned++; } });
     if (!groups.has(layout.activeGroup)) layout.activeGroup = groups.values().next().value;
@@ -543,13 +600,29 @@
     if (!validateLayout(layout)) throw new Error("Не удалось проверить преобразованную раскладку");
     return { layout: layout, pruned: pruned };
   }
-  function preferenceLayout(input) {
-    var layout = JSON.parse(JSON.stringify(input));
+  function preferenceLayout(input, live) {
+    var layout = JSON.parse(JSON.stringify(input)), omitted = false;
     Object.keys(layout.panels).forEach(function (id) {
       var spec = layout.panels[id], view = spec && views[spec.contentComponent];
-      if (view && view.preferenceTarget && spec.params) spec.params = { target: view.preferenceTarget(spec.params.target) };
+      if (!view || !view.preferenceTarget || !spec.params) return;
+      var target = view.preferenceTarget(spec.params.target);
+      if (target || !live) spec.params = { target: target };
+      else { delete layout.panels[id]; omitted = true; }
     });
+    if (omitted) pruneLayoutGroups(layout);
     return layout;
+  }
+  function pruneLayoutGroups(layout) {
+    function prune(node) {
+      if (node.type === "branch") { node.data = node.data.filter(prune); return node.data.length > 0; }
+      node.data.views = node.data.views.filter(function (id) { return !!layout.panels[id]; });
+      if (!node.data.views.includes(node.data.activeView)) node.data.activeView = node.data.views[0];
+      return node.data.views.length > 0;
+    }
+    if (!prune(layout.grid.root)) layout.grid.root = { type: "branch", data: [], size: layout.grid.root.size };
+    var groups = leaves(layout.grid.root);
+    if (!groups.some(function (group) { return group.data.id === layout.activeGroup; })) layout.activeGroup = groups[0] && groups[0].data.id;
+    if (layout.maximizedGroup && !groups.some(function (group) { return group.data.id === layout.maximizedGroup; })) delete layout.maximizedGroup;
   }
   function reset() {
     if (window.RNAssistantWindow && RNAssistantWindow.inFull(reset)) return;
@@ -561,12 +634,65 @@
     add("inspector", { referencePanel: chat, direction: compact || host.clientWidth < 560 ? "within" : "right" }).api.setSize({ width: inspectorWidth });
     chat.api.setActive(); restoring = false; changed();
   }
-  function join() {
-    if (window.RNAssistantWindow && RNAssistantWindow.inFull(join)) return;
-    wideLayout = null; api.exitMaximizedGroup();
-    var group = api.activeGroup || api.groups[0], active = api.activePanel;
+  function moveIntoGroup(group, active) {
+    api.exitMaximizedGroup();
     api.panels.slice().forEach(function (item) { if (item.group !== group) item.api.moveTo({ group: group, position: "center" }); });
-    if (active) active.api.setActive(); changed();
+    if (active) active.api.setActive();
+  }
+  function join(group) {
+    if (window.RNAssistantWindow && RNAssistantWindow.inFull(function () { join(group); })) return;
+    group = group && api.getGroup(group.id) || api.activeGroup || api.groups[0];
+    if (!group) return;
+    restoring = true; wideLayout = null;
+    try { moveIntoGroup(group, group.activePanel); }
+    finally { restoring = false; }
+    focusActivePanel(); changed(); revealActiveTab();
+  }
+  function leaves(node) {
+    return node.type === "leaf" ? [node] : node.data.flatMap(leaves);
+  }
+  function reconcileLayout(previous, live, activeId) {
+    if (!previous || !Object.keys(live.panels).length) return live;
+    var layout = JSON.parse(JSON.stringify(previous));
+    var groups = leaves(layout.grid.root), liveGroups = leaves(live.grid.root);
+    var memberships = new Map();
+    groups.forEach(function (group) {
+      group.data.views = group.data.views.filter(function (id) { return !!live.panels[id]; });
+      group.data.views.forEach(function (id) { memberships.set(id, group); });
+    });
+    liveGroups.forEach(function (group) {
+      var added = group.data.views.filter(function (id) { return !memberships.has(id); });
+      if (!added.length) return;
+      var sameGroup = groups.find(function (other) { return other.data.id === group.data.id; });
+      var destination = sameGroup || group.data.views.map(function (id) { return memberships.get(id); }).find(Boolean);
+      if (!destination) {
+        destination = { type: "leaf", size: (layout.grid.orientation === "HORIZONTAL" ? layout.grid.width : layout.grid.height) / (groups.length + 1),
+          data: { id: group.data.id, views: [], activeView: group.data.activeView } };
+        var anchor = memberships.get(activeId) || groups[0];
+        var root = layout.grid.root;
+        if (root.type === "leaf") root = layout.grid.root = { type: "branch", size: root.size, data: [root] };
+        var index = root.data.findIndex(function (node) { return leaves(node).includes(anchor); });
+        root.data.splice(index < 0 ? root.data.length : index + 1, 0, destination);
+        groups.push(destination);
+      }
+      added.forEach(function (id) {
+        var view = live.panels[id].contentComponent;
+        var sameType = liveGroups.length === 1 && (view === "browser" || view === "conversation") &&
+          groups.find(function (candidate) { return candidate.data.views.some(function (other) { return live.panels[other].contentComponent === view; }); });
+        var target = sameType || destination;
+        target.data.views.push(id); memberships.set(id, target);
+        if (id === group.data.activeView) target.data.activeView = id;
+      });
+    });
+    layout.panels = live.panels;
+    pruneLayoutGroups(layout);
+    var active = memberships.get(activeId);
+    if (active) { active.data.activeView = activeId; layout.activeGroup = active.data.id; }
+    return layout;
+  }
+  function currentLayout() {
+    var live = api.toJSON();
+    return compact && wideLayout ? reconcileLayout(wideLayout, live, api.activePanel && api.activePanel.id) : live;
   }
   function restoreLayout(layout) {
     stopInspectorExit();
@@ -585,29 +711,44 @@
     placeHost();
     sync();
   }
-  function resize(width) {
+  function restoreFocus(focused) {
+    if (focused && focused.isConnected && !focused.closest("[inert]") && focused.getClientRects().length &&
+        document.activeElement === document.body) focused.focus({ preventScroll: true });
+  }
+  function resize(width, height) {
     if (hostCompact) return; // host presentation is independent of responsive wide/compact
     if (!width) return;
     var next = RNAssistantShellLayout.mode() === "single" || width < 560;
-    if (next === compact) return;
+    var collapse = next && api.groups.length > 1 && (!compact || height < 420);
+    if (next === compact && !collapse) return;
+    var entering = next && !compact;
     var focused = host.contains(document.activeElement) ? document.activeElement : null;
     compact = next; RNAssistantActionMenu.closeAll(); restoring = true;
-    api.updateOptions({ disableDnd: compact });
-    if (compact && api.groups.length > 1) {
-      wideLayout = api.toJSON(); api.exitMaximizedGroup();
-      var group = api.activeGroup || api.groups[0], active = api.activePanel;
-      api.panels.slice().forEach(function (item) { if (item.group !== group) item.api.moveTo({ group: group, position: "center" }); });
-      if (active) active.api.setActive();
-    } else if (!compact && wideLayout) {
-      var saved = wideLayout; wideLayout = null; restoreLayout(saved);
+    try {
+      api.updateOptions({ disableDnd: compact });
+      if (entering && !wideLayout) wideLayout = api.toJSON();
+      if (collapse) {
+        var group = api.activeGroup || api.groups[0], active = api.activePanel;
+        var type = panelType(active), otherType = type === "conversation" ? "browser" : type === "browser" ? "conversation" : null;
+        var companion = entering && height >= 420 && otherType && api.groups.map(function (item) { return item.activePanel; })
+          .find(function (item) { return panelType(item) === otherType && visible(item.id); });
+        moveIntoGroup(group, active);
+        if (companion) {
+          companion.api.moveTo({ group: group, position: "bottom" });
+          active.api.setActive();
+        }
+      } else if (!compact && wideLayout) {
+        var saved = reconcileLayout(wideLayout, api.toJSON(), api.activePanel && api.activePanel.id);
+        wideLayout = null; restoreLayout(saved);
+      }
+    } finally {
+      restoring = false;
     }
-    restoring = false; sync(); revealActiveTab();
+    sync(); revealActiveTab();
+    restoreFocus(focused);
     // Dockview can settle visibility after the group move. Restore at the next paint,
     // without taking focus back if the user already moved it elsewhere.
-    requestAnimationFrame(function () {
-      if (focused && focused.isConnected && !focused.closest("[inert]") && focused.getClientRects().length &&
-          (document.activeElement === document.body || document.activeElement === focused)) focused.focus({ preventScroll: true });
-    });
+    requestAnimationFrame(function () { restoreFocus(focused); });
   }
   function bind() {
     if (api) return;
@@ -670,21 +811,22 @@
     } catch (error) { reset(); preservePreference = true; notice("Не удалось прочитать компоновку. Сохранённая раскладка не изменена."); }
     restoring = false;
     api.onDidLayoutChange(changed); api.onDidActivePanelChange(function () {
-      var record = api.activePanel && objectViews[api.activePanel.id];
-      if (record && record.view.focus) record.view.focus();
+      if (restoring) return;
+      focusActivePanel();
       sync(); revealActiveTab();
     }); api.onDidMaximizedGroupChange(sync);
-    api.onDidRemovePanel(function () { if (!restoring) wideLayout = null; });
     RNAssistantShellLayout.bindWorkspace({
       onLayoutChanged: sync,
       dismissTools: dismissTools,
       chooser: function () { openChooser(api.activeGroup || api.groups[0], "within"); },
       layout: function (trigger) {
         menu(trigger, [["Чат и инспектор", "panel", reset], ["Одна группа вкладок", "layers", join],
-          ["Сохранить раскладку", "save", function () { try { localStorage.setItem(savedKey, JSON.stringify(preferenceLayout(api.toJSON()))); notice("Раскладка сохранена"); } catch (error) { notice("Не удалось сохранить раскладку"); } }],
+          ["Сохранить раскладку", "save", function () { try { localStorage.setItem(savedKey, JSON.stringify(preferenceLayout(currentLayout(), true))); notice("Раскладка сохранена"); } catch (error) { notice("Не удалось сохранить раскладку"); } }],
           ["Вернуть сохранённую", "refresh", function () { try { var layout = normalizeLayout(JSON.parse(localStorage.getItem(savedKey))).layout; if (validateLayout(layout)) {
             if (!canClose(api.panels.filter(function (item) { return !layout.panels[item.id]; }))) return;
-            restoring = true; wideLayout = null; restoreLayout(layout); preservePreference = false; restoring = false; changed(); notice("Раскладка восстановлена");
+            restoring = true; wideLayout = null; compact = false;
+            restoreLayout(layout); preservePreference = false; restoring = false;
+            resize(dock.clientWidth, dock.clientHeight); focusActivePanel(); changed(); revealActiveTab(); notice("Раскладка восстановлена");
           } else notice("Сохранённой раскладки нет или её формат недоступен"); } catch (error) { restoring = false; notice("Не удалось восстановить раскладку"); } }]]);
       }
     });
@@ -710,7 +852,7 @@
     // Dockview's default bounding rect uses scaled pixels under CSS zoom. Layout accepts CSS pixels.
     var observer = new ResizeObserver(function (entries) {
       var rect = entries[0].contentRect;
-      if (rect.width && rect.height) { resize(rect.width); api.layout(rect.width, rect.height); sync(); }
+      if (rect.width && rect.height) { resize(rect.width, rect.height); api.layout(rect.width, rect.height); sync(); }
     }); observer.observe(dock);
     window.addEventListener("pagehide", function (event) { clearTimeout(saveTimer); cancelAnimationFrame(tabFrame); persist(); if (!event.persisted) { dragListeners.abort(); endDrag(); observer.disconnect(); RNAssistantActionMenu.closeAll(); api.dispose(); } });
     sync();
@@ -728,7 +870,7 @@
         var selectedPanel = selected && panel(views.conversation.key(selected.route));
         var chat = active && active.params && active.params.target && active.params.target.view === "conversation" ? active : selectedPanel;
         if (chat && !(chat.params && chat.params.target && chat.params.target.sessionId)) chat = null;
-        fullPresentation = { active: active && active.id, layout: compact && wideLayout || api.toJSON() };
+        fullPresentation = { active: active && active.id, layout: currentLayout() };
         hostCompact = true; compactChat = chat && chat.id;
         api.updateOptions({ disableDnd: true });
         if (chat) { api.exitMaximizedGroup(); chat.api.setActive(); chat.api.maximize(); }
@@ -737,37 +879,20 @@
         hostCompact = false; compactChat = null; compactEmpty.hidden = true; host.classList.remove("host-compact-no-chat");
         restoring = true; api.exitMaximizedGroup();
         var previous = fullPresentation; fullPresentation = null;
-        if (previous) {
-          // Restore only live identities. A domain deletion during Compact must not resurrect a view.
-          var live = new Set(api.panels.map(function (item) { return item.id; })), specs = api.toJSON().panels, groupIds = [];
-          var saved = JSON.parse(JSON.stringify(previous.layout));
-          Object.keys(saved.panels).forEach(function (id) { if (!live.has(id)) delete saved.panels[id]; else saved.panels[id] = specs[id]; });
-          function prune(node) {
-            if (node.type === "branch") { node.data = node.data.filter(prune); return node.data.length > 0; }
-            node.data.views = node.data.views.filter(function (id) { return live.has(id); });
-            if (!node.data.views.includes(node.data.activeView)) node.data.activeView = node.data.views[0];
-            if (node.data.views.length) groupIds.push(node.data.id);
-            return node.data.views.length > 0;
-          }
-          prune(saved.grid.root);
-          if (!groupIds.includes(saved.activeGroup)) saved.activeGroup = groupIds[0];
-        }
+        var saved = previous && reconcileLayout(previous.layout, api.toJSON(), previous.active);
       }
       placeHost();
       if (!hostCompact) {
         // If native bounds arrive after this state push, responsive owns the interim narrow layout
         // and keeps the exact Full snapshot for its next wide restore.
-        var width = host.clientWidth;
-        var narrow = RNAssistantShellLayout.mode() === "single" || width < 560;
-        if (previous && Object.keys(saved.panels).length) {
-          api.layout(width, host.clientHeight); restoreLayout(saved);
-          if (panel(previous.active)) panel(previous.active).api.setActive();
-        }
+        var dock = host.querySelector(".chat-dock"), width = dock.clientWidth, height = dock.clientHeight;
+        compact = false; wideLayout = saved || null;
+        if (saved && Object.keys(saved.panels).length) restoreLayout(saved);
         restoring = false;
-        if (narrow && previous) {
-          compact = false; resize(width); wideLayout = saved;
-        } else { compact = false; wideLayout = null; }
+        resize(width, height);
+        if (!compact) wideLayout = null;
         api.updateOptions({ disableDnd: compact });
+        focusActivePanel(); changed(); revealActiveTab();
       }
     }
     sync();
@@ -780,6 +905,8 @@
     canCloseAll: function () { return !api || canClose(api.panels); },
     registerConversation: function (descriptor) { views.conversation = descriptor; },
     getView: function (id) { return objectViews[id] && objectViews[id].view || null; },
+    activePanelId: function () { return api && api.activePanel && api.activePanel.id; },
+    chatNavigationPlacement: chatNavigationPlacement,
     activeTarget: function () { return workspaceActive() && api && api.activePanel && api.activePanel.params && api.activePanel.params.target || null; },
     eachView: function (type, callback) { Object.keys(objectViews).forEach(function (id) {
       var item = panel(id); if (item && item.params && item.params.target.view === type) callback(objectViews[id].view);

@@ -15,10 +15,14 @@ namespace RNAssistant.Application
         private readonly Dictionary<string, AgentOpen> _agentOpens = new Dictionary<string, AgentOpen>(StringComparer.Ordinal);
         private sealed class AgentOpen
         {
-            internal string Binding, SourceBinding, TabId, OperationId;
+            internal string Binding, SourceBinding, TabId, SessionId;
+            internal BrowserOwnerScope Owner;
+            internal BrowserTargetDescriptor Target;
+            internal string Locator;
             internal bool Unknown;
-            internal long Epoch;
-            internal TaskCompletionSource<BrowserPageStateDto> Completion = new TaskCompletionSource<BrowserPageStateDto>(TaskCreationOptions.RunContinuationsAsynchronously);
+            internal long Epoch, Generation;
+            internal readonly TaskCompletionSource<BrowserPageStateDto> Completion =
+                new TaskCompletionSource<BrowserPageStateDto>(TaskCreationOptions.RunContinuationsAsynchronously);
         }
         public IReadOnlyList<BrowserOpenableTarget> OpenableTargetsFor(BrowserOwnerScope owner)
         {
@@ -45,15 +49,25 @@ namespace RNAssistant.Application
                 if (_agentOpens.TryGetValue(request.OperationId, out operation)) {
                     if (operation.Binding != binding) throw new InvalidOperationException("The open operation belongs to another call or owner.");
                     if (operation.Unknown) throw new InvalidOperationException("The original open result is unknown; close its tab manually.");
-                    Page page;
-                    if (operation.Completion.Task.Status == TaskStatus.RanToCompletion && _operations.TryGetValue(request.OperationId, out page)) return Task.FromResult(Copy(page.State));
+                    if (operation.Completion.Task.Status == TaskStatus.RanToCompletion) {
+                        Page page;
+                        if (!_pages.TryGetValue(operation.TabId, out page) || page.State.SessionId != operation.SessionId) {
+                            var closed = Copy(operation.Completion.Task.Result);
+                            closed.Status = BrowserPageStatus.Closed; closed.Attached = false;
+                            return Task.FromResult(closed);
+                        }
+                        if (!MatchesAttachment(operation, page.State))
+                            throw new InvalidOperationException("The open receipt belongs to a previous Browser page.");
+                    }
                     return operation.Completion.Task;
                 }
-                if (_agentOpens.Values.Any(o => o.Unknown && o.SourceBinding == sourceBinding && _pages.ContainsKey(o.TabId)))
+                if (_agentOpens.Values.Any(o => o.Unknown && o.SourceBinding == sourceBinding && o.TabId != null && _pages.ContainsKey(o.TabId)))
                     throw new InvalidOperationException("The previous open is unknown. Close its Browser tab manually before opening again.");
-                foreach (var key in _agentOpens.Where(p => p.Value.Completion.Task.IsCompleted && !_pages.ContainsKey(p.Value.TabId)).Select(p => p.Key).Take(Math.Max(0, _agentOpens.Count - 127)).ToArray()) _agentOpens.Remove(key);
+                foreach (var key in _agentOpens.Where(p => p.Value.Completion.Task.IsCompleted &&
+                    (!p.Value.Unknown || p.Value.TabId == null || !_pages.ContainsKey(p.Value.TabId)))
+                    .Select(p => p.Key).Take(Math.Max(0, _agentOpens.Count - 127)).ToArray()) _agentOpens.Remove(key);
                 if (_agentOpens.Count >= 128) throw new InvalidOperationException("Browser open receipt limit reached.");
-                operation = new AgentOpen { Binding = binding, SourceBinding = sourceBinding, TabId = "browser-" + Guid.NewGuid().ToString("N"), OperationId = request.OperationId, Epoch = _openEpoch };
+                operation = new AgentOpen { Binding = binding, SourceBinding = sourceBinding, Owner = request.OwnerScope, Epoch = _openEpoch };
                 _agentOpens.Add(request.OperationId, operation);
             }
             _ = CompleteOpenAsync(operation, request, beforeDispatch, token);
@@ -68,18 +82,43 @@ namespace RNAssistant.Application
                 if (!OpenableTargetsFor(request.OwnerScope).Any(t => t.Target.DisplayLocator == request.Target.DisplayLocator && t.Target.SavedVersionId == request.Target.SavedVersionId))
                     throw new InvalidOperationException("The source is no longer available in this conversation.");
                 var resolved = _resolve(new BrowserResolveRequest { OwnerScope = request.OwnerScope, Locator = request.Target.DisplayLocator });
-                if (resolved?.Target?.State != BrowserTargetState.Ready || resolved.Target.SavedVersionId != request.Target.SavedVersionId)
+                if (!SameOpenTarget(resolved?.Target, request.Target) || resolved.Target.OwnerScope?.Matches(request.OwnerScope) != true)
                     throw new InvalidOperationException(resolved?.Message ?? "The exact source changed before open.");
-                Task<BrowserPageStateDto> opening;
-                lock (_sync) {
-                    if (operation.Epoch != _openEpoch || _disposed) throw new InvalidOperationException("The Browser owner reset before dispatch.");
-                    token.ThrowIfCancellationRequested(); beforeDispatch?.Invoke(); dispatched = true;
-                    opening = ExecuteAsync(new BrowserCommandPayload { Action = BrowserCommandKind.Open, BrowserTabId = operation.TabId,
-                    OperationId = request.OperationId, OwnerScope = request.OwnerScope, Locator = request.Target.DisplayLocator }, token);
+                BrowserDockOpenRequest dock;
+                await _commands.WaitAsync(token).ConfigureAwait(false);
+                try {
+                    BrowserPageStateDto state = null;
+                    Task<BrowserPageStateDto> opening = null;
+                    lock (_sync) {
+                        if (operation.Epoch != _openEpoch || _disposed) throw new InvalidOperationException("The Browser owner reset before dispatch.");
+                        if (_agentOpens.Values.Any(o => o != operation && o.Unknown && o.SourceBinding == operation.SourceBinding &&
+                            o.TabId != null && _pages.ContainsKey(o.TabId)))
+                            throw new InvalidOperationException("The previous open is unknown. Close its Browser tab manually before opening again.");
+                        token.ThrowIfCancellationRequested();
+                        operation.Target = resolved.Target; operation.Locator = resolved.Locator;
+                        var existing = _pages.Values.Select(p => p.State).FirstOrDefault(p => MatchesOpenSource(operation, p));
+                        if (existing == null && _pages.Count >= 16)
+                            throw new InvalidOperationException("Открыто 16 страниц. Закройте одну перед открытием новой.");
+                        operation.TabId = existing?.BrowserTabId ?? "browser-" + Guid.NewGuid().ToString("N");
+                        beforeDispatch?.Invoke(); dispatched = true;
+                        if (existing != null) state = Copy(existing);
+                        else opening = DeliverAsync(new BrowserCommandPayload { Action = BrowserCommandKind.Open, BrowserTabId = operation.TabId,
+                            OperationId = request.OperationId, OwnerScope = request.OwnerScope, Locator = resolved.Locator }, token, resolved);
+                    }
+                    if (opening != null) state = await opening.ConfigureAwait(false);
+                    lock (_sync) {
+                        Page page;
+                        if (operation.Epoch != _openEpoch || !_pages.TryGetValue(operation.TabId, out page) ||
+                            page.State.SessionId != state.SessionId || !MatchesOpenSource(operation, page.State))
+                            throw new InvalidOperationException("The Browser page changed before Dock placement.");
+                        operation.SessionId = page.State.SessionId; operation.Generation = page.State.DocumentGeneration;
+                        dock = new BrowserDockOpenRequest { Origin = BrowserDockOpenOrigin.Agent, BrowserTabId = operation.TabId,
+                            OperationId = request.OperationId, OwnerScope = request.OwnerScope, Locator = state.Url, Title = state.Title, Page = Copy(page.State) };
+                    }
                 }
-                var state = await opening.ConfigureAwait(false);
-                _requestDockOpen(new BrowserDockOpenRequest { BrowserTabId = operation.TabId, OperationId = request.OperationId,
-                    OwnerScope = request.OwnerScope, Locator = state.Url, Title = state.Title });
+                finally { _commands.Release(); }
+                if (operation.Completion.Task.IsCompleted) return;
+                _requestDockOpen(dock);
                 var deadline = Task.Delay(TimeSpan.FromSeconds(10), token);
                 if (await Task.WhenAny(operation.Completion.Task, deadline).ConfigureAwait(false) != operation.Completion.Task) {
                     token.ThrowIfCancellationRequested(); throw new TimeoutException("Dock did not acknowledge the exact visible Browser tab.");
@@ -92,15 +131,52 @@ namespace RNAssistant.Application
         }
         public void BlockAgentOpen(string operationId)
         { lock (_sync) { AgentOpen operation; if (operationId != null && _agentOpens.TryGetValue(operationId, out operation)) operation.Unknown = true; } }
-        private void ObserveAgentOpen(BrowserCommandPayload request, BrowserPageStateDto state)
+        private static bool SameOpenTarget(BrowserTargetDescriptor target, BrowserTargetDescriptor expected)
+        {
+            return target?.State == BrowserTargetState.Ready && target.Kind == expected.Kind &&
+                target.SavedVersionId == expected.SavedVersionId && target.ReleaseId == expected.ReleaseId &&
+                target.ResourceUri == expected.ResourceUri && target.ArtifactId == expected.ArtifactId &&
+                target.WorkspaceId == expected.WorkspaceId && target.PluginId == expected.PluginId;
+        }
+        private static bool MatchesOpenSource(AgentOpen operation, BrowserPageStateDto page)
+        {
+            return page.Status != BrowserPageStatus.Closed && page.ChatBound && page.OwnerScope?.Matches(operation.Owner) == true &&
+                page.Url == operation.Locator && SameOpenTarget(page.Target, operation.Target);
+        }
+        private static bool MatchesAttachment(AgentOpen operation, BrowserPageStateDto page)
+        {
+            return page.BrowserTabId == operation.TabId && page.SessionId == operation.SessionId &&
+                page.DocumentGeneration == operation.Generation && MatchesOpenSource(operation, page);
+        }
+        private void ValidateAttachment(BrowserCommandPayload request, BrowserPageStateDto page)
         {
             AgentOpen operation;
+            if (request.OperationId != null && _agentOpens.TryGetValue(request.OperationId, out operation)) {
+                if (operation.Unknown || request.Generation != operation.Generation || !MatchesAttachment(operation, page))
+                    throw new InvalidOperationException("Подтверждение относится к другой странице или устарело.");
+            }
+            else if (request.OperationId != page.OperationId)
+                throw new InvalidOperationException("Подтверждение относится к другому открытию.");
+        }
+        private void ObserveAgentOpens(BrowserCommandPayload request, BrowserPageStateDto state)
+        {
             lock (_sync)
             {
-                if (!_agentOpens.TryGetValue(state.OperationId, out operation) || operation.TabId != state.BrowserTabId || operation.Completion.Task.IsCompleted) return;
-                if (state.Status == BrowserPageStatus.Closed) operation.Completion.TrySetException(new InvalidOperationException("Browser closed before attachment."));
-                else if (request.Action == BrowserCommandKind.Attach && state.Attached && (_renderer == null || state.Status == BrowserPageStatus.Ready) && request.Bounds?.Visible == true && ValidBounds(request.Bounds))
-                    operation.Completion.TrySetResult(Copy(state));
+                Page page;
+                var current = _pages.TryGetValue(state.BrowserTabId, out page) ? page.State : state;
+                foreach (var entry in _agentOpens) {
+                    var operation = entry.Value;
+                    if (operation.SessionId == null || operation.TabId != state.BrowserTabId || operation.Completion.Task.IsCompleted) continue;
+                    if (!MatchesAttachment(operation, current)) {
+                        operation.Unknown = current.Status != BrowserPageStatus.Closed;
+                        operation.Completion.TrySetException(new InvalidOperationException("Browser closed or changed before attachment."));
+                    } else if (request?.Action == BrowserCommandKind.Attach && request.OperationId == entry.Key &&
+                        MatchesAttachment(operation, state) && current.Attached && request.Bounds?.Visible == true &&
+                        (_renderer == null || current.Status == BrowserPageStatus.Ready && request.NativeAttachmentVisible)) {
+                        var receipt = Copy(current); receipt.OperationId = entry.Key;
+                        operation.Completion.TrySetResult(receipt);
+                    }
+                }
             }
         }
     }

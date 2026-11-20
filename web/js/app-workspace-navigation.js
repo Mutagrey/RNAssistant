@@ -104,7 +104,10 @@
       renderChatSessions(); RNAssistantProjectChats.search("");
       RNAssistantShellLayout.setNavigationOpen(true); select(target, true, true);
     },
-    focusSearch: function () { switchTab("chat"); RNAssistantShellLayout.setNavigationOpen(true); if (pane) pane.focusSearch(); },
+    focusSearch: function () {
+      switchTab("chat", { preserveDockPanel: true });
+      RNAssistantShellLayout.setNavigationOpen(true); if (pane) pane.focusSearch();
+    },
     notice: function (source, message, retry, error) { notices[source] = message || ""; errors[source] = !!error;
       if (retry) retries[source] = retry; else delete retries[source]; status(); } };
 }());

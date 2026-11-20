@@ -44,10 +44,10 @@ namespace RNAssistant.Application
             try { return await DeliverAsync(request, token).ConfigureAwait(false); }
             finally { _commands.Release(); }
         }
-        private async Task<BrowserPageStateDto> DeliverAsync(BrowserCommandPayload request, CancellationToken token)
+        private async Task<BrowserPageStateDto> DeliverAsync(BrowserCommandPayload request, CancellationToken token, BrowserResolveResult opening = null)
         {
-            if (request != null) { request.NativeHistoryEntryId = null; request.NativeLocator = null; }
-            var result = await ExecuteCoreAsync(request, token).ConfigureAwait(false);
+            if (request != null) { request.NativeHistoryEntryId = null; request.NativeLocator = null; request.NativeAttachmentVisible = false; }
+            var result = await ExecuteCoreAsync(request, token, opening).ConfigureAwait(false);
             if (_renderer != null) {
                 lock (_sync) {
                     Page page;
@@ -68,7 +68,11 @@ namespace RNAssistant.Application
                     if (_pages.TryGetValue(result.BrowserTabId, out page)) result = AcceptNativeState(page, result);
                 }
             }
-            ObserveAgentOpen(request, result); _publish?.Invoke(Copy(result)); return Copy(result);
+            ObserveAgentOpens(request, result);
+            _publish?.Invoke(Copy(result));
+            if (request.Action == BrowserCommandKind.Attach)
+                result.VisibleAttachment = result.Attached && request.Bounds?.Visible == true && (_renderer == null || request.NativeAttachmentVisible);
+            return Copy(result);
         }
         private void NativeChanged(BrowserPageStateDto state)
         {
@@ -78,9 +82,9 @@ namespace RNAssistant.Application
                 if (_disposed || !_pages.TryGetValue(state.BrowserTabId, out page) || page.State.SessionId != state.SessionId || page.State.DocumentGeneration > state.DocumentGeneration) return;
                 value = AcceptNativeState(page, state);
             }
-            _publish?.Invoke(Copy(value));
+            ObserveAgentOpens(null, value); _publish?.Invoke(Copy(value));
         }
-        private Task<BrowserPageStateDto> ExecuteCoreAsync(BrowserCommandPayload request, CancellationToken token)
+        private Task<BrowserPageStateDto> ExecuteCoreAsync(BrowserCommandPayload request, CancellationToken token, BrowserResolveResult opening)
         {
             token.ThrowIfCancellationRequested();
             BrowserPageStateDto result;
@@ -124,7 +128,7 @@ namespace RNAssistant.Application
                         page.State.CanGoBack = false; page.State.CanGoForward = false;
                         page.Lifetime = new CancellationTokenSource();
                     }
-                    else Navigate(page, request.OwnerScope, request.Locator ?? "/", true);
+                    else Navigate(page, request.OwnerScope, request.Locator ?? "/", true, opening);
                     _pages.Add(request.BrowserTabId, page); _operations.Add(request.OperationId, page); _receipts.Enqueue(request.OperationId);
                     TrimReceipts();
                     if (inline) ExpireInlinePage(request.BrowserTabId, page.State.SessionId, page.Lifetime.Token);
@@ -144,7 +148,8 @@ namespace RNAssistant.Application
                     switch (request.Action)
                     {
                         case BrowserCommandKind.Attach:
-                            if (request.OperationId != page.State.OperationId) throw new InvalidOperationException("Подтверждение относится к другому открытию.");
+                            if (request.Bounds != null && !ValidBounds(request.Bounds)) throw new InvalidOperationException("Некорректная геометрия Browser.");
+                            ValidateAttachment(request, page.State);
                             page.State.Attached = true; break;
                         case BrowserCommandKind.NavigateUser:
                             var manualOwner = ManualNavigationOwner(page, request.Locator);
@@ -189,9 +194,9 @@ namespace RNAssistant.Application
             }
             return Task.FromResult(result);
         }
-        private void Navigate(Page page, BrowserOwnerScope owner, string locator, bool append)
+        private void Navigate(Page page, BrowserOwnerScope owner, string locator, bool append, BrowserResolveResult resolved = null)
         {
-            var resolved = _resolve(new BrowserResolveRequest { OwnerScope = owner, Locator = locator });
+            resolved = resolved ?? _resolve(new BrowserResolveRequest { OwnerScope = owner, Locator = locator });
             if (resolved?.Target == null) throw new InvalidOperationException(resolved?.Message ?? "Локальная цель недоступна.");
             var state = page.State;
             if (state.OwnerScope != null && !state.OwnerScope.Matches(owner)) { state.ChatBound = false; state.ManualControl = false; }
@@ -355,7 +360,7 @@ namespace RNAssistant.Application
                 _pages.Clear(); }
             if (_renderer != null) _nativeReset = _renderer.ResetAsync();
             foreach (var state in closed) {
-                ObserveAgentOpen(new BrowserCommandPayload { Action = BrowserCommandKind.Close }, state); _publish?.Invoke(state);
+                _publish?.Invoke(state);
             }
         }
         public async Task ResetAsync() { Reset(); await _nativeReset.ConfigureAwait(false); }

@@ -92,7 +92,13 @@ namespace RNAssistant.Office.WebView
                     page.Manual = manual;
                     _pages.Add(state.BrowserTabId, page); page.Changed += Publish;
                     page.FindRequested += () => { if (!_closed && _shell.Visible) _shell.Focus(); };
-                    page.NewTabRequested += locator => OpenTab?.Invoke(new BrowserDockOpenRequest { BrowserTabId = Guid.NewGuid().ToString("N"), OperationId = Guid.NewGuid().ToString("N"), OwnerScope = state.OwnerScope, Locator = locator, Title = state.Title });
+                    var source = page;
+                    page.NewTabRequested += locator => OpenTab?.Invoke(new BrowserDockOpenRequest {
+                        Origin = source.AgentOwnsInput ? BrowserDockOpenOrigin.AgentLink : BrowserDockOpenOrigin.PageLink,
+                        SourceBrowserTabId = source.State.BrowserTabId,
+                        SourceSessionId = source.State.SessionId, SourceGeneration = source.State.DocumentGeneration,
+                        OwnerScope = source.State.OwnerScope, Locator = locator, Title = source.State.Title
+                    });
                     try { await page.InitializeAsync(token); }
                     catch { _pages.Remove(state.BrowserTabId); page.Dispose(); await page.Drained; throw; }
                 }
@@ -103,6 +109,7 @@ namespace RNAssistant.Office.WebView
                     if (command.Action == BrowserCommandKind.ResumeAgent) page.ResumeAgent(command.ControlRevision);
                     if (command.Action == BrowserCommandKind.VisualControl) await page.VisualControlAsync(command.Visual);
                     if (command.Bounds != null) Place(page, command.Bounds);
+                    if (command.Action == BrowserCommandKind.Attach) command.NativeAttachmentVisible = page.Control.Visible;
                     if (page.HasLoaded) state.Status = BrowserPageStatus.Ready; state.Reason = BrowserRefusalCode.None; state.Message = _physical == null ? "Страница работает. Ввод агента недоступен: не установлен контроль физического ввода." : null;
                     state.Target.Capabilities.Preview = true; state.Target.Capabilities.Interact = _physical != null && page.HasLoaded;
                     state.Target.Capabilities.Media = page.HasLoaded; state.Target.Capabilities.PreviewReason = BrowserRefusalCode.None;

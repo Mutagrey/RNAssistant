@@ -37,26 +37,32 @@
   async function openSourceChat(sessionId,item,placement){
     item=item||sourcePlugin()||items.find(function(value){return value.pluginId===selectedId();});if(!item)return false;
     var id=item.pluginId,workspaceId=item.sourceWorkspaceId,route=++chatSelectionSerial,previous=conversationAddress();
-    await send('getPluginChat',{pluginId:id});
+    var source = await send('getPluginChat',{pluginId:id});
     if(route!==chatSelectionSerial||conversationAddress()!==previous||placement&&placement.isCurrent&&!placement.isCurrent())return false;
-    await window.RNAssistantProjectChats.open(workspaceId,sessionId);
+    var target = sessionId || source.sessionId;
+    await window.RNAssistantProjectChats.open(workspaceId,target,placement);
     if(route!==chatSelectionSerial||window.RNAssistantProjectChats.workspaceId()!==workspaceId||placement&&placement.isCurrent&&!placement.isCurrent())return false;
+    if (!target && !await RNAssistantProjectChats.create(workspaceId, placement)) return false;
+    if (target) {
+      var chat = RNAssistantConversationPanel.find({source:'workspace',workspaceId:workspaceId,sessionId:target});
+      if (!chat || RNAssistantConversationPanel.selected() !== chat) return false;
+      if (!chat.hasSnapshot && source.sessionId === target) chat.accept(source);
+      if (!chat.hasSnapshot) await chat.refresh();
+      if (route !== chatSelectionSerial || RNAssistantConversationPanel.selected() !== chat) return false;
+    }
     window.RNAssistantWorkspaceChat.mount('plugin');
     window.RNAssistantProjectChats.render();controls();
     var snapshot=RNAssistantProjectChats.snapshot();
     if(!snapshot||!snapshot.project||snapshot.project.workspaceId!==workspaceId||!snapshot.sessionId||sessionId&&snapshot.sessionId!==sessionId)return false;
-    var discussion=snapshot&&snapshot.sessionId?{source:'workspace',workspaceId:workspaceId,sessionId:snapshot.sessionId}:null;
     RNAssistantPlugins.onChatSnapshot(snapshot);
-    if(discussion&&placement)RNAssistantConversationPanel.open(discussion,placement);
-    else window.RNAssistantDockWorkspace.show('conversation');
     return true;
   }
-  async function select(id,sessionId){
+  async function select(id,sessionId,placement){
     var plugin=item(id);if(!plugin)return false;
-    if(sessionId)return openSourceChat(sessionId,plugin);
+    if(sessionId)return openSourceChat(sessionId,plugin,placement);
     if(!document.getElementById('tab-chat').classList.contains('active')&&!document.getElementById('tab-artifacts').classList.contains('active'))switchTab('chat',{preserveChatOwner:true});
     return RNAssistantBrowser.open('/plugins/'+encodeURIComponent(id)+'/source/'+(plugin.entryPath||'plugin.json').split('/').map(encodeURIComponent).join('/'),
-      {kind:'User',scopeId:'local'}, {title:plugin.name,reuse:true});
+      {kind:'User',scopeId:'local'}, {title:plugin.name});
   }
 
   function updateSourceLocation(){var connecting=el('Connect').checked,manual=connecting||customSource;
@@ -153,11 +159,10 @@
       }
       var created=await send(connecting?'connectPlugin':'createPlugin',{name:el('Name').value,rootPath:connecting||customSource?el('Root').value.trim():null,description:task,iconDescription:iconBrief,iconId:selectedIconId,iconColor:iconColor()});
       await refresh({afterPending:true});status((connecting?'Исходники подключены: ':'Исходники созданы: ')+created.sourceRoot);busy=false;await select(created.pluginId);
-      if(!connecting&&(task||iconBrief)){if(!await openSourceChat(null,created))return;var message='Загрузи навыки skills.workspace.plugin.authoring и skills.workspace.files. Прочитай README.md и plugin.json. ';
+      if(!connecting&&(task||iconBrief)){if(!await openSourceChat(null,created,RNAssistantConversationPanel.newPlacement()))return;var message='Загрузи навыки skills.workspace.plugin.authoring и skills.workspace.files. Прочитай README.md и plugin.json. ';
         if(task)message+='Создай плагин по задаче: '+task+'. ';
         if(iconBrief)message+='Нарисуй SVG-иконку по описанию: '+iconBrief+'. Создай icon.svg, добавь его в files и укажи в plugin.json. ';
         message+='После изменений проверь пакет через plugins.check, сохрани контрольную точку через plugins.save; plugins.apply вызывай только для явно запрошенной активации сохранённой версии.';
-        if(!RNAssistantProjectChats.snapshot()||!RNAssistantProjectChats.snapshot().sessionId){if(!await window.RNAssistantProjectChats.create())return;}
         el('Input').value=message;el('Input').dispatchEvent(new Event('input',{bubbles:true}));el('Form').requestSubmit();}
       el('CreateForm').reset();el('IconDescription').value='';el('IconImportName').value='';el('IconImportSvg').value='';
       selectedIconId='puzzle';customSource=false;renderIconChoices();el('Connect').onchange();

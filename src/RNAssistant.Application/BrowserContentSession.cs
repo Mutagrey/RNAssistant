@@ -96,6 +96,9 @@ namespace RNAssistant.Application
             if (Target.Kind == BrowserTargetKind.WorkspaceHtmlProject) return BrowserLocalLocator.ForProject(Target.WorkspaceId, member, Target.SavedVersionId);
             BrowserLocalLocator locator;
             if (!BrowserLocalLocator.TryParse(Target.DisplayLocator, out locator)) throw new InvalidOperationException("Invalid document address.");
+            // The admitted resource address denotes this lease's exact entry
+            // member. Use the same address when native history reports that member.
+            if (locator.RelativePath == null && member == EntryPath) return locator.ContentLocator;
             return BrowserLocalLocator.ForResource(locator.Key, locator.VersionId, member);
         }
         public string Location(string url)
@@ -111,7 +114,7 @@ namespace RNAssistant.Application
             if (!BrowserLocalLocator.TryParse(Location(url), out locator)) throw new InvalidOperationException("Invalid Browser location.");
             state.Url = locator.Canonical;
             state.Target.DisplayLocator = locator.ContentLocator;
-            state.Target.RelativePath = state.Target.EntryPath = locator.RelativePath;
+            state.Target.RelativePath = state.Target.EntryPath = locator.RelativePath ?? EntryPath;
         }
         public bool TryMember(string url, out string path)
         {
