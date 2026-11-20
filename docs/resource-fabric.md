@@ -1342,7 +1342,8 @@ belongs to OfficeHosts, and both dispatched and UI-thread adapters preserve that
 optional backend. Core owns only the common resource/evidence protocol.
 
 `core.find` in document scope discovers compact `excel-query` metadata without
-capturing every M definition. Copy the exact `Excel query: <name>` target. Query
+capturing every M definition. Filter by the query name or use `query="Excel query"`
+for a bounded list. Copy the exact `Excel query: <name>` target. Query
 names retain their spelling; the runtime creates document-scoped identities and
 revisions. An M definition, its connection/load configuration, an execution
 generation and an output table remain different facts and resources.

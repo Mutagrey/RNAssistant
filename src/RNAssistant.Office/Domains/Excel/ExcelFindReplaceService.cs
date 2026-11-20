@@ -18,7 +18,7 @@ namespace RNAssistant.Office.Domains.Excel
         public const int MaximumSearchCells = 100000;
         public const int MaximumFindResultCharacters = 32000;
         public const string NarrowSearchScopeMessage =
-            "Excel search scope exceeds the exact snapshot limit (100000 cells or 1000000 characters). Do not retry it unchanged. For known cells, read core.read with target=Excel range: Sheet!A1:B10 and representation=text; no search or VBA macro is needed. For text search, inspect sheets for UsedRange addresses, then search smaller explicit scope=range slices with sheet and address; combine matches without treating an unsearched slice as empty.";
+            "Excel search scope exceeds the exact snapshot limit (100000 cells or 1000000 characters). Read known cells directly with core.read using target=Excel range: Sheet!A1:B10 and representation=text. For text search, get UsedRange addresses with excel.inspect and kind=workbook, then search smaller explicit slices using scope=range, sheet and address. Report coverage for the slices actually searched.";
 
         private readonly IExcelFindReplaceBackend _backend;
 
