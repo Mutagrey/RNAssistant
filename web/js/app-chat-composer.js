@@ -6,6 +6,7 @@
   function create(nodes) {
     var sources = Object.create(null), owner = "office", selected = "", generation = 0, bound = false, disposed = false;
     var edits = new Map(), listeners = [], frames = new Set(), preferenceWrites = new Set(), draftBinding = null;
+    var clipboardRead = 0, insertingClipboardText = false;
     function invalidate() {
       ++generation;
       frames.forEach(function (frame) { window.cancelAnimationFrame(frame); }); frames.clear();
@@ -148,15 +149,66 @@
       node.addEventListener(event, action);
       listeners.push(function () { node.removeEventListener(event, action); });
     }
+    function inputChanged(immediateResize) {
+      var value = edit(context().target);
+      if (value) value.text = nodes.input.value;
+      dispatch("input", immediateResize);
+    }
+    function openInputMenu(event) {
+      var input = nodes.input, scope = capture();
+      if (input.disabled) return;
+      event.preventDefault();
+      var selectedText = input.selectionStart !== input.selectionEnd;
+      function canUseInput() {
+        return scope.isCurrent() && input.isConnected && !input.closest("[inert]") &&
+          !input.disabled && document.activeElement === input;
+      }
+      function editCommand(command) {
+        if (!canUseInput() || command === "cut" && input.readOnly) return;
+        scope.invoke("clipboardNotice", document.execCommand(command) ? "" : "Буфер обмена недоступен.");
+      }
+      async function pasteText() {
+        if (!canUseInput() || input.readOnly) return;
+        var stamp = ++clipboardRead, value = input.value, start = input.selectionStart, end = input.selectionEnd;
+        function canInsert() {
+          return stamp === clipboardRead && canUseInput() && !input.readOnly &&
+            input.value === value && input.selectionStart === start && input.selectionEnd === end;
+        }
+        var result;
+        try { result = await send("readClipboardText"); }
+        catch (error) {
+          if (canInsert()) scope.invoke("clipboardNotice", "Не удалось прочитать буфер обмена.");
+          return;
+        }
+        if (!canInsert()) return;
+        if (!result.text) {
+          scope.invoke("clipboardNotice", "В буфере обмена нет текста.");
+          return;
+        }
+        // Keep native undo and process multiline insertion as one draft change.
+        var inserted;
+        insertingClipboardText = true;
+        try { inserted = document.execCommand("insertText", false, result.text); }
+        finally { insertingClipboardText = false; }
+        if (inserted) inputChanged(true);
+        scope.invoke("clipboardNotice", inserted ? "" : "Не удалось вставить текст.");
+      }
+      window.RNAssistantActionMenu.open(input, [
+        { label: "Вырезать", icon: false, disabled: !selectedText || input.readOnly, onSelect: function () { editCommand("cut"); } },
+        { label: "Копировать", icon: false, disabled: !selectedText, onSelect: function () { editCommand("copy"); } },
+        { label: "Вставить как текст", icon: false, disabled: input.readOnly, onSelect: pasteText },
+        { label: "Выделить всё", icon: false, disabled: !input.value, onSelect: function () { if (canUseInput()) input.select(); } }
+      ], { label: "Редактирование сообщения", point: { x: event.clientX, y: event.clientY } });
+    }
     function bind() {
       if (bound) return;
       bound = true;
       function submit() { if (!nodes.send.disabled) dispatch("submit"); }
       listen(nodes.form, "submit", function (event) { event.preventDefault(); submit(); });
+      listen(nodes.input, "contextmenu", openInputMenu);
+      listen(nodes.input, "blur", function () { ++clipboardRead; });
       listen(nodes.input, "input", function (event) {
-        var value = edit(context().target);
-        if (value) value.text = nodes.input.value;
-        dispatch("input", event.inputType === "insertLineBreak" || /\r|\n/.test(event.data || ""));
+        if (!insertingClipboardText) inputChanged(event.inputType === "insertLineBreak" || /\r|\n/.test(event.data || ""));
       });
       listen(nodes.input, "keydown", function (event) {
         if (event.key === "Escape" && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {

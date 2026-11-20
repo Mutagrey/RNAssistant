@@ -11,6 +11,10 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+### 17.8.2-dev
+
+- В поле сообщения правая кнопка открывает меню с командой «Вставить как текст».
+
 ### 17.7.0-dev
 
 - Боковые панели плавно сворачиваются при уходе фокуса. Pin в заголовке

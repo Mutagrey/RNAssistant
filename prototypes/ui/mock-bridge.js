@@ -471,6 +471,7 @@
     if (type === "init") return { bridgeToken: token, bridgeContract: contract,
       init: Object.assign({ appVersion: "preview", host: "Excel", title: fixtures.document,
         settings: clone(settings), prompts: promptLibrary(), hasApiKey: true, hasHistorySecret: false }, chatState()) };
+    if (type === "readClipboardText") return { text: await navigator.clipboard.readText() };
     if (type === "getChatDrafts") {
       if (scenario === "draft-read-error") fail("Черновики недоступны.", "preview_draft_read_failed");
       return { drafts: previewDrafts.map(function (draft) {

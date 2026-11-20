@@ -42,6 +42,7 @@ namespace RNAssistant.Office.WebView
         public Action<string, string, bool> MailboxNavigationRequested { get; set; }
         public Func<string, Task<OfficeHostChatResponse>> OfficeHostChatRequested { get; set; }
         public Func<string, Task<OfficeHostChatResponse>> OfficeChatSelectionRequested { get; set; }
+        internal Func<string> ReadClipboardText { get; set; }
         private IBrowserPageHost _externalBrowser;
         internal Task<Action> PauseBrowserRunAsync(string chatId, string pauseId)
         { return Task.Run(() => _agentCommunication.PauseForUser(chatId, pauseId)); }
@@ -273,6 +274,11 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.HostWindowCommand:
                         if (WindowHost == null) throw new InvalidOperationException("This host does not support window commands.");
                         responsePayload = await WindowHost.ExecuteAsync(Payload<HostWindowCommandPayload>(payload), id).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.ReadClipboardText:
+                        // Clipboard access runs on the WebView message thread (STA).
+                        if (ReadClipboardText == null) throw new InvalidOperationException("Буфер обмена недоступен на этом host.");
+                        responsePayload = new ClipboardTextResponse { Text = ReadClipboardText() };
                         break;
                     case BridgeOperationId.GetPlugins: case BridgeOperationId.GetPluginIcons: case BridgeOperationId.SavePluginIcon:
                     case BridgeOperationId.DeletePluginIcon: case BridgeOperationId.DrawPluginIcon: case BridgeOperationId.UpdatePluginAppearance:

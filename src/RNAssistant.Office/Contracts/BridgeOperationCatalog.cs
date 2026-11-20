@@ -207,6 +207,7 @@ namespace RNAssistant.Office.Contracts
         QuickAction,
         CancelRequest,
         CancelChatRun,
+        [BridgeOperationPolicy(false, 10)] ReadClipboardText,
     }
 
     [AttributeUsage(AttributeTargets.Field)]

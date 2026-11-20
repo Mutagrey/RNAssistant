@@ -109,11 +109,16 @@
     };
     function on(element, event, fn) { if (element) element.addEventListener(event, fn, { signal: listeners.signal }); }
     function edit() { return composer.edit(address); }
+    var clipboardNotice = "";
     var common = {
       target: function () { return address; },
       input: function (immediateResize) {
         if (!edit()) adapter.captureDraft(true);
         renderControls({ inputOnly: true, immediateResize: !!immediateResize });
+      },
+      clipboardNotice: function (message) {
+        if (message || clipboardNotice && component.error === clipboardNotice) component.notice(message);
+        clipboardNotice = message;
       },
       clear: function () { node("chatInput").value = ""; common.input(); node("chatInput").focus(); },
       cancelEdit: function () { composer.cancelEdit(address, { focus: true }); render(); },

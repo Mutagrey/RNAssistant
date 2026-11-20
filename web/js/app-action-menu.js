@@ -8,7 +8,7 @@
   }
 
   function icon(name) { return window.RNAssistantIcons.render(name); }
-  var popup = null, popupTrigger = null;
+  var popup = null, popupTrigger = null, popupAtPoint = false;
 
   function closePopup(restoreFocus) {
     if (!popup) return;
@@ -17,7 +17,7 @@
       popupTrigger.setAttribute("aria-expanded", "false");
       if (restoreFocus && popupTrigger.isConnected) popupTrigger.focus({ preventScroll: true });
     }
-    popupTrigger = null;
+    popupTrigger = null; popupAtPoint = false;
     overlayChanged();
   }
 
@@ -26,10 +26,12 @@
       document.dispatchEvent(new CustomEvent("rnassistant:overlay-change"));
   }
 
-  // Portalled variant for headers inside Dockview's clipped tab container.
+  // Portal keeps menus outside Dockview's clipped containers.
   function open(trigger, items, options) {
-    if (trigger === popupTrigger) { closePopup(true); return; }
-    closeAll(); options = options || {};
+    options = options || {};
+    var point = options.point;
+    if (trigger === popupTrigger && !point) { closePopup(true); return; }
+    closeAll(); popupAtPoint = !!point;
     popupTrigger = trigger; popup = document.createElement("div");
     popup.className = "rna-action-menu-popup rna-action-menu-body" + (options.className ? " " + options.className : "");
     popup.setAttribute("role", options.role === "dialog" ? "dialog" : "menu"); popup.tabIndex = -1;
@@ -89,13 +91,16 @@
       menu.style.maxWidth = "min(var(--menu-max-width, 100vw), " + Math.max(0, (innerWidth - 2 * inset) / scale) + "px)";
       menu.style.maxHeight = Math.max(0, (innerHeight - 2 * inset) / scale) + "px";
       var bounds = menu.getBoundingClientRect();
-      var left = options.align === "start" ? rect.left : rect.right - bounds.width;
+      var left = point ? point.x : options.align === "start" ? rect.left : rect.right - bounds.width;
       menu.style.left = Math.max(inset, Math.min(left, innerWidth - bounds.width - inset)) / scale + "px";
       var top = options.placement === "top" ? rect.top - bounds.height - offset : rect.bottom + offset;
+      if (point) top = point.y + bounds.height <= innerHeight - inset ? point.y : point.y - bounds.height;
       menu.style.top = Math.max(inset, Math.min(top, innerHeight - bounds.height - inset)) / scale + "px";
     }
     position();
-    var first = popup.querySelector("button:not(:disabled)"); if (first) first.focus(); else if (options.role === "dialog") popup.focus();
+    var first = popup.querySelector("button:not(:disabled)");
+    if (first) first.focus({ preventScroll: !!point });
+    else if (options.role === "dialog" || point) popup.focus({ preventScroll: !!point });
     return { update: function (values) { if (popup === menu) { render(values); position(); } },
       close: function () { if (popup === menu) closePopup(false); },
       isOpen: function () { return popup === menu; } };
@@ -143,7 +148,7 @@
     if (menu.matches && menu.matches(".rna-action-menu") && menu.open) closeAll(menu);
   }, true);
   document.addEventListener("click", function (event) {
-    if (popup && (popup.contains(event.target) || popupTrigger && popupTrigger.contains(event.target))) return;
+    if (popup && (popup.contains(event.target) || !popupAtPoint && popupTrigger.contains(event.target))) return;
     var menu = event.target.closest(".rna-action-menu");
     if (!menu) closeAll();
     else if (event.target.closest(".rna-action-menu-body > button")) menu.removeAttribute("open");

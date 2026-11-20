@@ -83,6 +83,7 @@ namespace RNAssistant.Office.WebView
             _webRoot = webRoot;
             _bridge = new AssistantWebBridge(controller, PostBridgeMessage);
             _bridge.WindowHost = windowHost;
+            _bridge.ReadClipboardText = () => Clipboard.GetText(TextDataFormat.UnicodeText);
             _plugins = new RNAssistant.Application.PluginApplicationService(controller.StoragePaths, webRoot,
                 officeCapabilities: new WorkspaceOfficeCapabilities(() => _controller),
                 browserCapabilities: new BrowserCapabilityService(() => _externalBrowser));

@@ -80,6 +80,12 @@ namespace RNAssistant.Office.Contracts
         public bool WantsKeyboard { get; set; }
     }
 
+    public sealed class ClipboardTextResponse
+    {
+        [JsonProperty("text")]
+        public string Text { get; set; }
+    }
+
     public sealed class BridgeResponse
     {
         [JsonProperty("id")]
