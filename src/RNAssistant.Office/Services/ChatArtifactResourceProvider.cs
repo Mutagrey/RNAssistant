@@ -479,7 +479,7 @@ namespace RNAssistant.Office.Services
             var address = ParseAddress(session, resourceUri);
             var artifact = FindExactArtifact(session, address.ArtifactId);
             EnsureRevision(artifact, address.Revision);
-            _htmlResources.ValidateRevision(session, artifact);
+            if (!address.IsMember) _htmlResources.ValidateRevision(session, artifact);
             if (request.PageStart.HasValue)
                 return ReadPdfPageRangeText(session, request, artifact, address.IsMember, resourceUri, cancellationToken);
             if (request.PageIndex.HasValue)

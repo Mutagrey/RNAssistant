@@ -8,8 +8,8 @@
     var modeButtons = Array.prototype.slice.call(root.querySelectorAll(".html-workspace-mode-button"));
     var code = options.code;
     var getCodeEditorValue = code ? function () { return code.getValue(); } : window.getCodeEditorValue;
-    var setCodeEditorValue = code ? function (_, value, key) { code.setValue(value, key); } : window.setCodeEditorValue;
-    var setCodeEditorSource = code ? function (_, path) { code.source(path); } : window.setCodeEditorSource;
+    var setCodeEditorValue = window.setCodeEditorValue;
+    var setCodeEditorSource = window.setCodeEditorSource;
     var setCodeEditorReadOnly = code ? function (_, value) { code.readOnly(value); } : window.setCodeEditorReadOnly;
     var syncCodeEditors = code ? function () {} : window.syncCodeEditors;
     var refreshCodeEditors = code ? code.refresh : window.refreshCodeEditors;
@@ -18,7 +18,7 @@
     var renderedFile = null, renderedSourceKey = null;
     var workspaceArtifacts = options.artifacts;
     var htmlPreviewRefreshTimer = 0;
-    var previewCleared = false;
+    var previewCleared = false, appliedMode = null;
 
     function clearPreview(frame) {
       if (previewCleared) return;
@@ -264,6 +264,8 @@
 
     function applyHtmlWorkspaceMode() {
       var mode = state.htmlWorkspaceMode === "edit" ? "edit" : "preview";
+      if (appliedMode === mode) return;
+      appliedMode = mode;
       modeButtons.forEach(function (button) {
         button.classList.toggle("active", button.getAttribute("data-html-mode") === mode);
         button.setAttribute("aria-pressed", String(button.getAttribute("data-html-mode") === mode));
@@ -377,10 +379,11 @@
       var editorValue = editing ? selectedEditorValue(selected) : "";
       var editorKey = editing && selected ? JSON.stringify([state.activeChatId, selected.type,
         selected.item.id || selected.item.Id, selected.type === "file" ? selected.item.sourceReadKey : artifactRevision(selected.item)]) : "";
-      if (typeof setCodeEditorValue === "function") {
+      var sourcePath = selected && selected.type === "file" ? selected.item.path : selected && selected.type === "plan" ? "plan.md" : "source.json";
+      if (code) code.setValue(editorValue, editorKey, { path: sourcePath });
+      else if (typeof setCodeEditorValue === "function") {
         setCodeEditorValue("htmlWorkspaceEditorInput", editorValue, editorKey);
-        if (typeof setCodeEditorSource === "function") setCodeEditorSource("htmlWorkspaceEditorInput",
-          selected && selected.type === "file" ? selected.item.path : selected && selected.type === "plan" ? "plan.md" : "source.json");
+        if (typeof setCodeEditorSource === "function") setCodeEditorSource("htmlWorkspaceEditorInput", sourcePath);
       } else if ($("htmlWorkspaceEditorInput")) {
         $("htmlWorkspaceEditorInput").value = editorValue;
       }

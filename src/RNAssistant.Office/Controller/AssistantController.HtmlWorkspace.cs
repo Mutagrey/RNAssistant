@@ -95,10 +95,14 @@ namespace RNAssistant.Office
 
         public Task<HtmlWorkspaceSourceResponse> ReadHtmlWorkspaceSourceAsync(HtmlWorkspaceSourceRequest request, CancellationToken token)
         {
-            if (request == null || string.IsNullOrWhiteSpace(request.ChatId))
-                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
-            var session = HtmlWorkspaceEditorResourceService.CaptureSourceSession(LoadAddressedSession(request.ChatId), request);
-            return Task.Run(() => new HtmlWorkspaceEditorResourceService(_toolExecutor, _resourceData).OpenSource(session, request, token), token);
+            if (string.IsNullOrWhiteSpace(request?.ChatId) || request.Resource?.IsExact != true)
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat and exact HTML source are required.");
+            return Task.Run(() => {
+                var snapshot = ChatResourceUri.ArtifactSnapshot(request.Resource);
+                var actor = ReadArtifactActor(request.ChatId, null, snapshot.Uri);
+                var source = HtmlWorkspaceEditorResourceService.CaptureSourceSession(actor, request);
+                return new HtmlWorkspaceEditorResourceService(_toolExecutor, _resourceData).OpenSource(source, request, token);
+            }, token);
         }
 
         public ResourceDataCloseResponse CancelHtmlWorkspaceMutationUpload(ResourceUploadLeaseRequest request)

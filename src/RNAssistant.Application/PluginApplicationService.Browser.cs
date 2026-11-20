@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using RNAssistant.Application.Contracts;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
@@ -9,10 +10,13 @@ namespace RNAssistant.Application
 {
     public sealed partial class PluginApplicationService
     {
-        public BrowserResolveResult ResolveBrowserLocator(BrowserResolveRequest request)
+        public BrowserResolveResult ResolveBrowserLocator(BrowserResolveRequest request) => ResolveBrowserLocator(request, CancellationToken.None);
+
+        public BrowserResolveResult ResolveBrowserLocator(BrowserResolveRequest request, CancellationToken token)
         {
             using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)
             {
+                token.ThrowIfCancellationRequested();
                 RequireOpen();
                 BrowserLocalLocator locator;
                 if (!BrowserLocalLocator.TryParse(request?.Locator, out locator))
@@ -62,7 +66,7 @@ namespace RNAssistant.Application
                 }
                 else
                 {
-                    try { manifest = PluginPackageFiles.ParseManifest(_files.ReadText(workspace, "plugin.json").Text); }
+                    try { manifest = PluginPackageFiles.ParseManifest(_files.ReadText(workspace, "plugin.json", token).Text); }
                     catch (PluginException error)
                     {
                         target.EntryPath = "plugin.json"; target.Capabilities.SaveVersion = false;
@@ -77,11 +81,13 @@ namespace RNAssistant.Application
             }
         }
 
-        public BrowserSourcePage ReadBrowserSource(BrowserSourceRequest request, BrowserTargetDescriptor target)
+        public BrowserSourcePage ReadBrowserSource(BrowserSourceRequest request, BrowserTargetDescriptor target,
+            CancellationToken token = default(CancellationToken))
         {
-            if (target?.Kind == BrowserTargetKind.WorkspaceHtmlProject) return HtmlProjects.Source(request, target);
+            if (target?.Kind == BrowserTargetKind.WorkspaceHtmlProject) return HtmlProjects.Source(request, target, token);
             using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)
             {
+                token.ThrowIfCancellationRequested();
                 RequireOpen();
                 if (target?.OwnerScope == null || target.State != BrowserTargetState.Ready)
                     throw new PluginException("browser_source_unavailable", "Исходник недоступен.");
@@ -95,22 +101,22 @@ namespace RNAssistant.Application
                     var release = _store.ReadSavedRelease(target.PluginId, target.SavedVersionId);
                     if (release.SourceWorkspaceId != target.WorkspaceId) throw new PluginException("browser_owner_changed", "Контекст исходника изменился.");
                     return BrowserSourceReader.Read(target, request, release.Files.Select(file => file.Path),
-                        path => SourceComparisonService.Utf8(_store.ReadFile(release, path)));
+                        path => SourceComparisonService.Utf8(_store.ReadFile(release, path)), token);
                 }
                 if (target.Kind == BrowserTargetKind.PluginSource)
                 {
                     var workspace = Source(RequireRegistration(target.PluginId)).Workspace;
-                    var registration = RequireRegistration(target.PluginId);
-                    if (registration.SourceWorkspaceId != workspace.WorkspaceId) throw new PluginException("browser_owner_changed", "Контекст исходника изменился.");
+                    if (target.WorkspaceId != workspace.WorkspaceId) throw new PluginException("browser_owner_changed", "Контекст исходника изменился.");
+                    var definition = files.ReadText(workspace, "plugin.json", token).Text;
                     PluginManifestV1 manifest;
-                    try { manifest = PluginPackageFiles.ParseManifest(files.ReadText(workspace, "plugin.json").Text); }
+                    try { manifest = PluginPackageFiles.ParseManifest(definition); }
                     catch (PluginException)
                     {
-                        return BrowserSourceReader.Read(target, request, new[] { "plugin.json" }, path => files.ReadText(workspace, path).Text);
+                        return BrowserSourceReader.Read(target, request, new[] { "plugin.json" }, path => definition, token);
                     }
                     if (manifest.Id != target.PluginId) throw new PluginException("browser_owner_changed", "Идентичность плагина изменилась.");
                     return BrowserSourceReader.Read(target, request, manifest.Files.Concat(new[] { "plugin.json" }).Distinct(StringComparer.Ordinal),
-                        path => files.ReadText(workspace, path).Text);
+                        path => path == "plugin.json" ? definition : files.ReadText(workspace, path, token).Text, token);
                 }
                 throw new PluginException("browser_source_unavailable", "Этот источник не принадлежит владельцу плагинов.");
             }

@@ -103,6 +103,10 @@ a visible material action. One `…` owns copy-link/reload, home, project, expor
 compare, screenshot, edit-source and catalog commands; search is not duplicated in that
 menu.
 
+Source shows a loading status while a file is read. Returning to the displayed file
+cancels the pending selection. The editable HTML workspace shows the save requirement
+in its status bar and keeps the dirty file selected.
+
 For PDF and images, moving the thumbnail/gallery rail into the sidebar does not shrink
 the document page or canvas: the remaining content slot fills the surface. A successful
 exact material shows no refresh button; failed reads alone expose retry, while the same

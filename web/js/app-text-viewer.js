@@ -86,6 +86,7 @@
     var hasFull = typeof options.fullText === "string" && options.complete === true;
     var displayed = hasFull ? options.fullText : String(options.text || "");
     var displayedStartLine = hasFull ? 1 : Math.max(1, Number(options.startLine || 1));
+    var totalLines = lineCount(displayed), previousButton, nextButton;
     status.textContent = completenessText(options, hasFull);
     var statusListeners = [];
     root.appendChild(status);
@@ -133,8 +134,9 @@
         : null, "Файл подготовлен", "Не удалось скачать");
     }
     if (!hasFull) {
-      actionButton("←", options.hasPrevious ? options.onPrevious : null, "Предыдущая страница", "Страница недоступна");
-      actionButton("→", options.hasNext ? options.onNext : null, "Следующая страница", "Страница недоступна");
+      previousButton = actionButton("←", function () { return options.onPrevious(); }, "Предыдущая страница", "Страница недоступна");
+      nextButton = actionButton("→", function () { return options.onNext(); }, "Следующая страница", "Страница недоступна");
+      updatePaging();
     }
     actions.appendChild(actionStatus);
     toolbar.appendChild(actions);
@@ -150,14 +152,13 @@
     var gutter = element("pre", "rn-text-viewer-lines");
     var content = element("pre", "rn-text-viewer-content");
     gutter.setAttribute("aria-hidden", "true");
-    gutter.textContent = lineNumbers(displayedStartLine, lineCount(displayed));
+    gutter.textContent = lineNumbers(displayedStartLine, totalLines);
     content.textContent = displayed;
     source.appendChild(gutter);
     source.appendChild(content);
     root.appendChild(source);
     }
     function textStatus() {
-      var totalLines = lineCount(displayed);
       if (editor && editor.editor && typeof editor.editor.getCursor === "function") {
         var cursor = editor.editor.getCursor();
         return "Стр. " + (displayedStartLine + Number(cursor.line || 0)) + ", стлб. " + (Number(cursor.ch || 0) + 1) +
@@ -171,6 +172,20 @@
     }
     if (editor && editor.editor && typeof editor.editor.on === "function") editor.editor.on("cursorActivity", emitStatus);
     var searchIndex = -1, previousQuery = "";
+    function updatePaging() {
+      previousButton.disabled = !options.hasPrevious || typeof options.onPrevious !== "function";
+      nextButton.disabled = !options.hasNext || typeof options.onNext !== "function";
+    }
+    function setPage(next) {
+      options = next;
+      displayed = String(next.text || ""); displayedStartLine = Math.max(1, Number(next.startLine || 1));
+      totalLines = lineCount(displayed); status.textContent = completenessText(next, false);
+      searchIndex = -1; previousQuery = search.value = searchResult.textContent = actionStatus.textContent = "";
+      updatePaging();
+      if (editor) editor.setValue(displayed, JSON.stringify([next.path, next.offset, next.revision]), next);
+      else { gutter.textContent = lineNumbers(displayedStartLine, totalLines); content.textContent = displayed; }
+      emitStatus();
+    }
     function searchText(query, direction) {
       query = String(query || "").trim();
       var offsets = occurrenceOffsets(displayed, query);
@@ -192,6 +207,7 @@
     }
     return {
       element: root,
+      setPage: hasFull ? undefined : setPage,
       search: searchText,
       subscribeStatus: function (listener) {
         if (typeof listener !== "function") return function () {};

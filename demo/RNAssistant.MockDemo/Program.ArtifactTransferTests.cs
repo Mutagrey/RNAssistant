@@ -65,7 +65,24 @@ namespace RNAssistant.MockDemo
                 if (second.Target.EntryPath != "second.html") throw new Exception("Local link exported the previous member.");
                 foreach (var id in new[] { second.Source.LeaseId }.Concat(second.ResourceExport.Bindings.Select(value => value.Lease.LeaseId)))
                     controller.CloseResourceData(new ResourceDataCloseRequest { ChatId = second.ChatId, WorkspaceId = "browser", LeaseId = id });
+                var source = controller.GetHtmlWorkspace(chat).Workspace.Files.Single(file => file.Path == "second.html").Source;
+                var unbound = controller.CreateChat("Unbound").CatalogChanges.UpsertedChats.Single();
+                if (unbound.DocumentAuthorityId != item.DocumentId) throw new Exception("Expected an unbound chat in the source document.");
+                var unboundRejected = false;
+                try { controller.ReadHtmlWorkspaceSourceAsync(new HtmlWorkspaceSourceRequest { ChatId = unbound.Id, Resource = source }, CancellationToken.None).GetAwaiter().GetResult(); }
+                catch (ResourceRequestException error) when (error.ErrorCode == "RESOURCE_SNAPSHOT_UNAVAILABLE") { unboundRejected = true; }
+                if (!unboundRejected) throw new Exception("An unbound chat read the editor source from the same document.");
                 CheckBrowserDiscussion(controller, target);
+                var selected = controller.ListChats().ActiveChatId;
+                var editorSource = controller.ReadHtmlWorkspaceSourceAsync(new HtmlWorkspaceSourceRequest { ChatId = chat, Resource = source }, CancellationToken.None)
+                    .GetAwaiter().GetResult();
+                using (var stream = controller.HandleResourceData("GET", editorSource.Data.Url + "?offset=0&count=" + editorSource.Data.Payload.ByteLength, CancellationToken.None).Body)
+                using (var reader = new StreamReader(stream))
+                    if (reader.ReadToEnd() != "<p>Second page</p>" || editorSource.Resource.Uri != source.Uri)
+                        throw new Exception("The addressed editor read did not return the selected exact HTML file.");
+                controller.CloseResourceData(new ResourceDataCloseRequest { ChatId = chat, WorkspaceId = "html-editor", LeaseId = editorSource.Data.LeaseId });
+                if (controller.ListChats().ActiveChatId != selected) throw new Exception("Reading a file selected a different chat.");
+                Console.WriteLine("PASS HTML source controller: exact chat membership, selected file and preserved active chat");
                 target.ResourceUri += "-stale"; var rejected = false;
                 try { controller.PrepareBrowserHtmlExport(new BrowserProjectTransferRequest { Target = target }, CancellationToken.None); }
                 catch (InvalidOperationException) { rejected = true; }

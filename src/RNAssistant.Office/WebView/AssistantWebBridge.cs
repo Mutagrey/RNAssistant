@@ -707,7 +707,7 @@ namespace RNAssistant.Office.WebView
                         responsePayload = await RunBridgeWorkAsync(() => WriteBrowserVersion(Payload<BrowserVersionCommand>(payload), cancellationToken), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.ReadBrowserSource:
-                        responsePayload = await RunBridgeWorkAsync(() => BrowserSource(Payload<BrowserSourceRequest>(payload)), cancellationToken).ConfigureAwait(false);
+                        responsePayload = await RunBridgeWorkAsync(() => BrowserSource(Payload<BrowserSourceRequest>(payload), cancellationToken), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.GetCasHealth:
                         responsePayload = await RunBridgeWorkAsync(_controller.GetCasHealth, cancellationToken).ConfigureAwait(false);

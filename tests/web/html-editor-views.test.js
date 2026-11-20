@@ -73,6 +73,8 @@ const { chromium } = require('playwright');
     assert.equal(await a.locator('.preview-surface-toolbar').count(),0,'editor no longer has its own Browser chrome');
     await page.evaluate(() => RNAssistantHtmlWorkspaceSurface.open('html-b', { mode: 'edit' }));
     await root('html-b').locator('.CodeMirror').evaluate(node=>{node.CodeMirror.execCommand('selectAll');node.CodeMirror.replaceSelection('<main>draft B</main>','end','+input');});
+    assert.equal(await page.evaluate(()=>editorView('html-b').select('file','file2')),false,'unsaved file remains selected');
+    await root('html-b').getByText('Сначала сохраните изменения текущего файла.',{exact:true}).waitFor();
     const hiddenReads=await page.evaluate(()=>htmlTest.calls.filter(c=>c.command==='readBrowserSource').length);
     await page.evaluate(()=>{htmlTest.versions['html-a']=2;htmlTest.contents['html-a']='<h1>agent v2</h1>';handleResourceAuthorityChanged({scope:'document:html-document',generation:2,resources:[],allInScope:true});});
     assert.equal(await page.evaluate(()=>htmlTest.calls.filter(c=>c.command==='readBrowserSource').length),hiddenReads,'hidden Browser defers source refresh');

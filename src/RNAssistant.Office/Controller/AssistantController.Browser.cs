@@ -91,7 +91,8 @@ namespace RNAssistant.Office
             return new RNAssistant.Office.Contracts.ResourceDataCloseResponse { Closed = true };
         }
 
-        internal BrowserSourcePage ReadBrowserSource(BrowserSourceRequest request, BrowserTargetDescriptor target)
+        internal BrowserSourcePage ReadBrowserSource(BrowserSourceRequest request, BrowserTargetDescriptor target,
+            CancellationToken token = default(CancellationToken))
         {
             var metadata = BrowserOwner(request.OwnerScope, target.Immutable);
             if (target.OwnerScope.ScopeId != metadata.DocumentAuthorityId || target.ChatId != metadata.Id ||
@@ -103,15 +104,16 @@ namespace RNAssistant.Office
             if (artifact.ContentByteLength > 8 * 1024 * 1024) throw new InvalidOperationException("Исходник превышает лимит просмотра.");
             if (artifact.Kind == ChatArtifactKinds.HtmlWorkspace)
             {
+                token.ThrowIfCancellationRequested();
                 artifact = artifacts.Read(metadata, reference);
                 var snapshot = JsonConvert.DeserializeObject<HtmlWorkspaceSnapshot>(artifact.InlineText);
                 return BrowserSourceReader.Read(target, request, snapshot.Files.Select(file => file.Path),
-                    path => snapshot.Files.Single(file => file.Path == path).Content);
+                    path => snapshot.Files.Single(file => file.Path == path).Content, token);
             }
             if (!BrowserTargetResolver.IsHtmlResource(artifact)) throw new InvalidOperationException("Источник не является HTML.");
             return BrowserSourceReader.Read(target, request, new[] { "index.html" }, path =>
                 new UTF8Encoding(false, true).GetString(_toolExecutor.Payloads.ReadBytes(
-                    new PayloadRef(artifact.ContentSha256, artifact.ContentByteLength ?? -1, artifact.MimeType).ToBlobReference())));
+                    new PayloadRef(artifact.ContentSha256, artifact.ContentByteLength ?? -1, artifact.MimeType).ToBlobReference())), token);
         }
 
         internal IReadOnlyList<BrowserTargetDescriptor> BrowserTargets(BrowserOwnerScope owner, string suggestionsPrefix = null, int? suggestionsLimit = null)

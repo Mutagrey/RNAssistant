@@ -70,7 +70,6 @@
         var file;
         try {
           validate(workspace, wanted);
-          restoreCached(wanted);
           for (var index = 0; index < wanted.length; index++) {
             file = wanted[index]; active();
             if (ready(file)) continue;

@@ -326,7 +326,7 @@ namespace RNAssistant.Office
             return Task.FromResult(ChatState(id, chatId));
         }
         public ChatStateResponse UpdateMessageActivityData(string messageId, string dataJson, string chatId = null) { return ChatState(messageId, chatId); }
-        internal BrowserSourcePage ReadBrowserSource(BrowserSourceRequest request, BrowserTargetDescriptor target)
+        internal BrowserSourcePage ReadBrowserSource(BrowserSourceRequest request, BrowserTargetDescriptor target, CancellationToken token)
         { throw new InvalidOperationException("Source is not configured by this fixture."); }
         internal RNAssistant.Application.BrowserContentSession OpenBrowserContent(BrowserTargetDescriptor target, CancellationToken token)
         { throw new NotSupportedException("Native document content is checked with the real controller adapter."); }

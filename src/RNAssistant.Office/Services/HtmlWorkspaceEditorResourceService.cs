@@ -80,7 +80,7 @@ namespace RNAssistant.Office.Services
             {
                 cancellation.ThrowIfCancellationRequested();
                 var read = _executor.ResourceGateway.Read(session, new ResourceReadRequest { Reference = exact,
-                    Representation = ResourceRepresentations.Source, MaxChars = 32000 }).Result;
+                    Representation = ResourceRepresentations.Source, MaxChars = 32000 }, cancellation).Result;
                 var payload = read?.CompleteViewPayload;
                 if (read?.Resource?.Reference == null || read.Resource.Reference.Uri != exact.Uri || read.Resource.Reference.Revision != exact.Revision ||
                     read.Resource.Kind != ChatHtmlResourceCatalog.FileKind || read.Representation != ResourceRepresentations.Source || payload == null ||

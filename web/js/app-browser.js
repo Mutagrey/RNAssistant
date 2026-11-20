@@ -59,7 +59,7 @@
     var mount = document.createElement("div"); mount.className = "browser-view";
     var renderer = RNAssistantViewerRegistry.mount("browser", mount, { surface: root, portalHost: document.querySelector(".shell"), onLayout: layoutNative, onEnter: function () { if (session && selectedMode === "preview" && current.status === "Ready") { command("Focus").catch(fail); return true; } return false; } });
     var active = false, disposed = false, opening = null, session = null, current = null, generation = 0, recordedVisit = 0, pending = new Set();
-    var sourcePage = null, sourceViewer = null, loadingSource = 0, selectedMode = "preview", targetGeneration = -1, homeView = null;
+    var sourcePage = null, sourceViewer = null, loadingSource = null, selectedMode = "preview", targetGeneration = -1, homeView = null;
     var filesListed = false, filesReading = null, filesFailed = false, filesCollapsed = true;
     var agentAttachments = new Map(), restarting = null;
     var fileNavigation = createBrowserFileNavigation();
@@ -423,7 +423,7 @@
       heading.append(headingLabel, count, folder);
       var tree = document.createElement("div");
       panel.append(heading, tree);
-      var expanded = Object.create(null), positionKey = "browser-files:" + target.browserTabId;
+      var expanded = Object.create(null), positionKey = "browser-files:" + target.browserTabId, listedFiles = null;
 
       function fileIcon(path) {
         if (/\.(?:html?|xhtml)$/i.test(path)) return RNAssistantNavigationTree.icon("html");
@@ -456,6 +456,10 @@
       }
       function draw(files, activePath, emptyText) {
         files = Array.isArray(files) ? files.filter(function (path) { return typeof path === "string" && path.length > 0; }) : [];
+        if (listedFiles && listedFiles.length === files.length && listedFiles.every(function (path, index) { return path === files[index]; })) {
+          select(activePath); return;
+        }
+        listedFiles = files;
         count.textContent = String(files.length); count.hidden = !files.length;
         tree.removeAttribute("aria-busy");
         RNAssistantNavigationTree.render(tree, treeNodes(files, activePath), {
@@ -468,14 +472,16 @@
         });
       }
       function reset(message) {
+        listedFiles = null;
         count.hidden = true;
         if (message) tree.removeAttribute("aria-busy"); else tree.setAttribute("aria-busy", "true");
         RNAssistantNavigationTree.render(tree, [], { label: "Файлы проекта", positionKey: positionKey, emptyText: message || "Загрузка файлов…" });
       }
+      function select(path) { RNAssistantNavigationTree.setSelected(tree, path ? "file:" + path : null); }
       reset();
       return { element: panel,
         render: function (files, activePath) { draw(files, activePath); },
-        select: function (path) { RNAssistantNavigationTree.setSelected(tree, path ? "file:" + path : null); },
+        select: select,
         reset: reset, refreshFolder: refreshFolder,
         dispose: function () { RNAssistantNavigationTree.unmount(tree, positionKey); }
       };
@@ -485,7 +491,8 @@
       try { return await task; } finally { pending.delete(task); }
     }
     function stopReads() {
-      generation++; sourceRefreshEpoch++; loadingSource = 0; filesReading = null;
+      generation++; sourceRefreshEpoch++; filesReading = null;
+      cancelSourceRead();
       if (definitionDialog) definitionDialog.close(false);
       pending.forEach(function (task) { if (task.requestId) cancelBridgeRequest(task.requestId).catch(function () {}); }); pending.clear();
     }
@@ -566,14 +573,23 @@
       }, selectMode);
     }
     function selectMode(mode, path) {
-      if (mode !== "preview") { annotationHost.deactivate(); pageFind.deactivate(); }
+      var changedMode = mode !== selectedMode;
+      if (changedMode && mode !== "preview") { annotationHost.deactivate(); pageFind.deactivate(); }
       selectedMode = mode;
-      if (mode === "source" && path && sourcePage?.path !== path) loadSource(path, 0).catch(fail);
+      if (mode !== "source" || path && sourcePage?.path === path) cancelSourceRead();
+      else if (path) loadSource(path, 0).catch(fail);
       var selectedPath = mode === "preview" ? current?.target?.relativePath || current?.target?.entryPath : path || sourcePage?.path;
       if (selectedPath && filesListed) fileNavigation.select(selectedPath);
+      if (!changedMode && path) return;
       updateSearchAdapter(); presentation(); render();
       if (current) { annotationHost.update(current); pageFind.update(current); }
       layoutNative();
+    }
+    function renderLoading() {
+      var message = selectedMode === "source" && loadingSource ? "Загрузка исходника…" :
+        selectedMode === "preview" && current?.status === "Starting" ? current.message || "Открытие страницы…" : "";
+      if (loading.textContent !== message) loading.textContent = message;
+      loading.hidden = !message;
     }
     function render() {
       if (!active || disposed || !current) return;
@@ -582,8 +598,7 @@
       if (comparison) { if (content.hidden) { comparison.activate(); layoutNative(); return; } comparison.deactivate(); }
       var nativeReady = !home && !removed && ["Starting", "Ready"].includes(current.status);
       viewport.hidden = selectedMode !== "preview" || !nativeReady;
-      loading.hidden = selectedMode !== "preview" || current.status !== "Starting";
-      loading.textContent = loading.hidden ? "" : (current.message || "Открытие страницы…");
+      renderLoading();
       empty.hidden = !home && !removed && (selectedMode === "source" || selectedMode === "preview" && nativeReady);
       layoutNative();
       source.hidden = home || removed || selectedMode !== "source";
@@ -598,32 +613,43 @@
         if (!removed && current.status !== "Starting" && selectedMode === "source" && !sourcePage && !loadingSource) loadSource(null, 0).catch(fail);
       }
     }
+    function cancelSourceRead() {
+      var read = loadingSource;
+      if (!read) return;
+      loadingSource = null; renderLoading();
+      if (read.task?.requestId) cancelBridgeRequest(read.task.requestId).catch(function () {});
+    }
     async function loadSource(path, offset) {
       if (!active || disposed || !current || current.status === "Home" || current.status === "Removed") return;
+      if (loadingSource && loadingSource.path === path && loadingSource.offset === offset) return;
+      cancelSourceRead();
       var epoch = ++generation, owner = current, previous = sourcePage;
-      loadingSource = epoch;
+      var read = { path: path, offset: offset, task: null };
+      loadingSource = read; renderLoading();
       try {
-        var result = await request("readBrowserSource", { ownerScope: owner.ownerScope, locator: owner.url, path: path, offset: offset,
+        read.task = send("readBrowserSource", { ownerScope: owner.ownerScope, locator: owner.url, path: path, offset: offset,
           count: 32000, expectedRevision: offset > 0 && previous && previous.path === path ? previous.revision : null, requestGeneration: epoch });
-        if (disposed || !active || epoch !== generation || current.documentGeneration !== owner.documentGeneration) return;
+        var result = await read.task;
+        if (loadingSource !== read || disposed || !active || current.documentGeneration !== owner.documentGeneration) return;
         if (result.requestGeneration !== epoch || !Array.isArray(result.files) || result.files.length > 512 || typeof result.text !== "string" || result.text.length > 32000)
           throw new Error("Ответ исходника не соответствует текущему запросу.");
         sourcePage = result; filesListed = true;
         fileNavigation.render(result.files, selectedMode === "source" ? result.path : owner.target?.relativePath || owner.target?.entryPath || result.path);
-        sourceViewer = RNAssistantViewerRegistry.mount("text", source, { text: result.text, code: true, path: result.path, offset: result.offset,
+        var pageOptions = { text: result.text, code: true, path: result.path, offset: result.offset, revision: result.revision,
           totalCharacters: result.totalCharacters, hasPrevious: result.offset > 0, hasNext: result.offset + result.text.length < result.totalCharacters,
-          onPrevious: function () { loadSource(result.path, Math.max(0, result.offset - 32000)).catch(fail); },
-          onNext: function () { loadSource(result.path, result.offset + result.text.length).catch(fail); }, onCopy: copyTextResult });
-        updateSearchAdapter();
+          onPrevious: function () { return loadSource(result.path, Math.max(0, result.offset - 32000)).catch(fail); },
+          onNext: function () { return loadSource(result.path, result.offset + result.text.length).catch(fail); }, onCopy: copyTextResult };
+        if (sourceViewer) sourceViewer.setPage(pageOptions);
+        else { sourceViewer = RNAssistantViewerRegistry.mount("text", source, pageOptions); updateSearchAdapter(); }
         syncFileNavigationAvailability();
         return result;
       } catch (error) {
-        if (disposed || !active || epoch !== generation) return;
+        if (loadingSource !== read || disposed || !active) return;
         fileNavigation.select(sourcePage && sourcePage.path);
         syncFileNavigationAvailability();
         loadFileList();
         throw error;
-      } finally { if (!disposed && epoch === generation) loadingSource = 0; }
+      } finally { if (loadingSource === read) { loadingSource = null; renderLoading(); } }
     }
     function apply(value) {
       if (disposed || !value || value.browserTabId !== target.browserTabId || session && value.sessionId !== session ||

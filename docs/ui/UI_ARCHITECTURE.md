@@ -90,6 +90,10 @@ host visibility change advances `layoutRevision` so Shell resends the current bo
 Viewport-only DOM changes invalidate action and capture evidence in the native page
 owner. The working page requests version state when its menu opens.
 
+Source mode keeps one text viewer for the active page generation. A new file choice
+cancels the superseded read and retains the tree rows while the members match.
+The HTML editor loads the exact source under the addressed chat on a worker.
+
 ## Markdown document structure and MaterialSurface — In Review, 2026-11-17
 
 Saved Markdown presentation stays in `app-text-viewer.js` / `ViewerRegistry`.

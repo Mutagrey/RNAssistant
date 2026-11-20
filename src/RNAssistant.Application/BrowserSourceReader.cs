@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using RNAssistant.Application.Contracts;
 
 namespace RNAssistant.Application
@@ -11,8 +12,9 @@ namespace RNAssistant.Application
     public static class BrowserSourceReader
     {
         public static BrowserSourcePage Read(BrowserTargetDescriptor target, BrowserSourceRequest request,
-            IEnumerable<string> members, Func<string, string> read)
+            IEnumerable<string> members, Func<string, string> read, CancellationToken token = default(CancellationToken))
         {
+            token.ThrowIfCancellationRequested();
             if (request == null || request.Offset < 0 || request.Count < 1 || request.Count > 32000 || request.RequestGeneration < 0)
                 throw new ArgumentException("Некорректная страница исходника.");
             var paths = (members ?? Enumerable.Empty<string>()).Where(member => !string.IsNullOrEmpty(member))
@@ -24,6 +26,7 @@ namespace RNAssistant.Application
             if (request.FilesOnly) return new BrowserSourcePage { Target = target, Files = paths, Path = path, RequestGeneration = request.RequestGeneration };
             if (path == null) throw new InvalidOperationException("Файл не входит в выбранный источник: " + requestedPath);
             var text = read(path);
+            token.ThrowIfCancellationRequested();
             if (text == null || text.Length > 4 * 1024 * 1024) throw new InvalidOperationException("Исходник превышает лимит текстового просмотра.");
             string revision;
             using (var hash = SHA256.Create()) revision = BitConverter.ToString(hash.ComputeHash(Encoding.UTF8.GetBytes(text))).Replace("-", "").ToLowerInvariant();

@@ -20,10 +20,11 @@ namespace RNAssistant.Office.WebView
             return Plugins.BrowserTargets(owner, suggestionsPrefix, suggestionsLimit);
         }
 
-        internal BrowserResolveResult ResolveBrowserLocator(BrowserResolveRequest request)
+        internal BrowserResolveResult ResolveBrowserLocator(BrowserResolveRequest request,
+            System.Threading.CancellationToken token = default(System.Threading.CancellationToken))
         { return request.OwnerScope?.Kind == BrowserOwnerKind.Document ?
             _controller.ResolveBrowserLocator(request) :
-            Plugins.ResolveBrowserLocator(request); }
+            Plugins.ResolveBrowserLocator(request, token); }
 
         private BrowserVersionState ReadBrowserVersionState(BrowserVersionRequest request, System.Threading.CancellationToken token)
         { return request.Target?.OwnerScope?.Kind == BrowserOwnerKind.Document ? _controller.BrowserVersionState(request) : Plugins.BrowserVersionState(request, token); }
@@ -48,13 +49,14 @@ namespace RNAssistant.Office.WebView
         private SourceComparisonDto BrowserComparison(BrowserSourceComparisonRequest request)
         { return request.Target?.OwnerScope?.Kind == BrowserOwnerKind.Document ? _controller.CompareBrowserSources(request) : Plugins.CompareBrowserSources(request); }
 
-        private BrowserSourcePage BrowserSource(BrowserSourceRequest request)
+        private BrowserSourcePage BrowserSource(BrowserSourceRequest request, System.Threading.CancellationToken token)
         {
-            var resolved = ResolveBrowserLocator(new BrowserResolveRequest { OwnerScope = request.OwnerScope, Locator = request.Locator });
+            var resolved = ResolveBrowserLocator(new BrowserResolveRequest { OwnerScope = request.OwnerScope, Locator = request.Locator }, token);
             if (resolved.Target == null) throw new System.InvalidOperationException(resolved.Message);
             if (resolved.Target.Kind == BrowserTargetKind.Home) throw new System.InvalidOperationException("У Главной нет исходников.");
-            return resolved.Target.OwnerScope.Kind == BrowserOwnerKind.Document ? _controller.ReadBrowserSource(request, resolved.Target) :
-                Plugins.ReadBrowserSource(request, resolved.Target);
+            token.ThrowIfCancellationRequested();
+            return resolved.Target.OwnerScope.Kind == BrowserOwnerKind.Document ? _controller.ReadBrowserSource(request, resolved.Target, token) :
+                Plugins.ReadBrowserSource(request, resolved.Target, token);
         }
     }
 }

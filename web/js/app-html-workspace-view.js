@@ -233,8 +233,9 @@
   function selectHtmlWorkspaceItem(type, id) {
     var selected = state.htmlWorkspaceSelection || {};
     var changingSelection = String(selected.type || "") !== String(type || "") || String(selected.id || "") !== String(id || "");
-    if (state.htmlWorkspaceDirty && changingSelection) {
-      window.alert("Сначала сохраните изменения текущего артефакта.");
+    if (!changingSelection) return true;
+    if (state.htmlWorkspaceDirty) {
+      log("Сначала сохраните изменения текущего файла.", "error");
       return false;
     }
     state.artifactImageGalleryContext = null;
@@ -493,7 +494,8 @@
       if (menu.open) { menu.open = false; menu.querySelector("summary").focus(); }
     }); }, { signal: events.signal });
     $("htmlWorkspaceFileSelect").addEventListener("change", function () {
-      var value = this.value, colon = value.indexOf(":"); selectHtmlWorkspaceItem(value.slice(0, colon), value.slice(colon + 1)); renderFiles();
+      var value = this.value, colon = value.indexOf(":");
+      if (!selectHtmlWorkspaceItem(value.slice(0, colon), value.slice(colon + 1))) renderFiles();
     });
     $("saveHtmlWorkspaceButton").addEventListener("click", workspaceActions.saveSelection);
     $("reloadHtmlWorkspaceSourceButton").addEventListener("click", reloadHtmlWorkspaceSources);

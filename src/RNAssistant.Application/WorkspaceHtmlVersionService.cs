@@ -95,19 +95,21 @@ namespace RNAssistant.Application
             }
         }
 
-        public BrowserSourcePage Source(BrowserSourceRequest request, BrowserTargetDescriptor target)
+        public BrowserSourcePage Source(BrowserSourceRequest request, BrowserTargetDescriptor target,
+            CancellationToken token = default(CancellationToken))
         {
+            token.ThrowIfCancellationRequested();
             RequireOwner(request.OwnerScope, target.WorkspaceId);
             if (target.SavedVersionId != null)
             {
                 var snapshot = _artifacts.ReadWorkspaceHtml(target.WorkspaceId, target.SavedVersionId);
                 return BrowserSourceReader.Read(target, request, snapshot.Members.Select(m => m.Path), path =>
-                    SourceComparisonService.Utf8(_artifacts.ReadWorkspaceHtmlMember(target.WorkspaceId, target.SavedVersionId, path)));
+                    SourceComparisonService.Utf8(_artifacts.ReadWorkspaceHtmlMember(target.WorkspaceId, target.SavedVersionId, path)), token);
             }
             var workspace = _workspaces.OpenConnected(target.WorkspaceId);
             var definition = _workspaces.GetHtmlProjectDefinition(workspace);
             return BrowserSourceReader.Read(target, request, definition.Definition?.Members ?? new[] { workspace.HtmlEntryPath },
-                path => _files.ReadText(workspace, path).Text);
+                path => _files.ReadText(workspace, path, token).Text, token);
         }
 
         public System.Collections.Generic.IReadOnlyList<BrowserTargetDescriptor> SavedBrowserTargets(BrowserOwnerScope owner, string title, int limit)

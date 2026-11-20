@@ -52,14 +52,17 @@
       cm.on("change", function (_, change) { if (!changing && change.origin !== "setValue" && options.change) options.change(); });
       var observer = new ResizeObserver(function () { cm.refresh(); }); observer.observe(root);
       return { editor: cm, getValue: function () { return cm.getValue(); },
-        setValue: function (text, key) {
+        setValue: function (text, key, source) {
           changing = true;
           try {
-            if (documentKey !== key) { cm.swapDoc(new CodeMirror.Doc(text || "", cm.getOption("mode"))); documentKey = key; }
+            var doc = cm.getDoc(), mode = source ? sourceMode(source.path) || source.mode || null : doc.modeOption;
+            var firstLine = source ? source.startLine || 1 : doc.firstLine();
+            if (documentKey !== key || doc.modeOption !== mode || doc.firstLine() !== firstLine) {
+              cm.swapDoc(new CodeMirror.Doc(text || "", mode, firstLine)); documentKey = key;
+            }
             else if (cm.getValue() !== (text || "")) cm.setValue(text || "");
           } finally { changing = false; }
         },
-        source: function (path) { var next = sourceMode(path); if (cm.getOption("mode") !== next) cm.setOption("mode", next); },
         readOnly: function (value) { cm.setOption("readOnly", !!value); },
         refresh: function () { cm.refresh(); }, focus: function () { cm.focus(); },
         destroy: function () { observer.disconnect(); root.replaceChildren(); } };

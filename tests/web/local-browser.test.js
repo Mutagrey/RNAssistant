@@ -10,13 +10,20 @@ const {withPreviewPage} = require('./preview-session');
       const original = send;
       window.localProbe = {calls:[], pages:new Map(), pending:[], targets:0};
       window.send = (type, payload, ...rest) => {
-        if (!['browserCommand','readBrowserSource','queryNavigationSuggestions','getProjectChats'].includes(type)) return original(type,payload,...rest);
+        if (!['browserCommand','readBrowserSource','queryNavigationSuggestions','getProjectChats','cancelRequest'].includes(type)) return original(type,payload,...rest);
         const p = localProbe;p.calls.push({type,...structuredClone(payload)});
+        if (type === 'cancelRequest') return Promise.resolve({cancelled:true});
         if (type === 'getProjectChats') { const result={projects:[{workspaceId:'other',name:'Другой проект',rootPath:'/other',available:true,chats:[{Id:'other-chat',Title:'Чат другого проекта'}]}]}; return p.deferChats ? new Promise(resolve => p.finishChats=()=>resolve(result)) : Promise.resolve(result); }
         if (type === 'queryNavigationSuggestions') return new Promise(resolve => p.pending.push(() => resolve({requestGeneration:payload.requestGeneration,
           items:[{title:payload.prefix,displayLocator:'/projects/project/source/'+payload.prefix+'.html'}]})));
-        if (type === 'readBrowserSource') return Promise.resolve({target:p.pages.values().next().value.target,files:['index.html','second.html','styles/site.css'],path:payload.path||'index.html',
-          text:'<h1>Exact source '+(payload.path||'index.html')+'</h1>',offset:0,totalCharacters:40,revision:'sha256',requestGeneration:payload.requestGeneration});
+        if (type === 'readBrowserSource') {
+          const result={target:p.pages.values().next().value.target,files:['index.html','second.html','styles/site.css'],path:payload.path||'index.html',
+            text:'<h1>Exact source '+(payload.path||'index.html')+'</h1>',offset:0,totalCharacters:40,revision:'sha256',requestGeneration:payload.requestGeneration};
+          if (payload.path==='second.html') {
+            const pending=new Promise(resolve=>p.finishSource=()=>resolve(result)); pending.requestId='slow-source'; return pending;
+          }
+          return Promise.resolve(result);
+        }
         let value = p.pages.get(payload.browserTabId);
         if (payload.action === 'Open') {
           value = {browserTabId:payload.browserTabId,operationId:payload.operationId,sessionId:'session-'+(++p.targets),ownerScope:payload.ownerScope,
@@ -46,8 +53,18 @@ const {withPreviewPage} = require('./preview-session');
     assert.equal(await fileNavigation.locator('[role="treeitem"][aria-selected]').count(),3,'every source file is listed once in the shared sidebar tree');
     assert.equal(await fileNavigation.locator('[role="treeitem"][aria-selected="true"]').getAttribute('aria-label'),'index.html');
     assert.equal(await root.locator('.browser-object-content > select').count(),0,'the source file list is not duplicated above the viewer');
+    await page.evaluate(()=>{localProbe.tree=document.querySelector('.browser-file-navigation [role="tree"]');localProbe.editor=document.querySelector('.browser-document-source .CodeMirror');});
+    const second=fileNavigation.getByRole('treeitem',{name:'second.html',exact:true});
+    await second.click();await second.click();
+    await fileNavigation.getByRole('treeitem',{name:'index.html',exact:true}).click();
+    await page.evaluate(async()=>{localProbe.finishSource();await new Promise(requestAnimationFrame);});
+    assert.equal(await root.locator('.browser-document-source').getByText('<h1>Exact source index.html</h1>',{exact:false}).count(),1,'returning to the displayed file rejects the late source');
+    assert.equal(await page.evaluate(()=>localProbe.calls.filter(c=>c.type==='readBrowserSource'&&c.path==='second.html').length),1,'repeated clicks share the pending source read');
+    assert.equal(await page.evaluate(()=>localProbe.calls.filter(c=>c.type==='cancelRequest'&&c.requestId==='slow-source').length),1,'superseded read is cancelled once');
     await fileNavigation.getByRole('treeitem',{name:'styles/site.css',exact:true}).click();
     await root.locator('.browser-document-source').getByText('<h1>Exact source styles/site.css</h1>',{exact:false}).waitFor();
+    assert.equal(await page.evaluate(()=>localProbe.tree===document.querySelector('.browser-file-navigation [role="tree"]')&&
+      localProbe.editor===document.querySelector('.browser-document-source .CodeMirror')&&!!localProbe.editor),true,'file navigation reuses the file tree and CodeMirror');
     assert.equal(await fileNavigation.locator('[role="treeitem"][aria-selected="true"]').getAttribute('aria-label'),'styles/site.css');
     await fileNavigation.getByRole('treeitem',{name:'index.html',exact:true}).click();
     await root.locator('.browser-document-source').getByText('<h1>Exact source index.html</h1>',{exact:false}).waitFor();
