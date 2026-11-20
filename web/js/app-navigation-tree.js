@@ -230,7 +230,6 @@
       if (!item) return;
       record.rows.forEach(function (row) {
         row.tabIndex = row === item ? 0 : -1;
-        row.firstElementChild.classList.toggle("is-focused", row === item && (move || row.contains(document.activeElement)));
         row.querySelectorAll(".tree-action").forEach(function (action) { action.tabIndex = row === item ? 0 : -1; });
       });
       if (move) { item.focus({ preventScroll: true }); item.firstElementChild.scrollIntoView({ block: "nearest" }); }
@@ -322,12 +321,7 @@
       if (item && root.contains(item)) setFocus(item, false);
       refreshMarquee();
     });
-    on("focusout", function () {
-      queueMicrotask(function () {
-        if (!root.contains(document.activeElement)) root.querySelectorAll(".is-focused").forEach(function (row) { row.classList.remove("is-focused"); });
-        refreshMarquee();
-      });
-    });
+    on("focusout", function () { queueMicrotask(refreshMarquee); });
     on("pointerover", function (event) {
       if (event.pointerType === "touch") return;
       var label = event.target.closest(".navigation-tree-label"), row = label && label.parentNode;

@@ -560,6 +560,24 @@ namespace RNAssistant.Office
             return new OpenDocumentResponse { Path = path, Launched = true };
         }
 
+        internal OpenFolderResponse OpenFolder(OpenFolderPayload target)
+        {
+            if (!string.IsNullOrWhiteSpace(target.WorkspaceId))
+            {
+                var workspace = new WorkspaceStore(StoragePaths).OpenConnected(target.WorkspaceId);
+                DocumentOpenService.OpenFolder(workspace.RootPath);
+            }
+            else
+            {
+                var path = !string.IsNullOrWhiteSpace(target.ChatId)
+                    ? _chatSessions.GetDocumentPathForChat(target.ChatId)
+                    : ListOpenDocuments().FirstOrDefault(document => document != null &&
+                        string.Equals(document.DocumentKey, target.DocumentKey, StringComparison.OrdinalIgnoreCase))?.Path;
+                DocumentOpenService.OpenContainingFolder(path);
+            }
+            return new OpenFolderResponse { Dispatched = true };
+        }
+
         private bool TryActivateDocument(IOfficeDocumentCatalog catalog, string documentKey, string path)
         {
             if (catalog.ActivateDocument(documentKey))

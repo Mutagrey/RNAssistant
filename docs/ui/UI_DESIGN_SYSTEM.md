@@ -8,13 +8,15 @@
 
 ## Tree row actions — In Review, 2026-11-19
 
-`NavigationTree` keeps row actions in one right-aligned overlay that appears while the
-row is hovered, focused or keyboard-focused. Project order is `+`, open, delete, `…`;
+`NavigationTree` shows the right-aligned actions on hover, keyboard focus, and
+while a menu or confirmation is open. The action strip and its buttons are
+transparent. Project order is `+`, open, delete, `…`;
 chat order is delete, `…`. Label padding is derived from the current action count so
 text ends before the overlay instead of being painted underneath it. Action dimensions
 use the existing shell control/group tokens, 1 px action gaps and the common row radius.
 A destructive action's first click applies the shared confirming state and check icon;
 the second click executes it. No screen-specific sizes are copied into adapters.
+The common Chat View places its compact folder button before the document or project name.
 
 ## Prepared replacement diff — In Review, 2026-11-19
 
@@ -402,17 +404,16 @@ runtime terminal publication. Rejected/Unknown имеют текстовые с�
 Геометрия header/control сверена с frozen Demo при 1280×900/100%: 40/28 CSS px.
 Controls доступны при 420×520/125%; минимальная Compact проверена при 360×320/125%.
 
-Уточнение по фото — In Review, 2026-11-16: native header напрямую содержит
-navigation, Inspector, pin, «Полное окно», maximize/restore, меню,
-Compact/Companion и ×; panel/window controls остаются в нём также в Compact и
-narrow. Текстовая «Компоновка» убрана; вход в раскладку находится в меню окна,
-в остальных hosts остаётся одной кнопкой-иконкой. Общие tokens сохраняют control
-28 CSS px / icon 17 CSS px. SVG из `app-icons.js` различают левую/правую панель,
-раскладку, полное/компактное окно, Companion, pin и maximize/restore; используются
-общий stroke/currentColor и мягкая заливка активной части. Pin, Full и открытые
-панели получают общее accent/`aria-pressed` состояние. Дубли прямых действий и
-сырые native статусы убраны из меню. Редкие параметры сгруппированы в
-«Настройки окна…».
+Навигация со старой контурной иконкой стоит перед названием. Справа контурная
+иконка Inspector и `…` ведут к панели и меню окна. После разделителя идут pin
+окна, компактный/полный режим, maximize/restore и ×. Кнопка компактного режима
+в Compact рисует стрелку возврата в большее окно. Управление доступно в одну
+строку при узкой ширине. Раскладка находится в `…` окна, остальные hosts
+сохраняют кнопку-иконку раскладки.
+
+Pin боковой панели стоит перед её названием и использует общий компактный
+контрол с `aria-pressed`. Боковые панели движутся по общим motion tokens.
+При reduced motion скрытие применяется сразу.
 × означает полное закрытие сеанса с остановкой запросов и сохранением черновиков.
 Pin не означает TopMost. Compact сохраняет общий composer/ленту; другие элементы
 Shell и group header временно скрыты владельцем.

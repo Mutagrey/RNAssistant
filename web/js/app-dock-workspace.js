@@ -7,7 +7,9 @@
   var nativeVisible = true, hostCompact = false, compactChat = null, fullPresentation = null, compactEmpty;
   var tabFrame;
   var objectViews = Object.create(null);
-  var inspectorWidth;
+  var singletonContents = Object.create(null);
+  var inspectorWidth, inspectorPinned = false, inspectorExit = null;
+  var inspectorPinKey = "rnassistant.ui.inspector.pinned";
   var storageKey = "rnassistant.ui.dock.s1.v1", savedKey = storageKey + ".saved", nextChooser = 1;
   var recentKey = storageKey + ".local-recents.v1", recents = null, recentMemoryOnly = false;
   function recentEntry(value) {
@@ -200,6 +202,12 @@
   }
   function sync() {
     if (!api || restoring) return;
+    Object.keys(roots).forEach(function (id) {
+      if (views[id].renderer !== "onlyWhenVisible") return;
+      // A group can become visible without changing its active tab.
+      var destination = visible(id) ? singletonContents[id] : parking;
+      if (destination && roots[id].parentElement !== destination) destination.appendChild(roots[id]);
+    });
     roots.inspector.inert = !visible("inspector");
     var nextSettings = visible("settings"), activateSettings = nextSettings && !settingsVisible;
     var deactivateSettings = !nextSettings && settingsVisible;
@@ -217,10 +225,6 @@
     refreshPresentation();
     Object.keys(views).forEach(function (id) {
       var view = views[id], shown = visible(id);
-      // Retained singleton editors still use their canonical DOM controls while
-      // hidden (draft capture, late write ACK). Keep them connected in parking.
-      if (!shown && view.renderer === "onlyWhenVisible" && roots[id] && roots[id].parentElement !== parking)
-        parking.appendChild(roots[id]);
       if (view.onVisible && view.active !== shown) { view.active = shown; view.onVisible(shown); }
       if (shown && view.onLayout) view.onLayout();
     });
@@ -266,14 +270,13 @@
     return {
       element: content,
       init: function (parameters) {
+        singletonContents[id] = content;
         content.appendChild(roots[id]);
-        visibility = parameters.api.onDidVisibilityChange(function () {
-          if (parameters.api.isVisible && roots[id].parentElement !== content) content.appendChild(roots[id]);
-          sync();
-        });
+        visibility = parameters.api.onDidVisibilityChange(sync);
       },
       dispose: function () {
         if (visibility) visibility.dispose();
+        if (singletonContents[id] === content) delete singletonContents[id];
         // A replacement component may already own the root during a move/restore.
         if (roots[id].parentElement === content) parking.appendChild(roots[id]);
         Promise.resolve().then(function () { if (!panel(id) && views[id].onClose) views[id].onClose(); });
@@ -286,6 +289,7 @@
       renderer: views[id].renderer || "always", minimumWidth: 150, minimumHeight: 120, position: position });
   }
   function show(id, group, direction) {
+    if (id === "inspector") stopInspectorExit();
     if (id !== "conversation" && window.RNAssistantWindow && RNAssistantWindow.inFull(function () { show(id, group, direction); })) return;
     if (!api || !views[id] || views[id].targetRoute) return false;
     if (id === "browser") return RNAssistantBrowser.open("/", null, { group: group, direction: direction });
@@ -312,27 +316,66 @@
     }
     item.group.api.setVisible(true); item.api.setActive(); changed(); return true;
   }
-  function toolGroups() {
-    return api ? api.groups.filter(function (group) { return group.panels.length && group.panels.every(function (item) { return item.id === "inspector"; }); }) : [];
+  function inspectorGroup() {
+    var item = api && panel("inspector");
+    return item && item.group.panels.length === 1 ? item.group : null;
   }
   function inspectorToggleLabel() {
-    var groups = toolGroups();
-    if (compact || !groups.length) return "Открыть инспектор";
-    return groups.some(function (group) { return group.api.isVisible; }) ? "Свернуть инструменты" : "Развернуть инструменты";
+    var group = inspectorGroup();
+    if (compact || !group) return "Открыть инспектор";
+    return group.api.isVisible ? "Свернуть инструменты" : "Развернуть инструменты";
+  }
+  function stopInspectorExit() {
+    if (!inspectorExit) return;
+    inspectorExit.cancel();
+    inspectorExit = null;
+  }
+  function otherVisibleGroup(group) {
+    return api.groups.find(function (other) { return other !== group && other.api.isVisible; });
+  }
+  function hideInspector(group) {
+    if (inspectorExit) return;
+    function hide() {
+      stopInspectorExit();
+      if (inspectorGroup() !== group || !group.api.isVisible) return;
+      var next = otherVisibleGroup(group);
+      if (!next) return;
+      var focused = RNAssistantActionMenu.ownsTarget(group.element, document.activeElement);
+      RNAssistantActionMenu.closeWithin(group.element);
+      if (api.activeGroup === group) next.api.setActive();
+      group.api.setVisible(false);
+      if (focused) document.getElementById("toggleChatInspectorButton").focus({ preventScroll: true });
+      changed();
+    }
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { hide(); return; }
+    var styles = getComputedStyle(group.element);
+    inspectorExit = group.element.animate([{ clipPath: "inset(0)" }, { clipPath: "inset(0 0 0 100%)" }], {
+      duration: Number.parseFloat(styles.getPropertyValue("--motion-duration")),
+      easing: styles.getPropertyValue("--motion-ease").trim(), fill: "forwards"
+    });
+    inspectorExit.onfinish = hide;
+  }
+  function dismissTools(target) {
+    var group = inspectorGroup();
+    if (target && group && RNAssistantActionMenu.ownsTarget(group.element, target)) { stopInspectorExit(); return; }
+    if (target && target.closest("#toggleChatInspectorButton, [aria-controls='chatInspector']")) return;
+    if (!inspectorPinned && !compact && !hostCompact && workspaceActive() && group && group.api.isVisible && otherVisibleGroup(group))
+      hideInspector(group);
   }
   function toggleTools() {
     if (window.RNAssistantWindow && RNAssistantWindow.inFull(toggleTools)) return;
     if (!api) return;
-    var groups = toolGroups();
-    if (compact || !groups.length) { show("inspector"); return; }
-    var hide = groups.some(function (group) { return group.api.isVisible; });
-    if (hide && !api.groups.some(function (group) { return !groups.includes(group) && group.api.isVisible; })) {
-      notice("Это единственная рабочая область. Откройте чат рядом."); return;
+    var group = inspectorGroup();
+    if (compact || !group) { show("inspector"); return; }
+    if (inspectorExit) { stopInspectorExit(); return; }
+    if (group.api.isVisible) {
+      if (otherVisibleGroup(group)) hideInspector(group);
+      else notice("Это единственная рабочая область. Откройте чат рядом.");
+      return;
     }
     api.exitMaximizedGroup();
-    groups.forEach(function (group) { group.api.setVisible(!hide); });
-    var focusGroup = hide ? api.groups.find(function (group) { return group.api.isVisible; }) : groups[0];
-    if (focusGroup) focusGroup.api.setActive();
+    group.api.setVisible(true);
+    group.api.setActive();
     changed();
   }
   function canClose(items) {
@@ -526,6 +569,7 @@
     if (active) active.api.setActive(); changed();
   }
   function restoreLayout(layout) {
+    stopInspectorExit();
     // Placement is saved; rendering policy belongs to the current view descriptor.
     // Old `always` chat overlays use scaled rectangles as CSS sizes under zoom.
     Object.keys(layout.panels).forEach(function (id) {
@@ -573,6 +617,15 @@
     document.querySelector(".shell").appendChild(parking);
     document.getElementById("chatDropZone").remove();
     roots.inspector = document.getElementById("chatInspector"); roots.inspector.hidden = false;
+    try { inspectorPinned = localStorage.getItem(inspectorPinKey) === "1"; }
+    catch (error) { /* Presentation preferences are optional. */ }
+    RNAssistantPanelToggle.bindPin(document.getElementById("chatInspectorPanelPin"),
+      function () { return inspectorPinned; }, function (pinned) {
+        inspectorPinned = pinned;
+        if (pinned) stopInspectorExit();
+        try { localStorage.setItem(inspectorPinKey, pinned ? "1" : "0"); }
+        catch (error) { /* Presentation preferences are optional. */ }
+      });
     roots.settings = document.getElementById("settingsView");
     roots.request = document.getElementById("modelContextDialog"); roots.request.classList.remove("hidden");
     roots.diagnostics = document.getElementById("tab-diagnostics");
@@ -624,6 +677,7 @@
     api.onDidRemovePanel(function () { if (!restoring) wideLayout = null; });
     RNAssistantShellLayout.bindWorkspace({
       onLayoutChanged: sync,
+      dismissTools: dismissTools,
       chooser: function () { openChooser(api.activeGroup || api.groups[0], "within"); },
       layout: function (trigger) {
         menu(trigger, [["Чат и инспектор", "panel", reset], ["Одна группа вкладок", "layers", join],
@@ -735,7 +789,7 @@
     bind: bind, mount: mount, show: show, close: close, updateContext: updateContext, refreshPresentation: refreshPresentation,
     isVisible: visible,
     setTitle: function (id, title) { var item = panel(id); if (item && item.title !== title) item.api.setTitle(title); },
-    toggleTools: toggleTools, inspectorToggleLabel: inspectorToggleLabel,
+    toggleTools: toggleTools, inspectorToggleLabel: inspectorToggleLabel, cancelInspectorDismissal: stopInspectorExit,
     onTabChange: function (name) {
       section = name; if (!api) return;
       placeHost(); RNAssistantActionMenu.closeAll(); sync();

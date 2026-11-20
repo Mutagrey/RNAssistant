@@ -167,6 +167,13 @@
     ["addSelectionContextButton", "addTextContextButton", "compactContextButton", "openDocumentButton"].forEach(function (id) {
       on(node(id), "click", function () { if (adapter.commands[id]) adapter.commands[id](); });
     });
+    var folderButton = node("chatOpenFolderButton");
+    folderButton.disabled = !address.sessionId || !!state.bridgeUnavailable;
+    folderButton.title = address.source === "office" ? "Открыть папку документа" : "Открыть папку проекта";
+    folderButton.setAttribute("aria-label", folderButton.title);
+    on(folderButton, "click", function () {
+      openContainingFolder(address.source === "office" ? { chatId: address.sessionId } : { workspaceId: address.workspaceId });
+    });
     on(node("composerOpenMaterialsButton"), "click", function () { component.focus(); switchTab("artifacts"); });
     on(node("resumeAgentWaitsButton"), "click", function (event) {
       event.stopPropagation(); node("composerAddPicker").open = false;
@@ -229,6 +236,7 @@
       stopHeaderTimer();
       if (disposed || !view.canRender()) return;
       var header = adapter.header(), run = adapter.runView(), running = adapter.running();
+      folderButton.disabled = !address.sessionId || !!state.bridgeUnavailable;
       function text(id, value) { if (node(id).textContent !== value) node(id).textContent = value; }
       text("activeChatTitle", header.title);
       text("activeChatSubtitle", header.label + (header.unavailable ? " · недоступно" : ""));

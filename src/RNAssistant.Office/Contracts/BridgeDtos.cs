@@ -597,6 +597,24 @@ namespace RNAssistant.Office.Contracts
         public ChatStateResponse State { get; set; }
     }
 
+    public sealed class OpenFolderPayload
+    {
+        [JsonProperty("workspaceId")]
+        public string WorkspaceId { get; set; }
+
+        [JsonProperty("chatId")]
+        public string ChatId { get; set; }
+
+        [JsonProperty("documentKey")]
+        public string DocumentKey { get; set; }
+    }
+
+    public sealed class OpenFolderResponse
+    {
+        [JsonProperty("dispatched")]
+        public bool Dispatched { get; set; }
+    }
+
     public sealed class OutlookMailboxNavigationPayload
     {
         [JsonProperty("documentKey")]

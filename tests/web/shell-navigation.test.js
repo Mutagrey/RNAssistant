@@ -61,29 +61,54 @@ const {spawn}=require('node:child_process'),{chromium}=require('playwright');
   assert.equal((await page.getByRole('menu').boundingBox()).width,248);
   await page.keyboard.press('Escape');assert.equal(await page.evaluate(()=>document.activeElement.id),'workspaceLayout');
   await demo.close();
-  const rail=page.locator('.section-rail [data-section=chat]'),toggle=page.locator('#productMobileMenuButton'),scrim=page.locator('#productNavigationScrim');
+  const rail=page.locator('.section-rail [data-section=chat]'),toggle=page.locator('#productMobileMenuButton');
   const opened=()=>page.evaluate(()=>RNAssistantShellLayout.isNavigationOpen());
   const settled=()=>page.waitForFunction(()=>!document.querySelector('.shell').classList.contains('navigation-transition'));
-  await page.locator('[data-chat-node="chatInput"]').fill('Черновик остаётся на месте');
+  const input=page.locator('[data-chat-node="chatInput"]');
+  const navPin=page.locator('#workspaceNavigationHeading .panel-pin');
+  await input.fill('Черновик остаётся на месте');
   await page.evaluate(()=>window.shellNodes=['messages','chatForm','chatInspector'].map(id=>document.getElementById(id)||RNAssistantConversationPanel.office('preview-chat').node(id)));
-  assert.equal(await opened(),true);await rail.click();assert.equal(await opened(),false);await rail.click();assert.equal(await opened(),true);await settled();
+  assert.equal(await opened(),false,'wide navigation closes when the chat gains focus');
+  await rail.click();assert.equal(await opened(),true);
+  await navPin.click();assert.equal(await navPin.getAttribute('aria-pressed'),'true');
+  await input.click();assert.equal(await opened(),true,'pin keeps navigation open when the chat gains focus');
+  for(const section of ['artifacts','library','vba','chat']) {
+   await page.locator('.section-rail [data-section='+section+']').click();
+   assert.equal(await page.locator('.panel.active .global-nav .panel-pin').getAttribute('aria-pressed'),'true');
+  }
+  await rail.click();assert.equal(await opened(),false);await rail.click();assert.equal(await opened(),true);
+  assert.equal(await navPin.getAttribute('aria-pressed'),'true');
+  await navPin.click();
+  await page.locator('#newChatButton').click();await page.getByRole('menu').waitFor();
+  assert.equal(await opened(),true,'focus in an anchored tree menu stays within navigation');
+  await page.keyboard.press('Escape');await input.focus();assert.equal(await opened(),false);await settled();
   const actions=await page.locator('.dock-group-actions').first().evaluate(n=>[...n.children].map(n=>[n.offsetWidth,n.offsetHeight,n.firstElementChild.getBoundingClientRect().width]));
   assert.deepEqual(actions,Array(4).fill([25,25,14]),'shared control size must not stretch Demo buttons to 34px');
-  // A topbar toggle hides the tool group, retaining its DOM and dimensions.
+  // The Inspector uses the same focus behavior while Dockview retains the group.
+  const inspector=page.locator('#chatInspector');
+  const tools=page.locator('#toggleChatInspectorButton');
+  const inspectorPin=page.locator('#chatInspectorPanelPin');
+  await inspector.waitFor({state:'hidden'});
+  await tools.click();await inspector.waitFor();
+  await inspectorPin.click();
+  await input.click();
+  assert.equal(await inspector.isVisible(),true,'the right pin keeps its group visible');
+  await inspectorPin.click();
   const inspectorWidth=(await page.locator('#chatInspector').boundingBox()).width;
-  await page.locator('#toggleChatInspectorButton').click();
+  await input.focus();
+  await page.waitForFunction(()=>document.querySelector('#chatInspector').closest('.dv-groupview').getAnimations().length>0);
+  await inspector.waitFor({state:'hidden'});
   assert.equal(await page.locator('[data-tab-panel-id=inspector]').count(),1);
-  assert.equal(await page.locator('#chatInspector').isVisible(),false);
-  await page.locator('#toggleChatInspectorButton').click();
+  await tools.click();await inspector.waitFor();
   assert.ok(Math.abs((await page.locator('#chatInspector').boundingBox()).width-inspectorWidth)<2);
   assert.deepEqual(await page.evaluate(()=>shellNodes.map(n=>n===document.getElementById(n.id))),[true,true,true]);
   for(const width of [900,420,360]) {
    await page.setViewportSize({width,height:800});await page.waitForFunction(()=>RNAssistantShellLayout.mode()!=='wide'&&document.querySelector('.shell').classList.contains('navigation-'+RNAssistantShellLayout.mode()));await settled();
    assert.equal(await opened(),false);assert.equal(await rail.isVisible(),true,'rail stays available in compact and narrow mode');
    const before=await page.locator('#chatDockHost').boundingBox();
-   await rail.click();assert.equal(await opened(),true);await scrim.waitFor();
+   await rail.click();assert.equal(await opened(),true);await settled();
    const after=await page.locator('#chatDockHost').boundingBox();assert.equal(after.width,before.width,'navigation overlays without squeezing the workspace');
-   assert.equal(await page.locator('#chatDockHost').evaluate(n=>n.inert),true);
+   assert.equal(await page.locator('#chatDockHost').evaluate(n=>n.inert),false);
    const nav=await page.locator('#chatLayout > .global-nav').boundingBox();assert.ok(nav.width<width-60&&nav.width>=180);
    if(process.env.SHELL_SCREENSHOTS){fs.mkdirSync(process.env.SHELL_SCREENSHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.SHELL_SCREENSHOTS,'s1b-navigation-'+width+'.png')});}
    const expander=page.locator('#chatSessionList .navigation-tree-expander').first();
@@ -92,10 +117,13 @@ const {spawn}=require('node:child_process'),{chromium}=require('playwright');
    assert.equal(await opened(),false,'keyboard selection closes the overlay, including synchronous tree rerenders');
    assert.equal(await page.locator('[data-chat-node="chatInput"]').inputValue(),'Черновик остаётся на месте');
    await toggle.click();assert.equal(await opened(),true);await page.keyboard.press('Escape');assert.equal(await opened(),false);
-   await toggle.click();await scrim.click({position:{x:width-90,y:360}});assert.equal(await opened(),false);
+   await toggle.click();await settled();
+   await page.mouse.click(after.x+after.width-10,after.y+180);assert.equal(await opened(),false,'outside click reaches the workspace');
    assert.equal(await page.locator('#chatDockHost').evaluate(n=>n.inert),false);
    await page.locator('.section-rail [data-section=settings]').click();assert.equal(await opened(),false,'Settings does not open the global sidebar');
-   await page.locator('#settingsPageSelect').selectOption('interface');
+   const settingsPage=page.locator('#settingsPageSelect');
+   if(await settingsPage.isVisible()) await settingsPage.selectOption('interface');
+   else await page.locator('#settingsNavTree [data-settings-page="interface"]').click();
    assert.equal(await opened(),false);await page.locator('[data-settings-page=interface].active').waitFor();
    await rail.click();assert.equal(await opened(),true);await rail.click();assert.equal(await opened(),false);
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
@@ -104,16 +132,20 @@ const {spawn}=require('node:child_process'),{chromium}=require('playwright');
   await page.locator('#toggleChatInspectorButton').click();await page.locator('#toggleChatInspectorButton').click();
   assert.equal(await page.locator('[data-tab-panel-id^="chat:"]').count(),1);
   assert.equal(await page.locator('#chatInspector').isVisible(),true);
+  await toggle.click();await navPin.click();
   await page.setViewportSize({width:1280,height:900});await page.waitForFunction(()=>document.querySelector('.shell').classList.contains('navigation-wide'));await settled();
-  assert.equal(await opened(),true,'wide preference survives temporary overlay use');
-  await toggle.click();await page.setViewportSize({width:900,height:800});await toggle.click();await page.keyboard.press('Escape');
-  await page.setViewportSize({width:1280,height:900});await page.waitForFunction(()=>document.querySelector('.shell').classList.contains('navigation-wide'));assert.equal(await opened(),false,'explicit wide collapse is also retained');
+  assert.equal(await opened(),true,'pin survives resize from overlay to inline navigation');
+  await navPin.click();await toggle.click();assert.equal(await opened(),false);
   // The only remaining tool group cannot be hidden into an empty workspace.
-  await page.evaluate(()=>RNAssistantDockWorkspace.close('settings'));
+  await page.evaluate(()=>{
+   ['artifacts','instructions','vba'].map(RNAssistantDockWorkspace.sectionView).filter(Boolean).forEach(RNAssistantDockWorkspace.close);
+   RNAssistantDockWorkspace.close('settings');RNAssistantDockWorkspace.show('inspector');
+  });
+  await inspectorPin.click();
   await page.locator('[data-tab-panel-id^="chat:"]').getByRole('button').click();
-  await page.locator('#toggleChatInspectorButton').click();assert.equal(await page.locator('#chatInspector').isVisible(),true);
+  await tools.click();await inspector.waitFor();
   assert.match(await page.locator('#workspaceLayoutNotice').textContent(),/единственная рабочая область/);
-  assert.deepEqual(errors,[]);console.log('PASS shell navigation: wide/overlay, rail toggle, mouse/keyboard selection, folder, scrim/Escape, settings, draft/DOM, Inspector hide/restore/guard, Demo icon metrics');
+  assert.deepEqual(errors,[]);console.log('PASS shell navigation: focus, pin, animation, overlay, menus, settings, retained draft and Inspector');
  }catch(e){if(browser){const p=browser.contexts()[0]?.pages()[0];if(p){await p.screenshot({path:'/tmp/rna-shell-failure.png'});console.error(await p.evaluate(()=>({focus:document.activeElement.outerHTML.slice(0,300),mode:RNAssistantShellLayout.mode(),shell:document.querySelector('.shell').className})));}}throw e;}
  finally{if(browser)await browser.close();server.kill();}
 })().catch(e=>{console.error(e);process.exitCode=1});

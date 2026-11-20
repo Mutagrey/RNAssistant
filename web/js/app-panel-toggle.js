@@ -43,5 +43,20 @@
     return binding;
   }
 
-  window.RNAssistantPanelToggle = { bind: bind };
+  function bindPin(button, isPinned, setPinned) {
+    button.type = "button";
+    button.classList.add("icon-btn", "compact", "panel-pin");
+    button.setAttribute("aria-label", "Закрепить панель");
+    button.innerHTML = window.RNAssistantIcons.render("pin");
+    function sync() {
+      var pinned = isPinned();
+      button.setAttribute("aria-pressed", String(pinned));
+      button.title = pinned ? "Открепить панель" : "Закрепить панель";
+    }
+    button.onclick = function () { setPinned(!isPinned()); sync(); };
+    sync();
+    return sync;
+  }
+
+  window.RNAssistantPanelToggle = { bind: bind, bindPin: bindPin };
 }());

@@ -2,6 +2,17 @@
 // Native state is synthetic; real production Shell, Dockview, lifecycle and chat instances.
 const assert = require('node:assert/strict'), path = require('node:path'), fs = require('node:fs');
 const {spawn} = require('node:child_process'), {chromium} = require('playwright');
+function assertPlacement(actual, expected) {
+  function compareSizes(node, saved) {
+    if (Number.isFinite(saved?.size)) {
+      assert.ok(Math.abs(node.size - saved.size) <= 1, 'Dockview placement: ' + node.size + ' px instead of ' + saved.size + ' px');
+      node.size = saved.size;
+    }
+    if (node.type === 'branch' && saved?.type === 'branch') node.data.forEach((child, index) => compareSizes(child, saved.data[index]));
+  }
+  compareSizes(actual.layout.grid.root, expected.layout.grid.root);
+  assert.deepEqual(actual, expected, 'full placement and active panel are retained');
+}
 (async () => {
   const server = spawn('python3', ['-B', 'prototypes/serve_ui.py', '--port', '0'], {cwd: path.resolve(__dirname, '../..')});
   server.stderr.resume(); let browser;
@@ -50,7 +61,6 @@ const {spawn} = require('node:child_process'), {chromium} = require('playwright'
         if (payload.command === 'ShowCompact') current.presentation = 'Compact';
         if (payload.command === 'Maximize') { current.presentation = 'FullMaximized'; current.canRestore = true; current.canMaximize = false; }
         if (payload.command === 'Restore') { current.presentation = 'FullNormal'; current.canRestore = false; current.canMaximize = true; }
-        if (payload.command === 'Park') { current.presentation = 'Companion'; current.visibility = 'ContextHidden'; }
         if (payload.command === 'Shutdown' || payload.command === 'SwitchDocument') current.visibility = 'ShuttingDown';
         if (payload.command === 'SetPinned') current.pinned = payload.value;
         if (payload.command === 'SetAutoCollapse') current.autoCollapse = payload.value;
@@ -61,11 +71,15 @@ const {spawn} = require('node:child_process'), {chromium} = require('playwright'
     await page.waitForFunction(() => document.documentElement.classList.contains('integrated-window-chrome'));
     assert.ok(await page.evaluate(() => document.documentElement.classList.contains('native-window-drag')));
     assert.equal(await page.locator('#workspaceLayout').isVisible(), false, 'native layout is exposed once through the window menu');
-    assert.equal(await page.locator('.workspace-topbar-actions button:visible').count(), 8, 'wide native toolbar exposes panel and window controls directly');
-    for (const id of ['productMobileMenuButton', 'toggleChatInspectorButton', 'hostWindowPin', 'hostWindowFull', 'hostWindowMaximize'])
+    assert.deepEqual(await page.locator('.workspace-topbar button:visible').evaluateAll(buttons => buttons.map(button => button.id)), [
+      'productMobileMenuButton','toggleChatInspectorButton','hostWindowMenu','hostWindowPin','hostWindowPresentation','hostWindowMaximize','hostWindowClose'
+    ]);
+    assert.ok(await page.locator('#productMobileMenuButton + .workspace-context').count(), 'navigation sits before the title');
+    for (const id of ['productMobileMenuButton', 'toggleChatInspectorButton', 'hostWindowPin', 'hostWindowPresentation', 'hostWindowMaximize'])
       assert.ok(await page.locator('#' + id).isVisible(), 'direct native toolbar control is visible: ' + id);
-    assert.equal(await page.locator('#hostWindowFull').getAttribute('aria-pressed'), 'true');
-    assert.equal(await page.locator('#hostWindowFull').isDisabled(), true, 'Full is active in Full presentation');
+    const presentationButton = page.locator('#hostWindowPresentation');
+    const compactIcon = await presentationButton.innerHTML();
+    assert.equal(await presentationButton.getAttribute('aria-label'), 'Компактное окно');
     await page.locator('#hostWindowMaximize').click();
     await page.waitForFunction(() => windowProbe.state.presentation === 'FullMaximized');
     assert.equal(await page.locator('#hostWindowMaximize').getAttribute('aria-label'), 'Восстановить размер окна');
@@ -104,6 +118,9 @@ const {spawn} = require('node:child_process'), {chromium} = require('playwright'
       RNAssistantWindow.bootstrap({capabilities: {integratedChrome: true, nativeDragRegions: true,
         compactPresentation: true, companion: true, pin: true}, state: {...windowProbe.state}});
     });
+    await page.evaluate(() => RNAssistantDockWorkspace.show('inspector'));
+    await page.locator('#chatInspectorPanelPin').click();
+    await page.evaluate(() => RNAssistantDockWorkspace.openTarget({view: 'window-probe'}));
     await page.frameLocator('#windowProbeFrame').getByRole('textbox').fill('iframe retained');
     await page.waitForTimeout(200); // existing layout persistence debounce
     const before = await page.evaluate(() => ({layout: localStorage.getItem('rnassistant.ui.dock.s1.v1'), panels: document.querySelectorAll('[data-tab-panel-id]').length,
@@ -127,11 +144,11 @@ const {spawn} = require('node:child_process'), {chromium} = require('playwright'
     assert.equal(compact.value, 'Черновик сохраняется'); assert.equal(compact.disposed, 0);
     assert.ok(await page.evaluate(() => windowProbe.edit && windowProbe.chat.composer.edit(windowProbe.chat.target) === windowProbe.edit), 'edit state remains owned by the same composer');
     assert.equal(compact.layout, before.layout, 'transient placement never overwrites full layout');
-    for (const id of ['productMobileMenuButton', 'toggleChatInspectorButton', 'hostWindowPin', 'hostWindowFull', 'hostWindowMaximize',
+    for (const id of ['productMobileMenuButton', 'toggleChatInspectorButton', 'hostWindowPin', 'hostWindowMaximize',
       'hostWindowMenu', 'hostWindowPresentation', 'hostWindowClose']) assert.ok(await page.locator('#' + id).isVisible(), 'Compact keeps direct control: ' + id);
-    assert.equal(await page.locator('#hostWindowControls button').count(), 6, 'Compact keeps the full window control group');
-    assert.equal(await page.locator('#hostWindowFull').isDisabled(), false, 'Full action is available from Compact');
-    assert.equal(await page.locator('#hostWindowFull').getAttribute('aria-pressed'), 'false');
+    assert.equal(await page.locator('#hostWindowControls button').count(), 4);
+    assert.equal(await presentationButton.getAttribute('aria-label'), 'Вернуть полное окно');
+    assert.notEqual(await presentationButton.innerHTML(), compactIcon, 'Compact uses a different restore icon');
     await page.locator('#hostWindowMenu').click();
     for (const name of ['Полное окно', 'Навигация', 'Инспектор', 'Развернуть окно', 'Оставлять окно открытым'])
       assert.equal(await page.getByRole('menuitem', {name, exact: true}).count(), 0, 'Compact menu omits direct action: ' + name);
@@ -149,7 +166,7 @@ const {spawn} = require('node:child_process'), {chromium} = require('playwright'
     await page.getByRole('menuitem', {name: 'Назад', exact: true}).click();
     await page.keyboard.press('Escape');
     await page.locator('#hostWindowMenu').focus(); await page.keyboard.press('Tab');
-    assert.equal(await page.evaluate(() => document.activeElement.id), 'hostWindowPresentation', 'keyboard controls remain reachable');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'hostWindowPin', 'keyboard follows the visual order');
     await page.evaluate(() => RNAssistantWindow.apply({...windowProbe.state, revision: 1, pinned: false}));
     assert.equal(await page.evaluate(() => windowProbe.state.pinned), true, 'stale push cannot undo a command');
     if (process.env.RNA_WINDOW_REVIEW) await page.screenshot({path: process.env.RNA_WINDOW_REVIEW + '-compact.png'});
@@ -158,10 +175,12 @@ const {spawn} = require('node:child_process'), {chromium} = require('playwright'
     await page.evaluate(() => windowProbe.set('Compact'));
     await page.setViewportSize({width: 1280, height: 900});
     await page.evaluate(() => document.documentElement.style.zoom = '1');
-    await page.locator('#hostWindowFull').click();
+    await presentationButton.click();
     await page.waitForFunction(() => document.documentElement.dataset.hostPresentation === 'FullNormal');
+    assert.equal(await presentationButton.innerHTML(), compactIcon);
+    assert.equal(await page.evaluate(() => windowProbe.calls.some(call => call.command === 'Park')), false);
     await page.waitForTimeout(250);
-    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('rnassistant.ui.dock.s1.v1'))), JSON.parse(before.layout), 'full placement and active panel restored');
+    assertPlacement(await page.evaluate(() => JSON.parse(localStorage.getItem('rnassistant.ui.dock.s1.v1'))), JSON.parse(before.layout));
     assert.equal(await page.evaluate(() => windowProbe.disposed), 0);
     assert.equal(await page.evaluate(() => windowProbe.frameLoads), 1, 'retained Browser iframe is not reloaded');
     assert.equal(await page.frameLocator('#windowProbeFrame').getByRole('textbox').inputValue(), 'iframe retained');
@@ -173,7 +192,7 @@ const {spawn} = require('node:child_process'), {chromium} = require('playwright'
     assert.ok(await page.locator('#toggleChatInspectorButton').isVisible(), 'narrow Full keeps Inspector in the toolbar');
     await page.setViewportSize({width: 1280, height: 900});
     await page.waitForTimeout(250);
-    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('rnassistant.ui.dock.s1.v1'))), JSON.parse(before.layout), 'late native resize preserves full placement');
+    assertPlacement(await page.evaluate(() => JSON.parse(localStorage.getItem('rnassistant.ui.dock.s1.v1'))), JSON.parse(before.layout));
     await page.evaluate(() => windowProbe.set('Compact'));
     await page.locator('#hostWindowMenu').click();
     await page.getByRole('menuitem', {name: 'Открыть…', exact: true}).click();

@@ -6,7 +6,7 @@
   function unavailable(name) {
     if (!capabilities || !current || busy || current.visibility === "ShuttingDown") return true;
     if (name === "ShowCompact") return !capabilities.compactPresentation || current.canCompact === false;
-    if (name === "Park" || name === "SetAutoCollapse") return !capabilities.companion;
+    if (name === "SetAutoCollapse") return !capabilities.companion;
     if (name === "SetPinned") return !capabilities.pin;
     if (name === "Maximize") return current.canMaximize === false;
     if (name === "Restore") return current.canRestore === false;
@@ -22,17 +22,15 @@
   function render() {
     var controls = document.getElementById("hostWindowControls");
     if (!controls) return;
-    controls.hidden = !capabilities || !current || !current.chromeReady;
+    var menuButton = document.getElementById("hostWindowMenu");
+    controls.hidden = menuButton.hidden = !capabilities || !current || !current.chromeReady;
     if (!capabilities || !current) return;
     var pin = control("hostWindowPin", "Оставлять окно открытым", "pin", "SetPinned");
     pin.setAttribute("aria-pressed", String(!!current.pinned));
-    var full = control("hostWindowFull", "Полное окно", "windowFull", "ShowFull");
-    full.setAttribute("aria-pressed", String(!compact()));
-    full.disabled = full.disabled || !compact();
     control("hostWindowMaximize", current.canRestore ? "Восстановить размер окна" : "Развернуть окно",
       current.canRestore ? "windowRestore" : "windowMaximize", current.canRestore ? "Restore" : "Maximize");
-    control("hostWindowPresentation", compact() ? "Свернуть в помощник" : "Компактное окно",
-      compact() ? "windowCapsule" : "windowCompact", compact() ? "Park" : "ShowCompact");
+    control("hostWindowPresentation", compact() ? "Вернуть полное окно" : "Компактное окно",
+      compact() ? "windowExpandCompact" : "windowCompact", compact() ? "ShowFull" : "ShowCompact");
     control("hostWindowClose", "Закрыть RNAssistant", "close");
     control("hostWindowMenu", "Вид и окно", "more");
   }
@@ -160,9 +158,8 @@
       bound = true;
       bindHeaderMove();
       document.getElementById("hostWindowPin").onclick = function () { request("SetPinned", !current.pinned); };
-      document.getElementById("hostWindowFull").onclick = function () { request("ShowFull"); };
       document.getElementById("hostWindowMaximize").onclick = function () { request(current.canRestore ? "Restore" : "Maximize"); };
-      document.getElementById("hostWindowPresentation").onclick = function () { request(compact() ? "Park" : "ShowCompact"); };
+      document.getElementById("hostWindowPresentation").onclick = function () { request(compact() ? "ShowFull" : "ShowCompact"); };
       document.getElementById("hostWindowClose").onclick = function () { shutdown(false); };
       document.getElementById("hostWindowMenu").onclick = function () { menu(this); };
     }

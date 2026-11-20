@@ -10,7 +10,7 @@ class Element {
 }
 
 (async () => {
-  const elements = new Map(), updates = [], opens = [], sent = [], accepted = [], mountCalls = [];
+  const elements = new Map(), updates = [], opens = [], sent = [], accepted = [], mountCalls = [], folders = [];
   let remembered = "chat-2", tab = "office";
   const project = { workspaceId: "draw", name: "Рисовалка", rootPath: "/draw", available: true,
     chats: [{ Id: "chat-1", Title: "Набросок", RunStatus: "completed" },
@@ -37,6 +37,7 @@ class Element {
       throw new Error("Unexpected command: " + type);
     },
     switchTab: name => { tab = name; },
+    openContainingFolder: target => folders.push({ ...target }),
     log() {},
     RNAssistantConversationPanel: panel,
     RNAssistantWorkspaceNavigation: {
@@ -82,7 +83,7 @@ class Element {
   assert.equal(treeProject.selectable, true, "project title opens the project");
   assert.deepEqual(Array.from(treeProject.actions, action => action.title), [
     "Новый чат в «Рисовалка»",
-    "Открыть проект «Рисовалка»",
+    "Открыть папку проекта «Рисовалка»",
     "Удалить историю «Рисовалка»",
     "Другие действия проекта «Рисовалка»"
   ]);
@@ -98,7 +99,7 @@ class Element {
   chat.actions[1].onClick(chat, {});
   const chatMenu = opens.at(-1);
   assert.deepEqual(Array.from(chatMenu.items).filter(item => item.label).map(item => item.label), [
-    "Диагностика чата", "Переименовать чат", "Группы чата…"
+    "Открыть папку проекта", "Диагностика чата", "Переименовать чат", "Группы чата…"
   ]);
   assert.equal(chatMenu.items.some(item => item.label === "Удалить чат"), false, "delete is direct on the row");
 
@@ -110,7 +111,10 @@ class Element {
 
   opens.length = 0;
   treeProject.actions[1].onClick(treeProject, {});
-  assert.deepEqual(opens.at(-1), { source: "workspace", workspaceId: "draw", sessionId: "chat-2" }, "open action uses the same project path");
+  chatMenu.items[0].onSelect();
+  treeProject.actions[3].onClick(treeProject, {});
+  opens.at(-1).actions[0].onClick(treeProject, {});
+  assert.deepEqual(folders, Array(3).fill({ workspaceId: "draw" }), "open commands address the same project folder");
 
   sent.length = 0;
   treeProject.actions[0].onClick(treeProject, {});

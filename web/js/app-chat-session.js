@@ -184,6 +184,15 @@ async function selectChat(id) {
 }
 
 
+async function openContainingFolder(target) {
+  try {
+    var result = await send("openFolder", target);
+    if (!result || result.dispatched !== true) throw new Error("Открытие папки не подтверждено.");
+  } catch (error) {
+    RNAssistantShellLayout.notice(error.detail || error.message || String(error));
+  }
+}
+
 async function openActiveDocument(chatIdValue) {
   var targetChatId = typeof chatIdValue === "string" ? chatIdValue : state.activeChatId;
   if (!targetChatId) {

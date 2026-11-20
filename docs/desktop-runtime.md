@@ -24,6 +24,12 @@ Desktop.exe и встроенные VSTO task panes сохраняют преж�
 `nativeDragRegions` выбирает app-region либо typed `BeginMove` для переноса за
 свободную область Shell. При недоступном root UI Alt+F4 закрывает session напрямую;
 после ChromeReady используется обычный guard/flush. Caption не восстанавливается.
+Web-шапка начинается у верхнего края с одним нативным пикселем для resize.
+На Windows 11 DWM-обводка отключена через
+[`DWMWA_BORDER_COLOR`](https://learn.microsoft.com/en-us/windows/win32/api/dwmapi/ne-dwmapi-dwmwindowattribute).
+Открытие папки использует связанный workspace либо локальный путь документа из
+native каталога или заголовка чата и передаёт папку
+[системной оболочке Windows](https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shellexecutew).
 
 Custom frame и non-client regions сверены с Microsoft
 [WebView2 settings](https://learn.microsoft.com/en-us/microsoft-edge/webview2/reference/win32/icorewebview2settings9),

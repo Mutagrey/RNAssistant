@@ -13,13 +13,40 @@ namespace RNAssistant.Office.Services
                 throw new InvalidOperationException("Путь к документу недоступен. Откройте файл вручную.");
             }
 
+            OpenWithShell(path, "Не удалось открыть документ. Откройте файл вручную.");
+        }
+
+        public static void OpenFolder(string path)
+        {
+            if (!Directory.Exists(path))
+            {
+                throw new InvalidOperationException("Папка недоступна.");
+            }
+
+            OpenWithShell(path, "Не удалось открыть папку.");
+        }
+
+        public static void OpenContainingFolder(string documentPath)
+        {
+            Uri location;
+            if (!Uri.TryCreate(documentPath, UriKind.Absolute, out location) ||
+                !location.IsFile || !Path.IsPathRooted(documentPath))
+            {
+                throw new InvalidOperationException("У документа нет локальной папки.");
+            }
+
+            OpenFolder(Path.GetDirectoryName(documentPath));
+        }
+
+        private static void OpenWithShell(string path, string errorMessage)
+        {
             try
             {
-                Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+                using (Process.Start(new ProcessStartInfo(path) { UseShellExecute = true })) { }
             }
             catch (Exception ex)
             {
-                throw new InvalidOperationException("Не удалось открыть документ. Откройте файл вручную.", ex);
+                throw new InvalidOperationException(errorMessage, ex);
             }
         }
 

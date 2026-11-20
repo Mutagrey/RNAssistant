@@ -69,6 +69,11 @@
       toolbar.appendChild(create);
     }
     heading.replaceChildren(node("strong", "", options.title), toolbar);
+    if (root.classList.contains("global-nav")) {
+      var pin = node("button");
+      heading.prepend(pin);
+      RNAssistantShellLayout.bindNavigationPin(pin, controller.signal);
+    }
     var footer = node("div", "navigation-pane-state");
     var message = options.status || node("p", "muted");
     message.setAttribute("role", "status"); message.setAttribute("aria-live", "polite");

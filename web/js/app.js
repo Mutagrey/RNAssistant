@@ -1,7 +1,3 @@
-function setMobileNavigationOpen(open) {
-  if (window.RNAssistantShellLayout) window.RNAssistantShellLayout.setNavigationOpen(open);
-}
-
 function switchTab(name, options) {
   if (window.RNAssistantWindow && RNAssistantWindow.inFull(function () { switchTab(name, options); })) return;
   var workspaceView = RNAssistantDockWorkspace.sectionView(name) || (["settings", "request", "diagnostics"].indexOf(name) >= 0 ? name : null);
@@ -10,7 +6,6 @@ function switchTab(name, options) {
     name = "chat";
     options = { preserveChatOwner: true };
   }
-  if (window.RNAssistantShellLayout && window.RNAssistantShellLayout.mode() !== "wide") setMobileNavigationOpen(false);
   if ($("tab-instructions") && $("tab-instructions").classList.contains("active") && name !== "instructions" && typeof syncSelectedLibraryItem === "function") {
     syncSelectedLibraryItem();
   }

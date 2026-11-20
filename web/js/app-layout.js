@@ -1,9 +1,11 @@
 (function () {
   var productNavigationKey = "rnassistant.ui.navigation.width";
   var productNavigationOpenKey = "rnassistant.ui.navigation.open";
+  var navigationPinnedKey = "rnassistant.ui.navigation.pinned";
   var productNavigationPreference = true;
-  var compactNavigationOpen = false;
-  var productLayoutMode = null;
+  var productNavigationOpen = null;
+  var navigationPinned = false;
+  var navigationPins = new Set();
   var navigationTransitionTimer = null;
   var navigationToggle = null;
   var navigationSizes = null;
@@ -82,7 +84,10 @@
     return navigationSizes;
   }
 
-  try { productNavigationPreference = window.localStorage.getItem(productNavigationOpenKey) !== "0"; }
+  try {
+    productNavigationPreference = window.localStorage.getItem(productNavigationOpenKey) !== "0";
+    navigationPinned = window.localStorage.getItem(navigationPinnedKey) === "1";
+  }
   catch (error) { /* Presentation preferences are optional. */ }
 
   function navigationMode() {
@@ -93,19 +98,18 @@
 
   function navigationIsOpen() {
     if (window.RNAssistantWindow && RNAssistantWindow.isCompact()) return false;
-    return productLayoutMode === "wide" ? productNavigationPreference : compactNavigationOpen;
+    return !!productNavigationOpen;
+  }
+
+  function activeNavigation() {
+    return document.querySelector(".shell .panel.active .global-nav");
   }
 
   function syncProductNavigation() {
     var shell = document.querySelector(".shell");
     if (!shell) return;
     var mode = navigationMode();
-    if ((mode === "wide") !== (productLayoutMode === "wide")) {
-      compactNavigationOpen = false;
-    }
-    if (mode !== productLayoutMode) {
-      productLayoutMode = mode;
-    }
+    if (productNavigationOpen === null) productNavigationOpen = (mode === "wide" || navigationPinned) && productNavigationPreference;
     var open = navigationIsOpen();
     if (shell.classList.contains("layout-ready") && shell.classList.contains("navigation-open") !== open) {
       clearTimeout(navigationTransitionTimer);
@@ -123,41 +127,53 @@
     shell.querySelectorAll(".split-layout[data-navigation] > .global-nav + .splitter").forEach(function (handle) {
       handle.hidden = mode !== "wide";
     });
-    var active = shell.querySelector(".panel.active .global-nav");
-    var focusedInNavigation = active && active.contains(document.activeElement);
+    var active = activeNavigation();
+    var focusedInNavigation = active && RNAssistantActionMenu.ownsTarget(active, document.activeElement);
     if (button) button.hidden = !active;
     if (active) {
+      if (!open) RNAssistantActionMenu.closeWithin(active);
       active.inert = !open;
       active.setAttribute("aria-hidden", String(!open));
-    }
-    shell.querySelectorAll(".panel.active :is(.chat-dock-host, .instruction-editor, .vba-editor, .html-workspace-editor, .product-dt-main, .plugin-content)").forEach(function (main) {
-      main.inert = mode !== "wide" && open && !!active;
-    });
-    var scrim = document.getElementById("productNavigationScrim"), section = shell.querySelector(".panel.active");
-    if (scrim) {
-      // Keep the scrim and navigation in the same stacking context during section transitions.
-      if (section && scrim.parentElement !== section) section.appendChild(scrim);
-      scrim.hidden = mode === "wide" || !open || !active;
     }
     if (!open && focusedInNavigation && button) button.focus({ preventScroll: true });
     if (workspaceLayoutChanged) workspaceLayoutChanged();
   }
 
-  function setProductNavigationOpen(open) {
-    if (navigationMode() === "wide") {
-      productNavigationPreference = !!open;
+  function setProductNavigationOpen(open, remember) {
+    productNavigationOpen = !!open;
+    if (remember !== false) {
       try { window.localStorage.setItem(productNavigationOpenKey, open ? "1" : "0"); }
       catch (error) { /* Storage may be disabled. */ }
-    } else compactNavigationOpen = !!open;
+    }
     syncProductNavigation();
     if (typeof refreshCodeEditors === "function") refreshCodeEditors();
   }
 
   function dismissNavigation() {
-    if (navigationMode() !== "wide" && navigationIsOpen()) {
-      setProductNavigationOpen(false);
-      if (document.activeElement === document.body) document.getElementById("productMobileMenuButton").focus({ preventScroll: true });
+    if (!navigationPinned && navigationIsOpen()) {
+      setProductNavigationOpen(false, false);
     }
+  }
+
+  function bindNavigationPin(button, signal) {
+    var sync = RNAssistantPanelToggle.bindPin(button, function () { return navigationPinned; }, function (pinned) {
+      navigationPinned = pinned;
+      try {
+        localStorage.setItem(navigationPinnedKey, pinned ? "1" : "0");
+        if (pinned) localStorage.setItem(productNavigationOpenKey, "1");
+      } catch (error) { /* Presentation preferences are optional. */ }
+      navigationPins.forEach(function (update) { update(); });
+    });
+    navigationPins.add(sync);
+    signal.addEventListener("abort", function () { navigationPins.delete(sync); }, { once: true });
+  }
+
+  function dismissOutside(target) {
+    var active = activeNavigation();
+    if (active && !(target && (RNAssistantActionMenu.ownsTarget(active, target) ||
+        target.closest("#productMobileMenuButton, #libraryRootTab, .section-rail :is([data-tab='chat'], [data-tab='artifacts'], [data-tab='vba'], [data-plugin-id][aria-current='page'])") ||
+        target === active.nextElementSibling))) dismissNavigation();
+    if (workspaceCommands) workspaceCommands.dismissTools(target);
   }
 
   var workspaceCommands;
@@ -176,7 +192,7 @@
     mode: navigationMode,
     occupiesSpace: function () { return navigationMode() === "wide" && navigationIsOpen(); },
     setNavigationOpen: setProductNavigationOpen,
-    dismissNavigation: dismissNavigation,
+    bindNavigationPin: bindNavigationPin,
     selectSection: function (activate, repeated) {
       var wasOpen = navigationIsOpen();
       activate();
@@ -417,10 +433,20 @@
         apply();
       }
     });
-    document.getElementById("productNavigationScrim").addEventListener("click", dismissNavigation);
+    // Let a pointer activation keep its original target until click, even if it changes focus first.
+    var pointerDown = false;
+    document.addEventListener("pointerdown", function (event) { if (event.isPrimary) pointerDown = true; }, true);
+    function endPointer() { pointerDown = false; }
+    window.addEventListener("pointerup", endPointer, true);
+    window.addEventListener("pointercancel", endPointer, true);
+    document.addEventListener("focusin", function (event) { if (!pointerDown) dismissOutside(event.target); });
+    document.addEventListener("click", function (event) { dismissOutside(event.target); }, true);
+    window.addEventListener("blur", function () { endPointer(); dismissOutside(null); });
     document.getElementById("workspaceDiagnostics").addEventListener("click", function () { RNAssistantDiagnostics.openCurrent(); });
     document.addEventListener("rna-navigation-select", function (event) {
-      if (event.target.closest(".global-nav")) dismissNavigation();
+      if (!event.target.closest(".global-nav") || !navigationIsOpen() || navigationPinned) return;
+      dismissNavigation();
+      if (document.activeElement === document.body) document.getElementById("productMobileMenuButton").focus({ preventScroll: true });
     });
     document.querySelector(".content").addEventListener("click", function (event) {
       if (event.target.closest(".global-nav .dt-tabs button, .global-nav .product-create-menu button")) dismissNavigation();
@@ -446,15 +472,21 @@
   window.addEventListener("storage", function (event) {
     if (event.key === productNavigationKey && typeof window.refreshSplitPanes === "function") window.refreshSplitPanes();
     if (event.key === productNavigationOpenKey) {
-      productNavigationPreference = event.newValue !== "0";
+      productNavigationOpen = event.newValue !== "0";
       syncProductNavigation();
+    }
+    if (event.key === navigationPinnedKey) {
+      navigationPinned = event.newValue === "1";
+      navigationPins.forEach(function (update) { update(); });
     }
   });
   window.addEventListener("pagehide", function () { clearTimeout(workspaceNoticeTimer); });
   document.addEventListener("keydown", function (event) {
-    if (event.key === "Escape" && !event.defaultPrevented && navigationMode() !== "wide" && navigationIsOpen()) {
+    var active = activeNavigation();
+    if (event.key === "Escape" && !event.defaultPrevented && active && navigationIsOpen() &&
+        (!navigationPinned || active.contains(event.target))) {
       event.preventDefault();
-      dismissNavigation();
+      setProductNavigationOpen(false);
     }
   });
 }());

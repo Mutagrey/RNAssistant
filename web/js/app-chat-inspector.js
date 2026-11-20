@@ -528,7 +528,10 @@
       label: options.label || exact.label, document: options.document || exact.document, documentId: options.documentId || exact.documentId }));
     returnFocus = trigger || document.activeElement; returnFocusKey = source().key;
     view = 'activity'; cancelUsage();
-    if (visible) render(); else setOpen(true);
+    if (visible) {
+      window.RNAssistantDockWorkspace.cancelInspectorDismissal();
+      render();
+    } else setOpen(true);
     return true;
   }
 

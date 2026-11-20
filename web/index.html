@@ -53,8 +53,8 @@
   <link rel="stylesheet" href="css/app-agent-data.css?v=compact-tool-json-20261029-1">
   <link rel="stylesheet" href="css/app-theme.css?v=plugin-materials-20261103">
   <link rel="stylesheet" href="css/app-product-tokens.css?v=material-surface-20261118-4">
-  <link rel="stylesheet" href="css/app-product-navigation.css?v=browser-header-one-line-20261118-1">
-  <link rel="stylesheet" href="css/app-product-components.css?v=project-row-actions-20261119">
+  <link rel="stylesheet" href="css/app-product-navigation.css?v=sidebar-focus-20261120">
+  <link rel="stylesheet" href="css/app-product-components.css?v=sidebar-focus-20261120">
   <link rel="stylesheet" href="css/app-product-viewers.css?v=browser-header-one-line-20261118-1">
   <link rel="stylesheet" href="css/app-product-materials.css?v=material-surface-20261118-1">
   <link rel="stylesheet" href="css/app-product-screens.css?v=unified-workspace-20261111">
@@ -66,20 +66,18 @@
 <body>
   <div class="shell app-shell">
     <header class="workspace-topbar" aria-label="Управление рабочей областью">
+      <button type="button" id="productMobileMenuButton"></button>
       <div class="workspace-context"><span id="workspaceContextIcon" aria-hidden="true"></span><span id="workspaceSectionTitle">Рабочая область</span></div>
       <div class="workspace-topbar-actions">
-        <div class="workspace-panel-controls"><button class="product-mobile-menu-button" id="productMobileMenuButton"></button>
-          <button type="button" class="panel-toggle" id="toggleChatInspectorButton"></button>
-        </div>
+        <button type="button" id="toggleChatInspectorButton"></button>
+        <button type="button" class="icon-btn" id="hostWindowMenu" aria-label="Вид и окно" title="Вид и окно" aria-haspopup="menu" aria-expanded="false" hidden></button>
         <div class="workspace-view-actions" id="workspaceViewActions">
           <button type="button" class="icon-btn" id="workspaceLayout" aria-label="Расположение панелей" title="Расположение панелей" aria-haspopup="menu" aria-expanded="false"><svg data-rna-icon="layout" aria-hidden="true"></svg></button>
         </div>
         <div class="host-window-controls" id="hostWindowControls" hidden role="group" aria-label="Управление окном">
           <button type="button" class="icon-btn" id="hostWindowPin" aria-label="Оставлять окно открытым" aria-pressed="false"></button>
-          <button type="button" class="icon-btn" id="hostWindowFull" aria-label="Полное окно" aria-pressed="false"></button>
-          <button type="button" class="icon-btn" id="hostWindowMaximize" aria-label="Развернуть окно"></button>
-          <button type="button" class="icon-btn" id="hostWindowMenu" aria-label="Вид и окно" title="Вид и окно" aria-haspopup="menu" aria-expanded="false"></button>
           <button type="button" class="icon-btn" id="hostWindowPresentation" aria-label="Компактная панель"></button>
+          <button type="button" class="icon-btn" id="hostWindowMaximize" aria-label="Развернуть окно"></button>
           <button type="button" class="icon-btn" id="hostWindowClose" aria-label="Закрыть RNAssistant"></button>
         </div>
       </div>
@@ -97,7 +95,6 @@
     </nav>
 
     <footer class="workspace-statusbar"><span id="workspaceHostStatus"></span><span id="workspaceOperationStatus" role="status" aria-live="polite" hidden></span><span id="workspaceLayoutNotice" role="status" aria-live="polite"></span><span id="workspaceLayoutStatus"></span><button type="button" id="activeChatRunsButton" aria-label="Активные запросы" aria-haspopup="menu" aria-expanded="false"><svg data-rna-icon="chat" aria-hidden="true"></svg><span>Запросы</span><b id="activeChatRunsCount">0</b></button><button type="button" id="workspaceDiagnostics" title="Диагностика текущего чата"><svg data-rna-icon="chart" aria-hidden="true"></svg><span>Диагностика</span></button></footer>
-    <button type="button" class="navigation-scrim" id="productNavigationScrim" aria-label="Закрыть навигацию" tabindex="-1" hidden></button>
     <main class="content">
       <section class="panel active" id="tab-chat">
         <div class="chat-workspace split-layout" id="chatLayout" data-navigation>
@@ -114,13 +111,16 @@
           <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину дерева документов и чатов"></div>
           <div class="chat-main" id="chatDropZone">
         <div class="chatbar">
+          <button type="button" class="icon-btn compact" id="chatOpenFolderButton" title="Открыть папку" aria-label="Открыть папку" disabled>
+            <svg data-rna-icon="folder" aria-hidden="true"></svg>
+          </button>
           <div class="chat-title-block">
             <strong id="activeChatTitle">Новый чат</strong>
             <span id="activeChatSubtitle"></span>
           </div>
           <div class="chatbar-actions" id="chatbarActions">
             <span class="chat-run-status" id="chatRunStatus"></span>
-            <button type="button" class="icon-btn chat-header-wide" id="chatActivityButton" title="Ход работы" aria-label="Ход работы">
+            <button type="button" class="icon-btn chat-header-wide" id="chatActivityButton" title="Ход работы" aria-label="Ход работы" aria-controls="chatInspector">
               <svg data-rna-icon="clock" viewBox="0 0 24 24" aria-hidden="true"></svg>
             </button>
           </div>
@@ -272,6 +272,7 @@
           </div>
           <aside class="chat-inspector" id="chatInspector" aria-label="Боковая панель чата" hidden>
             <div class="chat-inspector-head">
+              <button type="button" id="chatInspectorPanelPin"></button>
               <details class="panel-switcher chat-inspector-switcher" id="chatInspectorSwitcher">
                 <summary aria-label="Раздел боковой панели" aria-haspopup="menu"><span id="chatInspectorViewTitle">Ход работы</span><svg data-rna-icon="down" viewBox="0 0 24 24" aria-hidden="true"></svg></summary>
                 <div class="popover-menu" role="menu" aria-label="Раздел боковой панели">
@@ -1152,26 +1153,26 @@
   <script src="js/app-editor-tabs.js?v=diagnostics-20261101"></script>
   <script src="js/app-skill-fields-view.js?v=shared-skill-fields-20261018-1"></script>
   <script src="js/app-core.js?v=chat-views-20261103-html-editors-20261103-1-chat-audit-20261103"></script>
-  <script src="js/app-icons.js?v=material-surface-20261118-1"></script>
-  <script src="js/app-panel-toggle.js?v=right-sections-sent-20261024-1"></script>
+  <script src="js/app-icons.js?v=sidebar-focus-20261120"></script>
+  <script src="js/app-panel-toggle.js?v=sidebar-focus-20261120"></script>
   <script src="js/app-preview-surface.js?v=browser-address-focus-20261119-3"></script>
   <script src="js/app-rail-popovers.js"></script>
-  <script src="js/app-navigation-tree.js?v=project-row-actions-20261119"></script>
+  <script src="js/app-navigation-tree.js?v=sidebar-focus-20261120"></script>
   <script src="js/app-conversation-state.js?v=chat-continuity-20261103"></script>
   <script src="js/app-conversation-view.js?v=chat-welcome-20261103"></script>
   <script src="js/app-conversation-observer.js?v=addressed-poll-20261027-1-observe-s2b4"></script>
   <script src="js/app-conversation-input.js?v=addressed-pending-20261027-1"></script>
   <script src="js/app-library-groups.js?v=20261029-first-group-1"></script>
-  <script src="js/app-action-menu.js?v=browser-header-one-line-20261118-1"></script>
+  <script src="js/app-action-menu.js?v=sidebar-focus-20261120"></script>
   <script src="js/app-dialog.js?v=browser-address-perf-20261118-1"></script>
   <script src="js/app-workspace-navigation.js?v=unified-tree-20261111"></script>
-  <script src="js/app-navigation-pane.js?v=material-surface-20261118-1"></script>
+  <script src="js/app-navigation-pane.js?v=sidebar-focus-20261120"></script>
   <script src="js/app-material-surface.js?v=material-surface-20261118-4"></script>
   <script src="js/app-utils.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-run-view-state.js?v=feed-stability-20261103"></script>
-  <script src="js/app-layout.js?v=legacy-migration-20261118-1"></script>
-  <script src="js/app-window.js?v=native-toolbar-actions-20261116"></script>
-  <script src="js/app-chat-inspector.js?v=chat-views-20261103-selected-inspector-20261113"></script>
+  <script src="js/app-layout.js?v=sidebar-focus-20261120"></script>
+  <script src="js/app-window.js?v=sidebar-focus-20261120"></script>
+  <script src="js/app-chat-inspector.js?v=sidebar-focus-20261120"></script>
   <script src="js/app-vba-completion.js?v=vba-completion-20260903-1"></script>
   <script src="js/app-editors.js?v=plugin-materials-20261103-html-editors-20261103-1"></script>
   <script src="js/app-chat-visuals.js?v=chat-visuals-20261119-1-static-only"></script>
@@ -1203,7 +1204,7 @@
   <script src="js/app-models.js?v=chat-views-20261103"></script>
   <script src="js/app-context-data.js"></script>
   <script src="js/app-chat-groups.js?v=project-row-actions-20261119"></script>
-  <script src="js/app-chat-state.js?v=project-row-actions-20261119"></script>
+  <script src="js/app-chat-state.js?v=chat-folder-20261120"></script>
   <script src="js/app-tools-structured.js?v=library-ux-20260903-1"></script>
   <script src="js/app-tools-actions.js?v=manual-tool-chat-20260908-1"></script>
   <script src="js/app-tools-documentation.js?v=tool-docs-20260906-1"></script>
@@ -1251,7 +1252,7 @@
   <script src="js/app-messages.js?v=legacy-history-20261116-1"></script>
   <script src="js/app-reasoning.js?v=chat-continuity-20261103"></script>
   <script src="js/app-attachments.js?v=chat-views-20261103-html-editors-20261103-1-native-selection-20261113"></script>
-  <script src="js/app-chat-session.js?v=retired-chat-rebind-20261119"></script>
+  <script src="js/app-chat-session.js?v=chat-folder-20261120"></script>
   <script src="js/app-chat-composer.js?v=unified-workspace-20261111"></script>
   <script src="js/app-chat-inbox.js?v=chat-views-20261103"></script>
   <script src="js/app-chat-run.js?v=request-causes-20261103"></script>
@@ -1261,19 +1262,19 @@
   <script src="js/app-office-chat-view.js?v=storage-recovery-20261116"></script>
   <script src="js/app-agent-recovery.js?v=agent-recovery-20261104"></script>
   <script src="js/app-agent-communication.js?v=agent-recovery-menu-20261104"></script>
-  <script src="js/app-conversation-panel.js?v=unified-workspace-20261111-selected-inspector-20261113"></script>
+  <script src="js/app-conversation-panel.js?v=chat-folder-20261120"></script>
   <script src="js/app-plugins.js?v=storage-recovery-20261116"></script>
-  <script src="js/app-project-chats.js?v=project-row-actions-20261119"></script>
+  <script src="js/app-project-chats.js?v=sidebar-focus-20261120"></script>
   <script src="js/vendor/dockview-core.min.js"></script>
   <script src="js/app-artifact-download.js?v=browser-saved-20261102"></script>
   <script src="js/app-material-view.js?v=material-surface-20261118-1"></script>
   <script src="js/app-start-surface.js"></script>
-  <script src="js/app-dock-workspace.js?v=window-toolbar-20261116"></script>
+  <script src="js/app-dock-workspace.js?v=sidebar-focus-20261120"></script>
   <script src="js/app-browser-actions.js?v=browser-header-one-line-20261118-1"></script>
   <script src="js/app-browser-annotations.js?v=native-selection-20261113"></script>
   <script src="js/app-browser-find.js?v=native-find-20261113"></script>
   <script src="js/app-browser.js?v=browser-address-focus-20261119-3"></script>
   <script src="js/app-active-runs.js?v=chat-parity-20261103"></script>
-  <script src="js/app.js?v=storage-recovery-20261116"></script>
+  <script src="js/app.js?v=sidebar-focus-20261120"></script>
 </body>
 </html>

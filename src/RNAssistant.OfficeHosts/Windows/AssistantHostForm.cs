@@ -37,6 +37,12 @@ namespace RNAssistant.OfficeHosts.Windows
             }
         }
 
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            WindowNative.SuppressFrameBorder(Handle);
+        }
+
         internal void BeginMove()
         {
             // Ignore a delayed Web message after the mouse was released.
@@ -67,11 +73,12 @@ namespace RNAssistant.OfficeHosts.Windows
                     command == WindowNative.Minimize ? HostWindowCommand.SystemMinimize : (HostWindowCommand?)null;
                 if (action.HasValue && Command != null) { Command(action.Value); m.Result = IntPtr.Zero; return; }
             }
-            if (m.Msg == 0x83 && m.WParam != IntPtr.Zero) // WM_NCCALCSIZE; retain native resize edges outside WebView HWND
+            if (m.Msg == 0x83 && m.LParam != IntPtr.Zero) // WM_NCCALCSIZE; RECT is also the first member of NCCALCSIZE_PARAMS
             {
                 var rect = (WindowNative.Rect)Marshal.PtrToStructure(m.LParam, typeof(WindowNative.Rect));
-                var edge = WindowState == FormWindowState.Maximized ? 0 : Math.Max(1, (int)Math.Round(6 * WindowNative.Scale(Handle)));
-                rect.Left += edge; rect.Top += edge; rect.Right -= edge; rect.Bottom -= edge;
+                var edge = WindowState == FormWindowState.Maximized ? 0 : Math.Max(1, (int)Math.Round(6 * WindowNative.Scale(m.HWnd)));
+                // Start the Web header at the frame edge. Keep one native pixel at the top for hit testing.
+                rect.Left += edge; rect.Top += Math.Sign(edge); rect.Right -= edge; rect.Bottom -= edge;
                 Marshal.StructureToPtr(rect, m.LParam, false); m.Result = IntPtr.Zero; return;
             }
             if (m.Msg == 0x84) // WM_NCHITTEST, signed screen coordinates

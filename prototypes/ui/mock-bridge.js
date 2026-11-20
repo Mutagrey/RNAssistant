@@ -687,6 +687,13 @@
       return clone(newPlugin);
     }
     if (type === "getProjectChats") return projectCatalog();
+    if (type === "openFolder") {
+      if (payload.workspaceId) requireWorkspace(payload);
+      else if (payload.chatId) requireArtifactReader(payload);
+      else if (!documentItems.some(function (item) { return item.documentKey === payload.documentKey; }))
+        fail("У документа нет локальной папки.", "preview_document_changed");
+      return { dispatched: true };
+    }
     if (type === "connectProjectWorkspace" || type === "createProjectWorkspace") {
       var rootPath = (payload.rootPath || "").trim();
       if (!/^(?:[a-z]:[\\/]|\/)/i.test(rootPath)) fail("Укажите полный путь к папке.", "preview_project_root_invalid");

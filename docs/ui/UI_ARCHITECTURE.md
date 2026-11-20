@@ -14,9 +14,11 @@ store or separate recovery path is introduced.
 ## Project/chat row actions — In Review, 2026-11-19
 
 `app-project-chats.js` remains the Workspace tree adapter. Project rows expose the
-existing group, new-chat, open and delete-history commands; title selection and the
-direct open command use the same `selectProject` → Workspace scope path, so they
-cannot open a panel under the previous adapter. `app-chat-groups.js` keeps delete as
+existing group, new-chat and delete-history commands. Title selection follows
+`selectProject` → the addressed Workspace chat. Folder actions in the project row,
+tree menus and shared Chat View use the typed `OpenFolder` bridge. The bridge
+resolves the connected project root by ID or the Office document path by its chat
+header or open-document key, then dispatches to the Windows shell. `app-chat-groups.js` keeps delete as
 the row's direct danger action and groups diagnostics, rename, plugin membership and
 chat groups under the existing `…`. `NavigationTree` renders one right-aligned
 hover/focus action cluster and owns the first-click confirmation state for destructive
@@ -526,8 +528,8 @@ presentation. Compact временно максимизирует группу �
 в `AppDataPaths.NativeWindowStateFile`: schema 1, DIP относительно monitor work area,
 atomic read-merge-write по host profile под коротким межпроцессным lock вне STA.
 
-Уточнение верхней панели — In Review, 2026-11-16: прямые navigation, Inspector,
-pin, «Полное окно» и maximize/restore принадлежат `workspace-topbar` и остаются
+Navigation, Inspector, pin, кнопка компактного/полного режима и maximize/restore
+принадлежат `workspace-topbar` и остаются
 доступны в Compact/narrow. Shell CSS скрывает отдельный `workspaceLayout` только
 при integrated chrome; остальные hosts сохраняют его как кнопку-иконку. Вход в
 навигацию из Compact сначала использует существующий `inFull`, затем открывает
@@ -1288,12 +1290,15 @@ conversation transcript paint откладывается; возвращение
 Chooser — обычный дешёвый view без retained domain data. Полный view-scoping
 глобального chat renderer остаётся S2; дубли экземпляров запрещены.
 
-Навигация также перенесена по поведению Demo: один ShellLayout управляет wide/overlay,
-rail repeat, scrim/Escape, выбором экрана и широким предпочтением. Старые проверки
+Один ShellLayout управляет wide/overlay, rail repeat, Escape, видимостью и pin.
+Выбор чата и уход фокуса сворачивают незакреплённое дерево. ActionMenu связывает
+вынесенное меню с его кнопкой. Старые проверки
 820/620 px и fullscreen-дерево удалены; feature content breakpoints остаются у экранов.
 Общий Tree сообщает о принятом выборе, не знает Shell и не держит второй state.
-Dockview скрывает самостоятельную группу Inspector без dispose/повторного mount;
-смешанная и единственная видимая группы защищены от случайного скрытия.
+DockWorkspace хранит pin Inspector и скрывает самостоятельную группу через
+Dockview после анимации, сохраняя узел и положение. Смешанная и единственная
+видимая группы защищены от случайного скрытия. При возврате группы DockWorkspace
+возвращает сохранённый DOM в текущий компонент даже при прежней активной вкладке.
 
 Опора lifecycle: [Dockview rendering API](https://dockview.dev/docs/core/panels/rendering/).
 Локальная pinned версия 8.8.3, лицензия/provenance и hashes включены в существующие

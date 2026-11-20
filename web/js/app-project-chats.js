@@ -109,8 +109,13 @@
     return (entry.chats || []).some(function (chat) { return runBlocksDeletion(chatRunStatus(entry, chat)); }) ||
       entry.workspaceId === projectId() && !!currentId() && runBlocksDeletion(runStatus());
   }
+  function projectFolderAction(entry, title, icon) {
+    return { title: title, iconHtml: RNAssistantNavigationTree.icon(icon), disabled: !entry.available || !!state.bridgeUnavailable,
+      onClick: function () { return openContainingFolder({ workspaceId: entry.workspaceId }); } };
+  }
   function projectMoreAction(entry, groupScope) {
     var action = RNAssistantActionMenu.treeActions("Другие действия проекта «" + entry.name + "»", [
+      projectFolderAction(entry, "Открыть папку проекта", "folder"),
       RNAssistantChatGroups.createAction(groupScope)
     ])[0];
     return action;
@@ -146,6 +151,7 @@
           status: presence.status, statusLabel: presence.label,
           actions: (entry.pluginId ? [{ title: "Открыть чат в плагине", iconHtml: window.RNAssistantNavigationTree.icon("code"),
             disabled: !entry.available, onClick: function () { window.RNAssistantPlugins.select(entry.pluginId, chat.Id); } }] : []).concat([
+            projectFolderAction(entry, "Открыть папку проекта", "folder"),
             { title: "Диагностика чата", iconHtml: window.RNAssistantNavigationTree.icon("diagnostics"), disabled: !entry.available,
               onClick: function () { window.openRunJournal({ owner: entry.pluginId ? "plugin" : "project", workspaceId: entry.workspaceId,
                 sessionId: chat.Id, pluginId: entry.pluginId, label: chat.Title, document: entry.name,
@@ -169,8 +175,7 @@
         actions: [
           { title: "Новый чат в «" + entry.name + "»", iconHtml: window.RNAssistantNavigationTree.icon("plus"),
             disabled: !entry.available, onClick: function () { create(entry.workspaceId); } },
-          { title: "Открыть проект «" + entry.name + "»", iconHtml: window.RNAssistantNavigationTree.icon("open"),
-            disabled: !entry.available, onClick: function () { selectProject(entry.workspaceId); } },
+          projectFolderAction(entry, "Открыть папку проекта «" + entry.name + "»", "open"),
           { title: "Удалить историю «" + entry.name + "»", iconHtml: window.RNAssistantNavigationTree.icon("trash"), danger: true,
             confirmTitle: "Подтвердить удаление истории «" + entry.name + "»", confirmIconHtml: window.RNAssistantNavigationTree.icon("check"),
             disabled: historyBlocked(entry), onClick: function () { removeHistory(entry); } },
@@ -181,7 +186,7 @@
       emptyText: query ? "Ничего не найдено" : !catalog ? catalogError ? "Проекты недоступны" : "Загрузка…" : "Добавьте проект через +",
       onSelect: function (item) {
         RNAssistantChatGroups.select(item);
-        if (item.kind === "parent" && item.workspaceId && !item.sessionId) { selectProject(item.workspaceId); return; }
+        if (item.kind === "parent" && item.workspaceId && !item.sessionId) return selectProject(item.workspaceId);
         var entry = projects().find(function (project) { return project.workspaceId === item.workspaceId; });
         if (entry && entry.pluginId && window.RNAssistantPlugins)
           window.RNAssistantPlugins.select(entry.pluginId, item.sessionId);
@@ -226,12 +231,12 @@
     if (wanted && project().available) await open(projectId(), wanted);
     else if (!wanted) render();
   }
-  function selectProject(workspaceId, openFirst) {
+  function selectProject(workspaceId) {
     if (!workspaceId || !projects().some(function (item) { return item.workspaceId === workspaceId; })) return;
     if (selectedWorkspaceId !== workspaceId) { ++serial; selectedWorkspaceId = workspaceId; }
     render();
     var entry = project();
-    if (openFirst === false || !entry.available || !entry.chats || !entry.chats.length) return;
+    if (!entry.available || !entry.chats || !entry.chats.length) return false;
     var remembered = window.RNAssistantWorkspaceChat.selectedSession(workspaceId);
     var chat = entry.chats.find(function (item) { return item.Id === remembered; }) || entry.chats[0];
     switchTab("chat");

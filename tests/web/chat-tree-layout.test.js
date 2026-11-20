@@ -18,6 +18,7 @@ const root = path.resolve(__dirname, '../..');
     page.on('pageerror', error => errors.push(error.stack || error.message));
     await page.goto(url + 'preview/web/?scenario=ready');
     await page.waitForFunction(() => state.activeChatId === 'preview-chat' && !state.initializePromise);
+    await page.locator('#workspaceNavigationHeading .panel-pin').click();
     const tree = page.locator('#chatSessionList');
     const row = key => tree.locator('[data-tree-key=' + JSON.stringify(key) + '] > .navigation-tree-row');
     const office = 'chat:preview-chat', project = 'project-chat:preview-data-workspace:preview-project-review';
@@ -28,16 +29,17 @@ const root = path.resolve(__dirname, '../..');
     assert.equal(await page.locator('#chatDockHost').evaluate(n => n.parentElement.id), 'chatLayout');
     const doc = (await row(office).evaluate(n => n.parentElement.dataset.parentKey));
     assert.equal(await row(doc).evaluate(n => getComputedStyle(n).fontWeight), '400');
-    assert.equal(await row(doc).locator('[data-tree-action]').count(), 1, 'Office keeps one compact parent menu');
+    assert.equal(await row(doc).locator('[data-tree-action]').count(), 4, 'Office exposes its row controls and one overflow menu');
     const projectRow = row('project:preview-data-workspace');
     assert.equal(await projectRow.evaluate(n => getComputedStyle(n).fontWeight), '400');
     assert.equal(await projectRow.locator('[data-tree-action]').count(), 4, 'project exposes new, open, delete and more actions');
     assert.deepEqual(await projectRow.locator('[data-tree-action]').evaluateAll(nodes => nodes.map(node => node.title)), [
-      'Новый чат в «Управленческая отчётность»', 'Открыть проект «Управленческая отчётность»',
+      'Новый чат в «Управленческая отчётность»', 'Открыть папку проекта «Управленческая отчётность»',
       'Удалить историю «Управленческая отчётность»', 'Другие действия проекта «Управленческая отчётность»'
     ]);
     assert.equal(await projectRow.locator('button[title^="Новый чат в"]').evaluate(n => getComputedStyle(n).visibility), 'hidden');
-    assert.equal(await projectRow.locator('button[title^="Открыть проект"]').evaluate(n => getComputedStyle(n).visibility), 'hidden');
+    const projectOpen = projectRow.locator('button[title^="Открыть папку проекта"]');
+    assert.equal(await projectOpen.evaluate(n => getComputedStyle(n).visibility), 'hidden');
     assert.equal(await projectRow.locator('button[title^="Удалить историю"]').evaluate(n => getComputedStyle(n).visibility), 'hidden');
     await projectRow.hover();
     assert.equal(await projectRow.locator('[data-tree-action]').last().evaluate(n => getComputedStyle(n).visibility), 'visible');
@@ -46,26 +48,37 @@ const root = path.resolve(__dirname, '../..');
     const accent = async () => page.evaluate(() => { const n=document.createElement('span'); n.style.color='var(--accent)'; document.body.append(n); const color=getComputedStyle(n).color; n.remove(); return color; });
     assert.equal(await folder.evaluate(n => getComputedStyle(n).color), await accent());
     const geometry = key => row(key).evaluate(n => {
-      const label=n.querySelector('.navigation-tree-label').getBoundingClientRect(), actions=n.querySelector('.tree-actions').getBoundingClientRect();
-      return { height:n.getBoundingClientRect().height, width:label.width, overlap:label.right>actions.left+1 };
+      const text=n.querySelector('.navigation-tree-label-text').getBoundingClientRect(), actions=n.querySelector('.tree-actions').getBoundingClientRect();
+      return { height:n.getBoundingClientRect().height, overlap:text.right>actions.left+1 };
     });
     const idle = await geometry(office); await row(office).hover();
-    assert.deepEqual(await geometry(office), idle); assert.equal(idle.overlap, false, 'selection/actions do not paint over the label');
+    assert.deepEqual(await geometry(office), { height: idle.height, overlap: false }, 'actions leave space for rendered text without resizing the row');
     assert.equal(idle.height, 32, 'preserved Demo row geometry');
     const demo = await browser.newPage({ viewport: { width: 1280, height: 900 } }); await demo.goto(url);
     assert.equal(await demo.locator('.nav-row').first().evaluate(n => getComputedStyle(n).minHeight), '32px'); await demo.close();
-    await page.evaluate(() => { window.treeHost = document.getElementById('chatDockHost'); window.officePanel = RNAssistantConversationPanel.selected(); });
+    await page.evaluate(() => {
+      window.treeHost = document.getElementById('chatDockHost'); window.officePanel = RNAssistantConversationPanel.selected();
+      window.folderCalls = []; const original = send;
+      window.send = function (type, payload, ...args) {
+        if (type === 'openFolder') folderCalls.push(payload);
+        return original(type, payload, ...args);
+      };
+    });
+    const officeFolder = page.getByRole('button', { name: 'Открыть папку документа', exact: true });
+    assert.equal(await officeFolder.evaluate(button => button.nextElementSibling.className), 'chat-title-block');
+    await officeFolder.click();
     await row(project).locator('.navigation-tree-label').click();
     await page.waitForFunction(() => RNAssistantConversationPanel.selected().target.sessionId === 'preview-project-review');
+    await page.getByRole('button', { name: 'Открыть папку проекта', exact: true }).click();
     assert.equal(await tree.locator('.navigation-tree-row.selected').count(), 1);
     assert.equal(await row(project).evaluate(n => n.classList.contains('selected')), true);
     assert.equal(await page.evaluate(() => treeHost === document.getElementById('chatDockHost') && treeHost.parentElement.id === 'chatLayout'), true);
     await row(office).locator('.navigation-tree-label').click();
     assert.equal(await page.evaluate(() => officePanel === RNAssistantConversationPanel.selected()), true, 'same retained Office view');
-    await row('project:preview-data-workspace').locator('button[title^="Открыть проект"]').click();
-    await page.waitForFunction(() => RNAssistantConversationPanel.selected().target.sessionId === 'preview-project-review');
-    assert.equal(await page.evaluate(() => RNAssistantWorkspaceChat.owner()), 'project', 'direct open selects the project adapter');
-    await row(office).locator('.navigation-tree-label').click();
+    await projectRow.hover(); await projectOpen.click();
+    assert.equal(await page.evaluate(() => officePanel === RNAssistantConversationPanel.selected()), true, 'opening a folder preserves chat selection');
+    assert.deepEqual(await projectOpen.evaluate(n => [n, n.parentElement, n.closest('.navigation-tree-row')].map(
+      surface => getComputedStyle(surface).backgroundColor)), Array(3).fill('rgba(0, 0, 0, 0)'));
     await page.evaluate(() => {
       const target={source:'workspace',workspaceId:'preview-data-workspace',sessionId:'preview-project-review'};
       window.projectPanel=RNAssistantConversationPanel.find(target);
@@ -91,8 +104,10 @@ const root = path.resolve(__dirname, '../..');
     await page.keyboard.press('Escape');
     assert.equal(await row(office).locator('[data-tree-action][aria-haspopup]').evaluate(n => n === document.activeElement), true);
     await chatMenu(project);
-    assert.deepEqual(await menu.getByRole('menuitem').allTextContents(), officeActions, 'Office/project menus have identical labels and order');
-    await page.keyboard.press('Escape');
+    assert.deepEqual(await menu.getByRole('menuitem').allTextContents(), ['Открыть папку проекта', ...officeActions.slice(1)]);
+    await menu.getByRole('menuitem', { name: 'Открыть папку проекта' }).click();
+    assert.deepEqual(await page.evaluate(() => folderCalls), [{ chatId: 'preview-chat' },
+      ...Array(3).fill({ workspaceId: 'preview-data-workspace' })], 'the header and tree dispatch the exact folder target');
     await page.getByRole('button', { name: 'Поиск документов, проектов и чатов', exact: true }).click();
     await page.locator('#chatSearchInput').fill('Проверка источников');
     await row('project-chat:preview-data-workspace:preview-project-clean').waitFor();
@@ -123,7 +138,7 @@ const root = path.resolve(__dirname, '../..');
     await page.locator('#projectChatConnectionSubmit').click(); await page.locator('#projectChatConnection').waitFor({state:'hidden'});
     assert.equal(await page.evaluate(()=>creationCalls.filter(x=>x.type==='createProjectWorkspace').length), 1);
     await row(project).locator('.navigation-tree-label').click();
-    await row(project).locator('button[title^="Новый чат в"]').click();
+    await projectRow.hover(); await projectRow.locator('button[title^="Новый чат в"]').click();
     await page.waitForFunction(()=>creationCalls.some(x=>x.type==='createProjectChat'));
     assert.equal(await page.evaluate(()=>creationCalls.find(x=>x.type==='createProjectChat').payload.workspaceId), 'preview-data-workspace');
     await page.waitForFunction(()=>!RNAssistantProjectChats.isCatalogBusy());

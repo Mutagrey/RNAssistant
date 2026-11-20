@@ -193,7 +193,10 @@
         }), { label: label });
       } }];
     },
-    closeWithin: function (root) { if (popupTrigger && root.contains(popupTrigger)) closePopup(false); }
+    closeWithin: function (root) { if (popupTrigger && root.contains(popupTrigger)) closePopup(false); },
+    ownsTarget: function (root, target) {
+      return root.contains(target) || !!(popup && popup.contains(target) && root.contains(popupTrigger));
+    }
   });
   document.querySelectorAll("[data-rna-action-menu]").forEach(function (mount) {
     var preset = presets[mount.getAttribute("data-rna-action-menu")];

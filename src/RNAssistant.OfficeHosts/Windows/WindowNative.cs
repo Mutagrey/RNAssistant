@@ -8,6 +8,7 @@ namespace RNAssistant.OfficeHosts.Windows
     internal static class WindowNative
     {
         internal const int SysCommand = 0x112, Close = 0xF060, Maximize = 0xF030, Restore = 0xF120, Minimize = 0xF020;
+        private const int DwmBorderColor = 34; // DWMWA_BORDER_COLOR
         [StructLayout(LayoutKind.Sequential)] internal struct Point { public int X, Y; }
         [StructLayout(LayoutKind.Sequential)] internal struct Rect
         {
@@ -35,6 +36,13 @@ namespace RNAssistant.OfficeHosts.Windows
         [DllImport("user32.dll")] internal static extern bool ReleaseCapture();
         [DllImport("user32.dll")] internal static extern IntPtr SendMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam);
         [DllImport("user32.dll", SetLastError = true)] internal static extern bool PostMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam);
+        [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref uint value, int size);
+
+        internal static void SuppressFrameBorder(IntPtr hwnd)
+        {
+            var color = 0xFFFFFFFEu; // DWMWA_COLOR_NONE; older Windows ignore the unsupported attribute.
+            DwmSetWindowAttribute(hwnd, DwmBorderColor, ref color, sizeof(uint));
+        }
 
         internal static double Scale(IntPtr hwnd)
         {

@@ -949,6 +949,11 @@ function chatDocumentTreeNode(documentItem, query) {
         confirmTitle: "Подтвердить удаление истории документа", confirmIconHtml: tree.icon("check"),
         onClick: function () { deleteDocument(documentItem.host, documentItem.documentKey); } },
       RNAssistantActionMenu.treeActions("Другие действия документа «" + documentItem.title + "»", [
+        { title: "Открыть папку документа", iconHtml: tree.icon("folder"), disabled: !!state.bridgeUnavailable,
+          onClick: function () {
+            return openContainingFolder(documentItem.chats.length ? { chatId: chatId(documentItem.chats[0]) } :
+              { documentKey: documentItem.documentKey });
+          } },
         RNAssistantChatGroups.createAction(groupScope)
       ])[0]
     ]
@@ -990,6 +995,8 @@ function chatTreeNode(chat) {
     status: deleting ? "running" : activity.presence.status,
     statusLabel: deleting ? "Удаление чата…" : activity.label,
     actions: [
+      { title: "Открыть папку документа", iconHtml: window.RNAssistantNavigationTree.icon("folder"),
+        disabled: !!state.bridgeUnavailable, onClick: function () { return openContainingFolder({ chatId: id }); } },
       { title: "Диагностика чата", iconHtml: window.RNAssistantNavigationTree.icon("diagnostics"),
         onClick: function () { window.openRunJournal({ owner: "office", chatId: id, label: chatTitle(chat),
           document: chatDocumentTitle(chat), runId: activity.run && activity.run.runId }); } },

@@ -255,6 +255,11 @@ namespace RNAssistant.Office
             return CurrentDocumentChatSelection == null ? null : CurrentDocumentChatSelection(chatId);
         }
         public OpenDocumentResponse OpenDocument(string chatId) { NavigationWork?.Invoke(); return new OpenDocumentResponse { Path = string.Empty, Launched = false }; }
+        internal OpenFolderResponse OpenFolder(OpenFolderPayload target)
+        {
+            NavigationWork?.Invoke();
+            return new OpenFolderResponse { Dispatched = true };
+        }
         public ChatStateResponse ActivateDocument(string documentKey) { NavigationWork?.Invoke(); return ChatState(null, documentKey); }
         public ChatStateResponse DeleteDocument(string host, string documentKey)
         {

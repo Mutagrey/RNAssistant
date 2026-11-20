@@ -54,6 +54,7 @@ namespace RNAssistant.Office.Contracts
         CreateDocumentChat,
         SelectChat,
         OpenDocument,
+        OpenFolder,
         ActivateDocument,
         AttachOutlookMailbox,
         CreateOfficeHostChat,

@@ -966,6 +966,15 @@ namespace RNAssistant.Office.Services
             return ResolveDocumentPath(session);
         }
 
+        internal string GetDocumentPathForChat(string chatId)
+        {
+            var header = _conversations.ReadHeader(chatId);
+            if (header != null) return ResolveDocumentPath(header.DocumentPath, header.DocumentKey);
+            var draft = AddressedDraft(chatId);
+            if (draft == null) throw new ChatSessionNotFoundException(chatId);
+            return ResolveDocumentPath(draft);
+        }
+
         private void UpdateCurrentDocumentMetadata(ChatSession session)
         {
             UpdateCurrentDocumentMetadata(session, CurrentDocumentPath());

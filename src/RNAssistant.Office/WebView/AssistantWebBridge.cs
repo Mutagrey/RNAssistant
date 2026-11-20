@@ -480,6 +480,14 @@ namespace RNAssistant.Office.WebView
                         responsePayload = await RunBridgeWorkAsync(
                             () => _controller.OpenDocument(Payload<ChatPayload>(payload).ChatId), cancellationToken).ConfigureAwait(false);
                         break;
+                    case BridgeOperationId.OpenFolder:
+                        var folderRequest = Payload<OpenFolderPayload>(payload);
+                        if (new[] { folderRequest.WorkspaceId, folderRequest.ChatId, folderRequest.DocumentKey }
+                            .Count(value => !string.IsNullOrWhiteSpace(value)) != 1)
+                            throw new InvalidOperationException("Укажите один чат, документ или проект.");
+                        responsePayload = await RunBridgeWorkAsync(() => _controller.OpenFolder(folderRequest), cancellationToken)
+                            .ConfigureAwait(false);
+                        break;
                     case BridgeOperationId.ActivateDocument:
                         responsePayload = await RunBridgeWorkAsync(
                             () => _controller.ActivateDocument(Payload<DocumentPayload>(payload).DocumentKey), cancellationToken).ConfigureAwait(false);

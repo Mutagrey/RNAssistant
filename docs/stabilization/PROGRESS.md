@@ -20,7 +20,7 @@
 
 Важно: `17.6.8` replacement preview ещё не имеет Windows/Office visual acceptance;
 Power Query native API, WebView2 JS executor CPU/cancellation и live-model A/B остаются
-открытым evidence. Playwright UI fixtures в текущем workspace не запускались.
+открытым evidence. Полный набор Playwright UI fixtures ещё не запускался.
 
 ## Maintenance bridge, SQLite scope and legacy migration checks — In Review, 2026-11-19
 
