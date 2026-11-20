@@ -976,6 +976,10 @@ Owner: Web materials/Dock lifecycle. При проверке регрессий 
 повторно прошла полностью. Этот consumer не входит в коммит RunJournal. Адресные
 `diagnostics-loading`, `chat-history-layout` и `diagnostics-navigation` проходят.
 
+Проверка 2026-11-20. `material-object-views.test.js` теряет видимость дерева
+каталога после открытия первой вкладки. Таймаут при выборе JSON воспроизводится
+на чистом HEAD. Владелец проверки — Materials/Dockview.
+
 ## Tools и skills: восстановление по фото — 2026-11-03
 
 Owners: Core capability admission/skill task state; Office/Workspace composition.

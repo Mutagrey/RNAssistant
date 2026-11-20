@@ -11,7 +11,7 @@ const context = vm.createContext({});
 context.window = context;
 const loaded = [];
 context.document = {
-  createElement: () => ({}),
+  createElement: () => ({ remove() {} }),
   head: { appendChild(script) {
     loaded.push(script.src);
     setImmediate(() => {

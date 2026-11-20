@@ -8,6 +8,7 @@
     var origin = document.activeElement, disposed = false, pending = false, failed = false, composing = false;
     var events = new AbortController(), prefix = "rna-dialog-" + (++sequence);
     var root = document.createElement("dialog"); root.className = "rna-dialog"; root.tabIndex = -1;
+    if (options.className) root.classList.add(options.className);
     root.setAttribute("aria-labelledby", prefix + "-title"); root.setAttribute("aria-modal", "true");
     var form = document.createElement("form"); form.noValidate = true;
     var title = document.createElement("h2"); title.id = prefix + "-title"; title.textContent = options.title;
@@ -37,7 +38,17 @@
     var submit = document.createElement("button"); submit.type = "submit";
     submit.className = "button compact " + (options.danger ? "danger-soft" : "primary");
     submit.textContent = options.submitLabel;
-    actions.append(cancel, submit); form.append(status, actions); root.appendChild(form);
+    if (options.content) {
+      var header = document.createElement("header"); header.className = "rna-dialog-header";
+      cancel.className = "icon-btn compact";
+      cancel.setAttribute("aria-label", "Закрыть");
+      cancel.title = "Закрыть";
+      cancel.innerHTML = window.RNAssistantIcons.render("close");
+      header.append(title, cancel);
+      root.append(header, options.content, status);
+    } else {
+      actions.append(cancel, submit); form.append(status, actions); root.appendChild(form);
+    }
 
     function on(node, name, handler) { node.addEventListener(name, handler, { signal: events.signal }); }
     function message(text, error) {
@@ -96,7 +107,7 @@
         cancel.focus({ preventScroll: true }); fit();
       }
     }
-    on(form, "submit", commit);
+    if (!options.content) on(form, "submit", commit);
     on(cancel, "click", function () { close(true); });
     on(root, "cancel", function (event) { event.preventDefault(); if (!composing) close(true); });
     on(root, "keydown", function (event) {
@@ -107,7 +118,9 @@
         event.preventDefault(); event.stopPropagation(); close(true); return;
       }
       if (event.key === "Tab") {
-        var controls = Array.from(root.querySelectorAll("input:not(:disabled), textarea:not(:disabled), button:not(:disabled)"));
+        var selector = "input:not(:disabled), textarea:not(:disabled), button:not(:disabled)";
+        if (options.content) selector += ", [tabindex='0']";
+        var controls = Array.from(root.querySelectorAll(selector)).filter(function (control) { return control.getClientRects().length; });
         var index = controls.indexOf(document.activeElement);
         if (index < 0 || event.shiftKey && index === 0 || !event.shiftKey && index === controls.length - 1) {
           event.preventDefault(); controls[event.shiftKey ? controls.length - 1 : 0].focus();
@@ -119,7 +132,11 @@
       on(input, "compositionend", function () { composing = false; });
       on(input, "input", function () { if (!failed) { input.removeAttribute("aria-invalid"); message("", false); } });
     }
-    var observer = new ResizeObserver(fit), handle = { close: close };
+    var observer = new ResizeObserver(fit), handle = { close: close, setStatus: function (text, error) {
+      if (disposed) return;
+      message(text, error);
+      fit();
+    } };
     active = handle; document.body.appendChild(root); root.showModal(); fit(); overlayChanged();
     observer.observe(root); observer.observe(document.documentElement);
     on(window, "resize", fit); on(window, "pagehide", function () { close(false); });

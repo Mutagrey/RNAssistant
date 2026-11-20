@@ -62,7 +62,7 @@
     content.tabIndex = 0;
     buttons.append(retry, downloadButton, more);
     var active = false, disposed = false, generation = 0, abort = new AbortController(), rendered = false, requests = new Set();
-    var events = new AbortController(), savedScroll = 0;
+    var events = new AbortController(), savedScroll = 0, markdownView = null;
     var localState = { activeChatId: target.chatId, artifactViewerPages: {} };
     function current(version) { return !disposed && active && generation === version && !abort.signal.aborted; }
     function status(text) { shell.setStatus(text || ""); }
@@ -70,20 +70,30 @@
       var data = value && (value.data || value.Data);
       if (data && data.leaseId) send("resourceDataClose", { chatId: target.chatId, workspaceId: "viewer", leaseId: data.leaseId }).catch(function () {});
     }
-    async function scopedSend(command, payload) {
+    async function scopedSend(command, payload, signal) {
       if (command === "resourceDataClose") return send(command, payload);
       var version = generation;
-      if (!current(version)) throw new Error("Чтение отменено.");
+      if (!current(version) || signal && signal.aborted) throw new DOMException("Чтение отменено.", "AbortError");
       payload = Object.assign({}, payload, { chatId: target.chatId });
       if (/^readArtifact/.test(command)) payload.documentId = target.documentId;
       var request = send(command, payload); if (request.requestId) requests.add(request.requestId);
+      function cancel() {
+        if (request.requestId && requests.delete(request.requestId)) cancelBridgeRequest(request.requestId).catch(function () {});
+      }
+      if (signal) signal.addEventListener("abort", cancel, { once: true });
       try {
         var result = await request;
-        if (!current(version)) { closeLate(result); throw new Error("Чтение отменено."); }
+        if (!current(version) || signal && signal.aborted) {
+          closeLate(result); throw new DOMException("Чтение отменено.", "AbortError");
+        }
         return result;
-      } finally { requests.delete(request.requestId); }
+      } finally {
+        if (signal) signal.removeEventListener("abort", cancel);
+        requests.delete(request.requestId);
+      }
     }
     function unmount() {
+      markdownView = null;
       content.querySelectorAll(".artifact-viewer-host, .collection-page").forEach(function (element) { RNAssistantViewerRegistry.unmount(element); });
       RNAssistantViewerRegistry.unmount(content);
     }
@@ -97,6 +107,18 @@
       maximumTextCharacters: maximumTextCharacters, maximumTextPages: 16,
       fetch: function (url, options) { return window.fetch(url, Object.assign({}, options, { signal: options.signal || abort.signal })); },
       render: render, log: function (text) { if (active && !disposed) status(text); }, downloadArtifactText: textDownload });
+    actions.mountMarkdown = function (view) { markdownView = view; };
+    actions.loadMarkdownGraph = function (request, signal) {
+      return scopedSend("readArtifactMarkdownGraph", { resourceUri: request.resourceUri }, signal);
+    };
+    actions.openMarkdownLink = function (item) {
+      if (!item || item.kind !== "document" || item.state !== "resolved" ||
+          !/^rna:\/\//.test(item.id || "") || !item.title) return false;
+      return RNAssistantDockWorkspace.openTarget(Object.assign({}, target, {
+        resourceUri: item.id, kind: "markdown", mimeType: "text/markdown", title: item.title,
+        revision: Number(item.revision) || null, byteLength: null, head: null
+      }), { referencePanel: key(target) });
+    };
     function render() {
       if (!active || disposed) { rendered = false; return; }
       var artifact = artifactFor(target), format = readers.artifactViewerKind(artifact);
@@ -150,8 +172,18 @@
       }, { chatId: target.chatId, sessionRevision: target.sessionRevision, compact: true,
         isCurrent: function () { return active && !disposed; }, send: scopedSend });
     return { element: root,
-      activate: function () { if (disposed || active) return; active = true; abort = new AbortController(); generation++; if (!rendered) render(); },
-      deactivate: function () { if (!active) return; active = false; stopReads(); RNAssistantActionMenu.closeWithin(root); },
+      activate: function () {
+        if (disposed || active) return;
+        active = true; abort = new AbortController(); generation++;
+        if (!rendered) render();
+        else if (markdownView) markdownView.activate();
+      },
+      deactivate: function () {
+        if (!active) return;
+        active = false;
+        if (markdownView) markdownView.deactivate();
+        stopReads(); RNAssistantActionMenu.closeWithin(root);
+      },
       dispose: function () { if (disposed) return; active = false; disposed = true; stopReads(); actions.closeAll(); events.abort(); RNAssistantActionMenu.closeWithin(root); unmount(); shell.destroy(); root.replaceChildren(); }
     };
   }

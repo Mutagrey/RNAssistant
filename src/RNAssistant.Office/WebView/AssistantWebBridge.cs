@@ -289,7 +289,8 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.GetRemovedPlugins: case BridgeOperationId.RemovePlugin: case BridgeOperationId.RestorePlugin:
                     case BridgeOperationId.GetPluginChat:
                     case BridgeOperationId.GetPluginVendors: case BridgeOperationId.ImportPluginVendor: case BridgeOperationId.ResolveHtmlVendor:
-                    case BridgeOperationId.GetProjectChats: case BridgeOperationId.ConnectProjectWorkspace: case BridgeOperationId.CreateProjectWorkspace:
+                    case BridgeOperationId.GetProjectChats: case BridgeOperationId.ReadProjectMarkdownGraph:
+                    case BridgeOperationId.ConnectProjectWorkspace: case BridgeOperationId.CreateProjectWorkspace:
                     case BridgeOperationId.CreateProjectChat: case BridgeOperationId.ForkProjectChat: case BridgeOperationId.GetProjectChat:
                     case BridgeOperationId.GetPreviousProjectChatMessages: case BridgeOperationId.GetProjectToolResultPresentation:
                     case BridgeOperationId.DeleteProjectChatMessage:
@@ -1053,6 +1054,13 @@ namespace RNAssistant.Office.WebView
                         var markdownAnalysis = Payload<MarkdownAnalysisRequest>(payload);
                         responsePayload = await RunBridgeWorkAsync(
                             () => ArtifactViewerService.AnalyzeMarkdown(markdownAnalysis, cancellationToken), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.ReadArtifactMarkdownGraph:
+                        var markdownGraph = Payload<ArtifactResourcePayload>(payload);
+                        responsePayload = await RunBridgeWorkAsync(() =>
+                            _controller.ReadArtifactMarkdownGraph(markdownGraph.ChatId,
+                                markdownGraph.DocumentId, markdownGraph.ResourceUri, cancellationToken),
+                            cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.ReadArtifactViewerPage:
                         var artifactViewerPage = Payload<ArtifactViewerPagePayload>(payload);

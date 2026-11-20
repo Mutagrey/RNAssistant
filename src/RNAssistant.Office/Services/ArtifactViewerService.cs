@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Threading;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
@@ -215,6 +216,64 @@ namespace RNAssistant.Office.Services
             return metadata;
         }
 
+        public MarkdownGraphSnapshot ReadMarkdownGraph(ChatSession session, string resourceUri, DocumentArtifactStore artifacts,
+            CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            var focus = _gateway.ResolveArtifact(session, resourceUri);
+            if (string.IsNullOrEmpty(session.DocumentAuthorityId) || focus.DocumentAuthorityId != session.DocumentAuthorityId ||
+                !IsMarkdown(focus, NormalizeMimeType(focus.MimeType), focus.Title) || focus.RemovedFromDocument)
+                throw new InvalidOperationException("Граф доступен для сохранённого Markdown в каталоге документа.");
+
+            const int pageSize = 100, maximumCatalogEntries = 5000;
+            var candidates = new List<ChatArtifact>();
+            var complete = true;
+            var offset = 0;
+            long? generation = null;
+            while (offset < maximumCatalogEntries)
+            {
+                token.ThrowIfCancellationRequested();
+                var page = artifacts.InspectCurrentMetadata(session, offset, pageSize);
+                if (generation.HasValue && page.Generation != generation.Value) { complete = false; break; }
+                generation = page.Generation;
+                if (page.UnavailableResources > 0) complete = false;
+                candidates.AddRange(page.Items.Where(item => !item.RemovedFromDocument && item.DocumentAuthorityId == session.DocumentAuthorityId &&
+                    IsMarkdown(item, NormalizeMimeType(item.MimeType), item.Title)));
+                if (candidates.Count > MarkdownLinkGraphService.MaximumDocuments) { complete = false; break; }
+                if (!page.NextOffset.HasValue) break;
+                offset = page.NextOffset.Value;
+                if (offset >= maximumCatalogEntries) complete = false;
+            }
+
+            var head = candidates.Find(item => ChatResourceUri.CreateArtifactRevisionUri(session, item) == resourceUri);
+            bool? historical = false;
+            if (head == null) historical = complete ? true : (bool?)null;
+            var selected = ReadGraphSource(session, artifacts, head ?? focus, historical, token);
+            var sources = candidates.Where(item => item != head).Take(MarkdownLinkGraphService.MaximumDocuments - 1)
+                .Select(item => ReadGraphSource(session, artifacts, item, false, token));
+            if (head == null && candidates.Count >= MarkdownLinkGraphService.MaximumDocuments) complete = false;
+            return MarkdownLinkGraphService.Build(new[] { selected }.Concat(sources), resourceUri, "document", complete, token: token);
+        }
+
+        private static MarkdownGraphSource ReadGraphSource(ChatSession session, DocumentArtifactStore artifacts,
+            ChatArtifact artifact, bool? historical, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            var reference = ChatResourceUri.CreateArtifactRevision(session, artifact);
+            var source = new MarkdownGraphSource { Id = reference.Uri, Title = artifact.Title, Revision = reference.Revision,
+                Historical = historical };
+            try
+            {
+                source.Analysis = artifacts.AnalyzeMarkdown(session, artifact);
+            }
+            catch (MarkdownAnalysisException error) { source.Issue = error.Code; }
+            catch (MarkdownSectionException error) { source.Issue = error.Code; }
+            catch (InvalidDataException) { source.Issue = "source_invalid"; }
+            catch (IOException) { source.Issue = "source_io_unavailable"; }
+            catch (UnauthorizedAccessException) { source.Issue = "source_access_denied"; }
+            return source;
+        }
+
         private static ArtifactViewerPageDto ValidatePage(ChatSession session, string resourceUri, ResourceDescriptor descriptor,
             ChatArtifact artifact, string viewerKind, ChatAttachment exactTextAttachment, ResourceReadResult result)
         {
@@ -289,15 +348,12 @@ namespace RNAssistant.Office.Services
             if (RNAssistant.Application.BrowserTargetResolver.IsHtmlResource(artifact)) return ArtifactViewerKinds.Text;
             var mimeType = NormalizeMimeType(descriptor == null ? null : descriptor.MimeType);
             var kind = artifact == null ? string.Empty : (artifact.Kind ?? string.Empty).Trim().ToLowerInvariant();
-            var extension = Path.GetExtension(descriptor == null ? null : descriptor.Title ?? string.Empty) ?? string.Empty;
-            if (mimeType == "text/markdown" || mimeType == "text/x-markdown" ||
-                kind == ChatArtifactKinds.PlanDocument || kind == ChatArtifactKinds.Markdown ||
-                string.Equals(extension, ".md", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(extension, ".markdown", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(extension, ".mdx", StringComparison.OrdinalIgnoreCase))
+            var title = descriptor?.Title ?? string.Empty;
+            if (IsMarkdown(artifact, mimeType, title))
             {
                 return ArtifactViewerKinds.Markdown;
             }
+            var extension = Path.GetExtension(title) ?? string.Empty;
             if (mimeType == "application/pdf" && kind == ChatArtifactKinds.Attachment)
             {
                 return ArtifactViewerKinds.Pdf;
@@ -324,6 +380,17 @@ namespace RNAssistant.Office.Services
         internal static string NormalizeMimeType(string value)
         {
             return (value ?? string.Empty).Split(';')[0].Trim().ToLowerInvariant();
+        }
+
+        private static bool IsMarkdown(ChatArtifact artifact, string mimeType, string title)
+        {
+            if (RNAssistant.Application.BrowserTargetResolver.IsHtmlResource(artifact)) return false;
+            var kind = (artifact?.Kind ?? string.Empty).Trim().ToLowerInvariant();
+            return mimeType == "text/markdown" || mimeType == "text/x-markdown" ||
+                kind == ChatArtifactKinds.PlanDocument || kind == ChatArtifactKinds.Markdown ||
+                title?.EndsWith(".md", StringComparison.OrdinalIgnoreCase) == true ||
+                title?.EndsWith(".markdown", StringComparison.OrdinalIgnoreCase) == true ||
+                title?.EndsWith(".mdx", StringComparison.OrdinalIgnoreCase) == true;
         }
 
         private byte[] ReadExactImageBytes(

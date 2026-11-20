@@ -17,6 +17,7 @@ class Element {
       { Id: "chat-2", Title: "Модель контекста", RunStatus: "completed" }] };
   const panel = {
     selected: () => null,
+    newPlacement: () => undefined,
     open: target => opens.push(Object.assign({}, target)),
     find: target => target.sessionId === "chat-3" ? { snapshot: () => null, accept: value => accepted.push(value) } : null
   };
@@ -71,7 +72,8 @@ class Element {
     renderChatSessions() {},
     RNAssistantDialog: { open: () => ({ close() {} }) },
     RNAssistantShellLayout: { refresh() {} },
-    RNAssistantDockWorkspace: { refreshPresentation() {} }
+    RNAssistantDockWorkspace: { refreshPresentation() {}, chatNavigationPlacement() {} },
+    RNAssistantProjectMarkdownGraph: { open: (workspaceId, name) => opens.push({ workspaceId, name }) }
   });
   context.window = context;
   vm.runInContext(read("js/app-chat-groups.js"), context, { filename: "app-chat-groups.js" });
@@ -113,7 +115,10 @@ class Element {
   treeProject.actions[1].onClick(treeProject, {});
   chatMenu.items[0].onSelect();
   treeProject.actions[3].onClick(treeProject, {});
-  opens.at(-1).actions[0].onClick(treeProject, {});
+  const projectMenu = opens.at(-1);
+  projectMenu.actions[0].onClick(treeProject, {});
+  projectMenu.actions.find(action => action.title === "Граф Markdown").onClick(treeProject, {});
+  assert.deepEqual(opens.at(-1), { workspaceId: "draw", name: "Рисовалка" });
   assert.deepEqual(folders, Array(3).fill({ workspaceId: "draw" }), "open commands address the same project folder");
 
   sent.length = 0;

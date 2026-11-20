@@ -153,6 +153,33 @@ namespace RNAssistant.Core.Services
             return read;
         }
 
+        public MarkdownGraphSnapshot ScanMarkdownGraph(string directory, CancellationToken token)
+        {
+            if ((directory?.Length ?? 0) > 1000)
+                throw new WorkspaceFileException("path_outside_mount", "Путь папки превышает 1000 символов.");
+            directory = directory?.Replace('\\', '/');
+            var paths = _files.FindPaths(_workspace, directory, true, null, null, token, reportLinkedEntries: true);
+            var markdown = paths.Paths.Where(DocumentArtifactStore.IsMarkdownPath).ToList();
+            var complete = paths.Complete && markdown.Count <= MarkdownLinkGraphService.MaximumDocuments;
+            var sources = markdown.Take(MarkdownLinkGraphService.MaximumDocuments).Select(path => ReadGraphSource(path, token));
+            return MarkdownLinkGraphService.Build(sources, null, "workspace", complete, directory, token);
+        }
+
+        private MarkdownGraphSource ReadGraphSource(string path, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            var source = new MarkdownGraphSource { Id = path, Path = path, Title = Path.GetFileName(path) };
+            try
+            {
+                source.Analysis = _files.ReadMarkdownAnalysis(_workspace, path, out var snapshot, out _, token);
+                source.Revision = snapshot.Reference.Revision;
+            }
+            catch (WorkspaceFileException error) { source.Issue = error.Code; }
+            catch (IOException) { source.Issue = "source_io_unavailable"; }
+            catch (UnauthorizedAccessException) { source.Issue = "source_access_denied"; }
+            return source;
+        }
+
         public ResourceReadObservation ReadMarkdownSection(string relativePath, string section,
             int maximumCharacters, CancellationToken token = default(CancellationToken))
         {

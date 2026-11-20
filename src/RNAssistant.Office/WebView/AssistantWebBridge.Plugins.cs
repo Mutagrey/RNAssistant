@@ -69,6 +69,8 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.ImportPluginVendor: return Plugins.Vendors.Import(Payload<PluginConnectRequest>(payload).RootPath);
                     case BridgeOperationId.ResolveHtmlVendor: return Plugins.ResolveHtmlVendor(Payload<PluginVendorRequest>(payload));
                     case BridgeOperationId.GetProjectChats: return Plugins.ProjectChats();
+                    case BridgeOperationId.ReadProjectMarkdownGraph: return Plugins.ReadProjectMarkdownGraph(
+                        Payload<ProjectMarkdownGraphRequest>(payload), token);
                     case BridgeOperationId.ConnectProjectWorkspace: return Plugins.ConnectProjectWorkspace(Payload<ProjectConnectionRequest>(payload));
                     case BridgeOperationId.CreateProjectWorkspace: return Plugins.CreateProjectWorkspace(Payload<ProjectConnectionRequest>(payload));
                     case BridgeOperationId.CreateProjectChat: return Plugins.CreateProjectChat(Payload<ProjectChatRequest>(payload));

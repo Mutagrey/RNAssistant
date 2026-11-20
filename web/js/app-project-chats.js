@@ -116,6 +116,9 @@
   function projectMoreAction(entry, groupScope) {
     var action = RNAssistantActionMenu.treeActions("Другие действия проекта «" + entry.name + "»", [
       projectFolderAction(entry, "Открыть папку проекта", "folder"),
+      { title: "Граф Markdown", iconHtml: RNAssistantNavigationTree.icon("graph"),
+        disabled: !entry.available || !!state.bridgeUnavailable,
+        onClick: function () { window.RNAssistantProjectMarkdownGraph.open(entry.workspaceId, entry.name); } },
       RNAssistantChatGroups.createAction(groupScope)
     ])[0];
     return action;

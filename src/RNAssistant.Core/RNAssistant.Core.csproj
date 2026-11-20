@@ -391,6 +391,7 @@
     <Compile Include="Storage\DocumentArtifactStore.FilePatches.cs" />
     <Compile Include="Storage\DocumentArtifactStore.Claims.cs" />
     <Compile Include="Services\MarkdownAnalysisService.cs" />
+    <Compile Include="Services\MarkdownLinkGraphService.cs" />
     <Compile Include="Services\MarkdownSectionSelector.cs" />
     <Compile Include="Storage\ChatStore.Caching.cs" />
     <Compile Include="Storage\ChatStore.EventLog.cs" />

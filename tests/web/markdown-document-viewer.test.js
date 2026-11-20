@@ -15,11 +15,17 @@ const root = path.resolve(__dirname, "../..");
     const errors = [];
     page.on("pageerror", error => errors.push(error.message));
     await page.setContent('<!doctype html><html lang="ru"><body><main id="host" class="product-viewer"></main></body></html>');
-    for (const file of ["app-product-tokens.css", "app-product-components.css", "app-product-navigation.css", "app-workspace.css", "app-text-viewer.css", "app-product-viewers.css"])
+    for (const file of ["app-product-tokens.css", "app-product-components.css", "app-product-navigation.css", "app-workspace.css", "app-text-viewer.css", "app-markdown-graph.css", "app-product-viewers.css"])
       await page.addStyleTag({ path: path.join(root, "web/css", file) });
     await page.addStyleTag({ content: "*{box-sizing:border-box}html,body{height:100%}body{margin:0;padding:20px;background:var(--canvas);font:14px/1.6 system-ui;color:var(--ink)}main{height:100%;padding:16px;background:var(--surface);border-radius:8px}pre{white-space:pre-wrap;margin:0;padding:12px;font-size:12px}.rn-markdown-viewer-note{color:var(--ink-muted)}" });
-    for (const file of ["vendor/purify.min.js", "app-icons.js", "app-navigation-tree.js", "app-panel-toggle.js", "app-viewer-registry.js", "app-navigation-pane.js", "app-material-surface.js", "app-text-viewer.js", "app-viewer-ui.js", "app-artifact-viewer-actions.js"])
+    for (const file of ["vendor/purify.min.js", "app-icons.js", "app-navigation-tree.js", "app-panel-toggle.js", "app-viewer-registry.js", "app-navigation-pane.js", "app-material-surface.js", "app-markdown-graph.js", "app-text-viewer.js", "app-viewer-ui.js", "app-artifact-viewer-actions.js"])
       await page.addScriptTag({ path: path.join(root, "web/js", file) });
+    // The production viewer uses exactly this pinned source carrier.
+    const carrier = fs.readFileSync(path.join(root, "web/js/vendor/vis-network.source.js"), "utf8");
+    const marker = 'window.RNAssistantHtmlVendorRuntime.register("vis-network", ';
+    assert.ok(carrier.includes(marker), "Pinned vis.Network 10.1.2 is present");
+    const packageSource = JSON.parse(carrier.slice(carrier.indexOf(marker) + marker.length, carrier.lastIndexOf(");"))).js;
+    await page.addScriptTag({ content: packageSource });
     await page.evaluate(() => {
       window.markdown = () => { throw new Error("Saved document used the message renderer"); };
       window.fixtureText = "# Документы проекта\n\n## Обзор\n\nСвязанные материалы: [Методика](./Методика.md).\n\n## Обзор\n\nДругая версия раздела.\n";
@@ -77,7 +83,11 @@ const root = path.resolve(__dirname, "../..");
     await page.locator("[data-tree-select='section:s3']").click();
     assert.equal(await page.locator("#overview-1").count(), 1);
     await page.getByRole("button", { name: "Граф связей Markdown", exact: true }).click();
-    assert.equal(await page.locator(".rn-markdown-graph-svg").count(), 1, "Markdown graph is available from the common mode controls");
+    await page.locator(".rna-md-graph-canvas canvas").first().waitFor();
+    assert.equal(await page.locator(".rna-md-graph").count(), 1, "Shared Markdown view mounts vis.Network");
+    await page.getByRole("button", { name: "Иерархия", exact: true }).click();
+    assert.equal(await page.locator(".rna-md-graph-canvas canvas").count(), 1,
+      "Layout switching retains the interactive canvas");
     await page.getByRole("button", { name: "Просмотр Markdown", exact: true }).click();
     await page.locator(".rn-markdown-viewer-rendered a[role='link']").first().click();
     assert.match(await page.locator(".rn-markdown-viewer-note").textContent(), /Методика\.md/);
@@ -149,6 +159,11 @@ const root = path.resolve(__dirname, "../..");
     assert.equal(await page.getByRole("button", { name: "Действия с материалом", exact: true }).count(), 1,
       "Material actions move into the same shared top row");
     assert.equal(await page.getByRole("button", { name: "Граф связей Markdown", exact: true }).count(), 1);
+    await page.getByRole("button", { name: "Граф связей Markdown", exact: true }).click();
+    await page.locator(".material-surface-statusbar").getByText(/Узлы 2 · Связи 1/).waitFor();
+    assert.equal(await page.locator(".rna-md-graph [role='status']").count(), 0, "only the shared Material status bar shows graph counts");
+    assert.match(await page.getByRole("button", { name: "Иерархия", exact: true }).getAttribute("class"), /\bicon-btn\b/);
+    await page.getByRole("button", { name: "Просмотр Markdown", exact: true }).click();
     const treeSpacing = await page.evaluate(() => ({
       sidebar: parseFloat(getComputedStyle(document.querySelector(".material-surface-sidebar")).paddingTop),
       navigation: parseFloat(getComputedStyle(document.querySelector(".material-surface-sidebar .rn-markdown-viewer-navigation")).paddingTop),

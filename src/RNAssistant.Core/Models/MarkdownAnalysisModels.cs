@@ -49,10 +49,62 @@ namespace RNAssistant.Core.Models
         [JsonProperty("end")] public int End { get; private set; }
         [JsonProperty("line")] public int Line { get; private set; }
         [JsonProperty("isImage")] public bool IsImage { get; private set; }
+        [JsonProperty("kind")] public string Kind { get; private set; }
 
-        internal MarkdownLink(string destination, string text, int start, int end, int line, bool isImage)
+        internal MarkdownLink(string destination, string text, int start, int end, int line, bool isImage, string kind = "markdown")
         {
             Destination = destination; Text = text; Start = start; End = end; Line = line; IsImage = isImage;
+            Kind = kind;
         }
     }
+
+    // Derived data only: exact source identity comes from an existing resource owner.
+    // No storage, filesystem traversal, model inference or implicit cross-scope links.
+    public sealed class MarkdownGraphSource
+    {
+        public string Id { get; set; }
+        public string Title { get; set; }
+        public string Path { get; set; }
+        public string Revision { get; set; }
+        public bool? Historical { get; set; } = false;
+        public MarkdownDocumentAnalysis Analysis { get; set; }
+        public string Issue { get; set; }
+    }
+
+    public sealed class MarkdownGraphNode
+    {
+        [JsonProperty("id")] public string Id { get; set; }
+        [JsonProperty("title")] public string Title { get; set; }
+        [JsonProperty("path", NullValueHandling = NullValueHandling.Ignore)] public string Path { get; set; }
+        [JsonProperty("issue", NullValueHandling = NullValueHandling.Ignore)] public string Issue { get; set; }
+        [JsonProperty("historical", DefaultValueHandling = DefaultValueHandling.Ignore)] public bool Historical { get; set; }
+        [JsonProperty("revision", NullValueHandling = NullValueHandling.Ignore)] public string Revision { get; set; }
+        [JsonProperty("state")] public string State { get; set; }
+        [JsonProperty("kind")] public string Kind { get; set; }
+    }
+
+    public sealed class MarkdownGraphEdge
+    {
+        [JsonProperty("from")] public string From { get; set; }
+        [JsonProperty("to")] public string To { get; set; }
+        [JsonProperty("kind")] public string Kind { get; set; }
+        [JsonProperty("status")] public string Status { get; set; }
+        [JsonProperty("destination")] public string Destination { get; set; }
+        [JsonProperty("label")] public string Label { get; set; }
+        [JsonProperty("anchor", NullValueHandling = NullValueHandling.Ignore)] public string Anchor { get; set; }
+        [JsonProperty("line")] public int Line { get; set; }
+        [JsonProperty("start")] public int Start { get; set; }
+    }
+
+    public sealed class MarkdownGraphSnapshot
+    {
+        [JsonProperty("scope")] public string Scope { get; set; }
+        [JsonProperty("focus")] public string Focus { get; set; }
+        [JsonProperty("complete")] public bool Complete { get; set; }
+        [JsonProperty("scanned")] public int Scanned { get; set; }
+        [JsonProperty("notice")] public string Notice { get; set; }
+        [JsonProperty("nodes")] public List<MarkdownGraphNode> Nodes { get; set; }
+        [JsonProperty("edges")] public List<MarkdownGraphEdge> Edges { get; set; }
+    }
+
 }

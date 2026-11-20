@@ -69,6 +69,13 @@ namespace RNAssistant.Harness
                     "large workspace files do not return a false empty complete outline");
                 AssertEqual(10, provider.ReadCharacters("notes/sample.markdown", 0, 10).Result.Text.Length,
                     "ordinary bounded reads remain available above the structure limit");
+                File.WriteAllText(Path.Combine(workspace.RootPath, "notes", "index.md"),
+                    "[Sample](sample.markdown) [Outside](../root.md) [[Missing]]");
+                var graph = provider.ScanMarkdownGraph("notes", CancellationToken.None);
+                AssertTrue(!graph.Complete && graph.Nodes.Any(node => node.State == "unavailable" && node.Issue == "markdown_too_large"),
+                    "workspace graph retains the unavailable Markdown reason");
+                AssertEqual("pending,outside,pending", string.Join(",", graph.Edges.Select(edge => edge.Status)),
+                    "workspace graph distinguishes incomplete, out-of-folder and unresolved links");
 
                 var ports = typeof(WorkspaceConversationService).GetNestedType("WorkspacePorts", BindingFlags.NonPublic);
                 var schema = JObject.Parse((string)ports.GetMethod("ResourceSchema", BindingFlags.Static | BindingFlags.NonPublic)
@@ -115,6 +122,19 @@ namespace RNAssistant.Harness
                 AssertEqual(ToolExecutionOutcome.Ok, native.Outcome, "current native runtime dispatches the outline handler");
                 AssertEqual(0, native.ResourceEvidence.Count, "outline navigation creates no source-read evidence");
 
+                var otherChat = NewSession(adapter);
+                otherChat.DocumentAuthorityId = session.DocumentAuthorityId;
+                var peer = ingestion.Stage(ConversationMetadata.From(otherChat), "peer.md", "text/markdown",
+                    Encoding.UTF8.GetBytes("[Outline](outline.md#tail)"));
+                var peerMessage = new ChatMessage { Role = "user", Attachments = ingestion.LoadDrafts(otherChat, new[] { peer.Id }).ToList() };
+                otherChat.Messages.Add(peerMessage);
+                ingestion.CommitAndLink(otherChat, peerMessage, 0);
+                var graph = new ArtifactViewerService(executor.ResourceGateway).ReadMarkdownGraph(
+                    session, selected.Reference.Uri, documentArtifacts, CancellationToken.None);
+                AssertTrue(graph.Complete && graph.Nodes.Count == 2, "document graph includes Markdown from another chat in the same authority");
+                var backlink = graph.Edges.Single();
+                AssertTrue(backlink.To == selected.Reference.Uri && backlink.Status == "resolved" && backlink.Line == 1,
+                    "document backlink retains the exact target revision and referring line");
             });
         }
     }

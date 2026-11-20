@@ -272,6 +272,7 @@
       viewerStatus.replaceChildren();
       if (value && value.nodeType === 1) viewerStatus.appendChild(value);
       else viewerStatus.textContent = value || "";
+      viewerStatus.title = typeof value === "string" ? value : "";
       viewerStatus.dataset.error = error ? "true" : "false";
       viewerStatus.setAttribute("role", error ? "alert" : "status");
       statusbar.hidden = !viewerStatus.textContent && !statusMeta.textContent;
@@ -377,7 +378,7 @@
       else if (chrome.search) setSearch(chrome.search);
       else setSearch(null);
 
-      statusListener = function (text) { setViewerStatus(text || ""); };
+      statusListener = function (text, error) { setViewerStatus(text || "", error); };
       if (chrome.subscribeStatus) unsubscribeStatus = chrome.subscribeStatus(statusListener);
       else if (controller && typeof controller.subscribeStatus === "function") unsubscribeStatus = controller.subscribeStatus(statusListener);
       if (navigation && typeof navigation.available === "function") {

@@ -46,6 +46,11 @@ namespace RNAssistant.Runtime
         private ResourceProviderRouter<WorkspaceFileResourceProvider> FileResources(WorkspaceDescriptor workspace)
         { return new ResourceProviderRouter<WorkspaceFileResourceProvider>(new[] { new WorkspaceFileResourceProvider(_files, workspace) }); }
 
+        public MarkdownGraphSnapshot ReadMarkdownGraph(WorkspaceDescriptor workspace, string directory, CancellationToken token)
+        {
+            return FileResources(workspace).Select("file").ScanMarkdownGraph(directory, token);
+        }
+
         public WorkspaceResourcePage FindResources(WorkspaceDescriptor workspace, WorkspaceFindResourcesRequest request)
         {
             if (request == null || request.Limit < 1 || request.Limit > 200)

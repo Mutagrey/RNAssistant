@@ -116,11 +116,18 @@ explanatory status instead of becoming a detached toolbar action. Browser has no
 duplicate title/meta; address is the identity. Save/history/apply share one version
 menu, and home/project/export/compare/search-adjacent page operations share the single
 overflow instead of separate tool buttons. MD and Browser use the same `preview` mode
-semantics. The local MD graph
-uses the existing bounded analysis sections/links and does not claim cross-document
-resolution or backlinks. Authored Markdown editing and resolved link/backlink indexes
-remain separate unfinished slices. This patch changes no mutation owner or durable
-document state.
+semantics.
+
+`MarkdownLinkGraphService` resolves explicit Markdown and wiki references from the
+shared Markdig AST. `readArtifactMarkdownGraph` binds the exact viewer revision to
+one document's current catalog. `readProjectMarkdownGraph` binds to the selected
+Workspace and its requested relative directory through the existing file owner.
+Both return bounded, derived snapshots with per-occurrence source lines and
+completeness. `app-markdown-graph.js` renders these snapshots with the packaged
+vis.Network 10.1.2 shared by both entry points. Material deactivation and dialog
+close release the canvas and cancel pending reads. The open Markdown view keeps
+its completed graph for mode and tab switches until refresh. The graph publishes its
+status through the existing MaterialSurface and dialog presentation adapters.
 
 ## Unified chat draft persistence — W9, In Review, 2026-11-16
 

@@ -35,6 +35,7 @@
   <link rel="stylesheet" href="css/app-preview-surface.css?v=browser-header-one-line-20261118-1">
   <link rel="stylesheet" href="css/app-json-viewer.css?v=diagnostics-source-20261103">
   <link rel="stylesheet" href="css/app-text-viewer.css?v=material-surface-20261118-4">
+  <link rel="stylesheet" href="css/app-markdown-graph.css?v=vis-graph-20261120">
   <link rel="stylesheet" href="css/app-sequence-viewer.css?v=theme-tokens-20261019-1">
   <link rel="stylesheet" href="css/app-resource-viewer.css?v=material-surface-20261118-1">
   <link rel="stylesheet" href="css/app-trajectory.css?v=journal-loading-20261103">
@@ -54,8 +55,8 @@
   <link rel="stylesheet" href="css/app-theme.css?v=plugin-materials-20261103">
   <link rel="stylesheet" href="css/app-product-tokens.css?v=material-surface-20261118-4">
   <link rel="stylesheet" href="css/app-product-navigation.css?v=sidebar-focus-20261120">
-  <link rel="stylesheet" href="css/app-product-components.css?v=tree-actions-20261120">
-  <link rel="stylesheet" href="css/app-product-viewers.css?v=browser-header-one-line-20261118-1">
+  <link rel="stylesheet" href="css/app-product-components.css?v=vis-graph-20261120">
+  <link rel="stylesheet" href="css/app-product-viewers.css?v=vis-graph-20261120">
   <link rel="stylesheet" href="css/app-product-materials.css?v=material-surface-20261118-1">
   <link rel="stylesheet" href="css/app-product-screens.css?v=unified-workspace-20261111">
   <link rel="stylesheet" href="css/app-questions.css?v=questions-pager-20261023-2">
@@ -1141,7 +1142,7 @@
   <script src="js/vendor/highlight.min.js"></script>
   <script src="js/app-echarts-sandbox-runtime.js?v=ui-lazy-20260903-1"></script>
   <script src="js/app-html-vendor-catalog.js?v=html-vendors-20261002-3"></script>
-  <script src="js/app-html-vendor-runtime.js?v=html-vendors-20261002-3"></script>
+  <script src="js/app-html-vendor-runtime.js?v=vis-graph-20261120"></script>
   <script src="js/vendor/codemirror/codemirror.min.js"></script>
   <script src="js/vendor/codemirror/mode/vb/vb.min.js"></script>
   <script src="js/vendor/codemirror/mode/javascript/javascript.min.js"></script>
@@ -1168,10 +1169,10 @@
   <script src="js/app-conversation-input.js?v=addressed-pending-20261027-1"></script>
   <script src="js/app-library-groups.js?v=tree-actions-20261120"></script>
   <script src="js/app-action-menu.js?v=sidebar-focus-20261120-composer-menu"></script>
-  <script src="js/app-dialog.js?v=browser-address-perf-20261118-1"></script>
+  <script src="js/app-dialog.js?v=vis-graph-20261120"></script>
   <script src="js/app-workspace-navigation.js?v=unified-tree-20261111"></script>
   <script src="js/app-navigation-pane.js?v=sidebar-focus-20261120"></script>
-  <script src="js/app-material-surface.js?v=material-surface-20261118-4"></script>
+  <script src="js/app-material-surface.js?v=vis-graph-20261120"></script>
   <script src="js/app-utils.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-run-view-state.js?v=feed-stability-20261103"></script>
   <script src="js/app-layout.js?v=sidebar-focus-20261120"></script>
@@ -1192,7 +1193,8 @@
   <script src="js/app-browser-viewer.js?v=browser-address-focus-20261119-2"></script>
   <script src="js/app-viewer-ui.js?v=material-surface-20261118-4"></script>
   <script src="js/app-json-viewer.js?v=plugin-materials-20261103"></script>
-  <script src="js/app-text-viewer.js?v=material-surface-20261118-4"></script>
+  <script src="js/app-markdown-graph.js?v=vis-graph-20261120"></script>
+  <script src="js/app-text-viewer.js?v=vis-graph-20261120"></script>
   <script src="js/app-sequence-viewer.js?v=artifact-gallery-20260902-1"></script>
   <script src="js/app-resource-viewer.js?v=material-surface-20261118-1"></script>
   <script src="js/app-run-journal.js?v=request-causes-20261103"></script>
@@ -1223,7 +1225,7 @@
   <script src="js/app-visual-inspector.js?v=annotate-hover-20261024-1-live-annotation-20261103-native-selection-20261113-native-find-20261113-toggle-20261116"></script>
   <script src="js/app-visual-annotations.js?v=browser-address-perf-20261118-1"></script>
   <script src="js/app-html-workspace-preview.js?v=binary-chunks-20260906-1-vendors-1-visual-inspector-1-local-interactive-20261113-native-selection-20261113"></script>
-  <script src="js/app-artifact-viewers.js?v=material-surface-20261118-4"></script>
+  <script src="js/app-artifact-viewers.js?v=vis-graph-20261120"></script>
   <script src="js/app-sequence-document-viewer.js?v=material-surface-20261118-4"></script>
   <script src="js/app-html-workspace-artifacts.js?v=authored-html-viewer-20261014-1-annotation-surface-20261026-1-shared-source-20261029-1-materials-s3b2"></script>
   <script src="js/app-html-workspace-source.js?v=html-memory-20261002-1-scope-20261102-browser-export-20261113"></script>
@@ -1268,10 +1270,11 @@
   <script src="js/app-agent-communication.js?v=agent-recovery-menu-20261104"></script>
   <script src="js/app-conversation-panel.js?v=chat-folder-20261120-composer-menu"></script>
   <script src="js/app-plugins.js?v=storage-recovery-20261116"></script>
-  <script src="js/app-project-chats.js?v=sidebar-focus-20261120"></script>
+  <script src="js/app-project-markdown-graph.js?v=vis-graph-20261120"></script>
+  <script src="js/app-project-chats.js?v=vis-graph-20261120"></script>
   <script src="js/vendor/dockview-core.min.js"></script>
   <script src="js/app-artifact-download.js?v=browser-saved-20261102"></script>
-  <script src="js/app-material-view.js?v=material-surface-20261118-1"></script>
+  <script src="js/app-material-view.js?v=vis-graph-20261120"></script>
   <script src="js/app-start-surface.js"></script>
   <script src="js/app-dock-workspace.js?v=sidebar-focus-20261120"></script>
   <script src="js/app-browser-actions.js?v=browser-header-one-line-20261118-1"></script>

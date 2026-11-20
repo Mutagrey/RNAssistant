@@ -176,14 +176,22 @@ surface styling.
 MockDemo still has its known resource-data transport gap, so the real artifact read
 is not claimed. Windows x64 / Office x64 / WebView2 checks remain separate.
 
-Next slices in order: editable Markdown with the existing resource mutation owner
-and revision/read-back guards; scope-aware explicit link resolution/backlinks and a
-shared Cytoscape graph consuming resolved results. The current MD graph is local,
-bounded and uses only the existing analysis output.
-Word/PDF ingestion and semantic relationships follow those shared foundations.
 Rollback is this source diff; the new text-index profile is derived and rebuildable.
 The completed host-neutral slice is `17.4.0-dev`. It adds no durable migration,
 commit, release or Windows/Office qualification.
+
+### Markdown link graph — In Review, 2026-11-20
+
+The shared Material viewer and project dialog use the same vis.Network renderer.
+The document catalog supplies exact Markdown revisions across chats in one Office
+document. The Workspace file owner supplies Markdown in the selected project folder.
+The graph has room for 160 documents, 4,096 mentions and 240 unresolved nodes.
+
+Review a saved Markdown in **Материалы → Граф**, select an incoming mention, and
+switch between the network and hierarchy. Open **… → Граф Markdown** on a project
+row, scan a relative folder, and close the dialog during a scan. Chromium preview
+and the focused Markdown Harness cover the host-neutral behavior. Visual acceptance
+on Windows Office/WebView2 remains open.
 
 ## Unified chat draft persistence — W9, In Review, 2026-11-16
 

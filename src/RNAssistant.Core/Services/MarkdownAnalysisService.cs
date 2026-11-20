@@ -3,8 +3,11 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using Markdig;
 using Markdig.Helpers;
+using Markdig.Parsers;
+using Markdig.Parsers.Inlines;
 using Markdig.Renderers.Html;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
@@ -22,19 +25,63 @@ namespace RNAssistant.Core.Services
     // There is no I/O, resource resolution, cache, or user-editable state here.
     public static class MarkdownAnalysisService
     {
-        public const string Profile = "markdown-markdig-0.37.0-v1";
+        public const string Profile = "markdown-markdig-0.37.0-v2";
         public const int MaximumCharacters = 1024 * 1024;
         public const int MaximumSections = 4096;
         public const int MaximumLinks = 16384;
 
-        private static readonly MarkdownPipeline Pipeline = new MarkdownPipelineBuilder()
-            .UsePipeTables()
-            .UseEmphasisExtras()
-            .UseTaskLists()
-            .UseAutoLinks()
-            .UsePreciseSourceLocation()
-            .DisableHtml()
-            .Build();
+        private static readonly MarkdownPipeline Pipeline = CreatePipeline();
+
+        private static MarkdownPipeline CreatePipeline()
+        {
+            var builder = new MarkdownPipelineBuilder().UsePipeTables().UseEmphasisExtras()
+                .UseTaskLists().UseAutoLinks().UsePreciseSourceLocation().DisableHtml();
+            builder.InlineParsers.InsertBefore<LinkInlineParser>(new WikiLinkParser());
+            return builder.Build();
+        }
+
+        private sealed class WikiLinkInline : LiteralInline
+        {
+            public string Destination;
+            public string Label;
+            public int OccurrenceEnd;
+
+            public WikiLinkInline(StringSlice content) : base(content) { }
+        }
+
+        private sealed class WikiLinkParser : InlineParser
+        {
+            private static readonly Regex Pattern = new Regex(@"\G\[\[([^\[\]\r\n]{1,400})\]\]", RegexOptions.CultureInvariant);
+
+            public WikiLinkParser() { OpeningCharacters = new[] { '[' }; }
+
+            public override bool Match(InlineProcessor processor, ref StringSlice slice)
+            {
+                var start = slice.Start;
+                if (start >= slice.End || slice.Text[start + 1] != '[') return false;
+                var match = Pattern.Match(slice.Text, start, Math.Min(404, slice.End - start + 1));
+                if (!match.Success) return false;
+                var value = match.Groups[1].Value;
+                var split = value.IndexOf('|');
+                var destination = (split < 0 ? value : value.Substring(0, split)).Trim();
+                if (destination.Length == 0) return false;
+                var end = start + match.Length - 1;
+                var sourceStart = processor.GetSourcePosition(start, out var line, out var column);
+                var sourceEnd = processor.GetSourcePosition(end);
+                processor.Inline = new WikiLinkInline(new StringSlice(slice.Text, start, end))
+                {
+                    Destination = destination,
+                    Label = split < 0 ? destination : value.Substring(split + 1).Trim(),
+                    Span = new SourceSpan(sourceStart, sourceEnd),
+                    OccurrenceEnd = sourceEnd,
+                    Line = line,
+                    Column = column,
+                    IsClosed = true
+                };
+                slice.Start = end + 1;
+                return true;
+            }
+        }
 
         public static MarkdownDocumentAnalysis Analyze(string text, bool includeHtml = true)
         {
@@ -55,23 +102,31 @@ namespace RNAssistant.Core.Services
             var links = new List<MarkdownLink>();
             foreach (var node in document.Descendants())
             {
+                var wiki = node as WikiLinkInline;
                 var link = node as LinkInline;
                 var autoLink = node as AutolinkInline;
-                if (link == null && autoLink == null) continue;
+                if (wiki == null && link == null && autoLink == null) continue;
+                if (wiki != null && InsideLink(wiki)) continue;
                 if (links.Count == MaximumLinks)
                     throw new MarkdownAnalysisException("The Markdown link list exceeds the analysis bound.", "markdown_structure_too_large");
 
-                var destination = link != null ? link.Url ?? string.Empty :
+                var destination = wiki != null ? wiki.Destination : link != null ? link.Url ?? string.Empty :
                     (autoLink.IsEmail ? "mailto:" : string.Empty) + autoLink.Url;
-                var label = link != null ? InlineText(link) : autoLink.Url;
-                // Reference-style links retain the occurrence span, not the
-                // separate definition span. Destinations stay relative here.
+                var label = wiki != null ? wiki.Label : link != null ? InlineText(link) : autoLink.Url;
+                // Reference-style links retain the occurrence span, not the separate definition span.
                 links.Add(new MarkdownLink(destination, label, node.Span.Start + sourceOffset,
-                    node.Span.End + 1 + sourceOffset, node.Line + 1, link != null && link.IsImage));
+                    (wiki?.OccurrenceEnd ?? node.Span.End) + 1 + sourceOffset, node.Line + 1, link != null && link.IsImage,
+                    wiki != null ? "wiki" : "markdown"));
             }
-
             return new MarkdownDocumentAnalysis(Profile, text.Length,
                 includeHtml ? document.ToHtml(Pipeline) : null, sections.AsReadOnly(), links.AsReadOnly());
+        }
+
+        private static bool InsideLink(Inline inline)
+        {
+            for (var parent = inline.Parent; parent != null; parent = parent.Parent)
+                if (parent is LinkInline) return true;
+            return false;
         }
 
         private static List<MarkdownSection> BuildSections(string text, List<HeadingBlock> headings, int sourceOffset)

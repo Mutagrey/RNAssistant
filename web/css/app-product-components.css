@@ -58,6 +58,7 @@ summary.icon-btn::-webkit-details-marker { display: none; }
 .rna-dialog::backdrop { background: var(--scrim); }
 .rna-dialog form { display: grid; gap: var(--space-3); min-width: 0; margin: 0; }
 .rna-dialog h2 { margin: 0; font-size: var(--text-lg); line-height: var(--line-height-heading); font-weight: 600; }
+.rna-dialog-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .rna-dialog p { margin: 0; }
 .rna-dialog-field { display: grid; gap: var(--space-1); min-width: 0; color: var(--ink); font-size: var(--text-sm); font-weight: 500; }
 .rna-dialog-field input { width: 100%; }

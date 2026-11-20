@@ -302,7 +302,7 @@
     var format = needsComplete && !viewer.complete ? "text" : expectedKind;
     if (needsComplete && !viewer.complete) appendContentLabel(root, "Структурный просмотр доступен после полного чтения. Сейчас показана страница исходника.");
     if (format === "markdown" && !viewer.markdownPresentation) viewer.markdownPresentation = {};
-    window.RNAssistantViewerRegistry.mount(format, target, {
+    var view = window.RNAssistantViewerRegistry.mount(format, target, {
       code: true, path: viewer.title || prop(artifact, "Title", "title", ""),
       text: viewer.complete ? viewer.fullText : page.text,
       pageText: page.text,
@@ -312,6 +312,11 @@
       requireAnalysis: format === "markdown",
       analysis: format === "markdown" ? viewer.markdownAnalysis : null,
       presentation: format === "markdown" ? viewer.markdownPresentation : null,
+      resourceUri: format === "markdown" ? uri : null,
+      onGraphData: format === "markdown" && typeof actions.loadMarkdownGraph === "function"
+        ? function (signal) { return actions.loadMarkdownGraph({ resourceUri: uri }, signal); } : null,
+      onOpenLink: format === "markdown" && typeof actions.openMarkdownLink === "function"
+        ? actions.openMarkdownLink : null,
       onAnalyze: format === "markdown" && typeof actions.analyzeMarkdown === "function"
         ? function (text) { return actions.analyzeMarkdown(text, { resourceUri: uri }); } : null,
       offset: page.offset,
@@ -328,6 +333,7 @@
       onCopy: window.copyTextResult,
       onDownload: function () { return actions.downloadArtifactViewer({ resourceUri: uri }); }
     });
+    if (format === "markdown" && typeof actions.mountMarkdown === "function") actions.mountMarkdown(view);
     return true;
   }
 

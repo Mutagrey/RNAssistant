@@ -226,7 +226,7 @@
     renderButton.title = "Просмотр Markdown";
     renderButton.setAttribute("aria-label", "Просмотр Markdown");
     sourceButton.title = "Исходник Markdown — только чтение";
-    graphButton.title = "Граф заголовков и явных ссылок";
+    graphButton.title = "Граф связей Markdown";
     sourceButton.setAttribute("aria-label", "Исходник Markdown");
     graphButton.setAttribute("aria-label", "Граф связей Markdown");
     if (window.RNAssistantIcons) renderButton.innerHTML = window.RNAssistantIcons.render("play");
@@ -252,6 +252,36 @@
     var compactLayout = null, compactAutoCollapsed = false;
     var navigationExternal = false, navigationAvailabilityListeners = [];
     var statusListeners = [], childStatusUnsubscribe = null, navigationQuery = "";
+    var graphSnapshot = null, graphRequest = null, graphStatus = "", graphError = false, active = true;
+    function cancelGraphRead() {
+      if (graphRequest) graphRequest.abort.abort();
+      graphRequest = null;
+    }
+    function readGraph(fresh) {
+      if (fresh) { cancelGraphRead(); graphSnapshot = null; renderNavigation(); }
+      if (graphSnapshot) return Promise.resolve(graphSnapshot);
+      if (graphRequest) return graphRequest.promise;
+      var request = { abort: new AbortController() }, signal = request.abort.signal;
+      function requireCurrent() {
+        if (disposed || !active || signal.aborted) throw new DOMException("Чтение отменено.", "AbortError");
+      }
+      request.promise = Promise.resolve().then(function () {
+        requireCurrent();
+        return options.onGraphData(signal);
+      }).then(function (value) {
+        requireCurrent();
+        if (!value || value.scope !== "document" || value.focus !== options.resourceUri)
+          throw new Error("Граф относится к другому материалу.");
+        graphSnapshot = window.RNAssistantMarkdownGraph.validate(value);
+        renderNavigation();
+        return graphSnapshot;
+      }).catch(function (error) {
+        requireCurrent();
+        throw error;
+      }).finally(function () { if (graphRequest === request) graphRequest = null; });
+      graphRequest = request;
+      return request.promise;
+    }
     var full = typeof options.fullText === "string" && options.complete === true && options.sourceComplete !== false;
     var sourceText = full ? options.fullText : String(options.text || "");
     var mode = ["md", "source", "graph"].indexOf(presentation.mode) >= 0 ? presentation.mode : "md";
@@ -351,69 +381,39 @@
     }
 
     function renderGraph() {
-      var graph = element("div", "rn-markdown-graph");
-      var sections = analysis.sections.slice(0, 60), links = analysis.links.filter(function (link) { return !link.isImage; }).slice(0, 120);
-      var destinations = [], destinationIndex = Object.create(null);
-      links.forEach(function (link) {
-        if (!link.destination || destinationIndex[link.destination] != null || destinations.length >= 24) return;
-        destinationIndex[link.destination] = destinations.length; destinations.push(link.destination);
+      if (!active) return;
+      if (!window.RNAssistantMarkdownGraph) throw new Error("Модуль графа Markdown не загружен.");
+      var container = element("div", "rn-markdown-graph");
+      body.appendChild(container);
+      child = window.RNAssistantMarkdownGraph.mount(container, {
+        focus: options.resourceUri || "local-document", title: options.path || "Документ",
+        analysis: analysis, presentation: presentation,
+        onGraphData: typeof options.onGraphData === "function" ? function (fresh) { return readGraph(fresh); } : null,
+        onOpen: options.onOpenLink,
+        onReveal: revealSource,
+        onStatus: function (text, error) {
+          graphStatus = text;
+          graphError = error;
+          if (statusListeners.length) emitStatus();
+          else setNote(text);
+        }
       });
-      var height = Math.max(420, (Math.max(sections.length, destinations.length) + 2) * 44);
-      var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      svg.classList.add("rn-markdown-graph-svg"); svg.setAttribute("viewBox", "0 0 1000 " + height);
-      svg.setAttribute("role", "img"); svg.setAttribute("aria-label", "Граф заголовков и явных ссылок Markdown");
-      var sectionPosition = Object.create(null), nodes = [];
-      var documentNode = { x: 30, y: 30, w: 150, h: 34, title: options.path || "Документ", kind: "document" };
-      nodes.push(documentNode);
-      sections.forEach(function (section, index) {
-        var position = { x: 235 + Math.max(0, Number(section.level || 1) - 1) * 105, y: 30 + index * 44,
-          w: 150, h: 32, title: section.title || "Без названия", section: section };
-        sectionPosition[section.id] = position; nodes.push(position);
-      });
-      var destinationPosition = Object.create(null);
-      destinations.forEach(function (destination, index) {
-        var position = { x: 850, y: 30 + index * 44, w: 130, h: 32, title: destination };
-        destinationPosition[destination] = position; nodes.push(position);
-      });
-      function line(from, to) {
-        if (!from || !to) return;
-        var value = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        value.setAttribute("x1", from.x + from.w); value.setAttribute("y1", from.y + from.h / 2);
-        value.setAttribute("x2", to.x); value.setAttribute("y2", to.y + to.h / 2); value.classList.add("rn-markdown-graph-edge"); svg.appendChild(value);
-      }
-      sections.forEach(function (section) {
-        line(section.parentId && sectionPosition[section.parentId] || documentNode, sectionPosition[section.id]);
-      });
-      var edgeCount = sections.length;
-      links.forEach(function (link) {
-        var target = destinationPosition[link.destination]; if (!target) return;
-        var source = documentNode;
-        sections.forEach(function (section) {
-          if (link.start >= section.start && link.start < section.end && (!source.section || section.level > source.section.level))
-            source = sectionPosition[section.id];
-        });
-        line(source, target); edgeCount++;
-      });
-      nodes.forEach(function (position) {
-        var group = document.createElementNS("http://www.w3.org/2000/svg", "g");
-        group.classList.add("rn-markdown-graph-node"); group.setAttribute("transform", "translate(" + position.x + " " + position.y + ")");
-        var rect = document.createElementNS("http://www.w3.org/2000/svg", "rect"); rect.setAttribute("width", position.w); rect.setAttribute("height", position.h); rect.setAttribute("rx", "7");
-        var text = document.createElementNS("http://www.w3.org/2000/svg", "text"); text.setAttribute("x", "9"); text.setAttribute("y", "21");
-        text.textContent = String(position.title || "").length > 24 ? String(position.title).slice(0, 23) + "…" : String(position.title || "");
-        group.append(rect, text); svg.appendChild(group);
-      });
-      graph.appendChild(svg);
-      var bounded = analysis.sections.length > sections.length || analysis.links.filter(function (link) { return !link.isImage; }).length > links.length || destinations.length === 24;
-      if (bounded || !links.length) {
-        var note = element("div", "rn-markdown-graph-note", !links.length ? "В документе нет явных ссылок; показана структура заголовков." :
-          "Граф ограничен первыми 60 заголовками, 24 адресами и 120 ссылками.");
-        graph.appendChild(note);
-      }
-      body.appendChild(graph);
+    }
+
+    function revealSource(line) {
+      presentation.requestedMode = "source";
+      show("source");
+      if (child && child.revealLine) child.revealLine(line);
     }
 
     function show(nextMode) {
       if (disposed) return;
+      if (mode === "graph" && nextMode === "graph" && child) return;
+      if (mode === "graph" && nextMode !== "graph") {
+        cancelGraphRead();
+        graphStatus = ""; graphError = false;
+        setNote("");
+      }
       mode = nextMode;
       if (["md", "source", "graph"].indexOf(mode) < 0) mode = "md";
       if (!full || needsAnalysis && !analysis) mode = "source";
@@ -491,6 +491,26 @@
       });
       if (targets.length) groups.push({ key: "links", title: "Ссылки в документе", kind: "group",
         badge: String(targets.length), expanded: !!expanded.links, children: targets });
+      if (typeof options.onGraphData === "function") {
+        var origins = Object.create(null);
+        if (graphSnapshot) graphSnapshot.nodes.forEach(function (item) { origins[item.id] = item; });
+        var backlinks = graphSnapshot ? graphSnapshot.edges.filter(function (edge) {
+          return edge.to === options.resourceUri && edge.from !== options.resourceUri && edge.status !== "pending";
+        }) : [];
+        var backlinkNodes = backlinks.map(function (edge, index) {
+          var origin = origins[edge.from];
+          return { key: "backlink:" + index, kind: "item", backlink: edge, origin: origin,
+            title: (origin ? origin.title : edge.from) + " · строка " + edge.line };
+        });
+        if (!graphSnapshot) backlinkNodes.push({ key: "load-backlinks", kind: "item", loadBacklinks: true,
+          title: "Проверить обратные ссылки…" });
+        if (!backlinkNodes.length) backlinkNodes.push({ key: "no-backlinks", kind: "item", disabled: true,
+          title: graphSnapshot.complete ? "Обратных ссылок нет" : "Сканирование неполное" });
+        groups.push({ key: "backlinks", title: "Обратные ссылки", kind: "group",
+          badge: graphSnapshot ? String(backlinks.length) + (graphSnapshot.complete ? "" : "…") : "…",
+          expanded: !!expanded.backlinks,
+          children: backlinkNodes });
+      }
       var query = navigationQuery.toLowerCase();
       function filtered(node) {
         var children = (node.children || []).map(filtered).filter(Boolean);
@@ -507,7 +527,16 @@
         onToggle: function (node, value) { expanded[node.section ? node.section.id : node.key] = value; },
         onSelect: function (node) {
           if (node.section) { show("md"); scrollToAnchor(node.section.anchor); }
-          else if (node.link) { show("source"); if (child && child.revealLine) child.revealLine(node.link.line); }
+          else if (node.link) { revealSource(node.link.line); }
+          else if (node.loadBacklinks) {
+            if (mode !== "graph") setNote("Проверка обратных ссылок…");
+            readGraph(false).then(function () { if (!disposed && mode !== "graph") setNote(""); }).catch(function (error) {
+              if (!disposed && mode !== "graph" && error.name !== "AbortError")
+                setNote(error.detail || error.message || "Не удалось прочитать связи.");
+            });
+          } else if (node.backlink && node.origin && typeof options.onOpenLink === "function") {
+            options.onOpenLink(node.origin);
+          }
           if (root.clientWidth > 0 && root.clientWidth <= 640) {
             presentation.navigationCollapsed = true; setNavigationVisibility();
           }
@@ -564,17 +593,17 @@
 
     function markdownStatus() {
       if (mode === "source" && child && typeof child.subscribeStatus === "function") return null;
-      if (mode === "graph" && analysis) return "Граф · разделы: " + analysis.sections.length + " · явные ссылки: " + analysis.links.length;
+      if (mode === "graph") return graphStatus;
       return (analysis ? "Разделы: " + analysis.sections.length + " · ссылки: " + analysis.links.length : "Markdown") +
         " · " + sourceText.length + " символов";
     }
     function emitStatus() {
       var value = markdownStatus();
       if (value == null) return;
-      publishStatus(value);
+      publishStatus(value, mode === "graph" && graphError);
     }
-    function publishStatus(value) {
-      statusListeners.slice().forEach(function (listener) { listener(value); });
+    function publishStatus(value, error) {
+      statusListeners.slice().forEach(function (listener) { listener(value, error); });
     }
 
     function analyze() {
@@ -626,6 +655,17 @@
     if (full && needsAnalysis && !analysis) analyze();
     return {
       element: root,
+      activate: function () {
+        if (disposed || active) return;
+        active = true;
+        if (mode === "graph" && !child) renderGraph();
+      },
+      deactivate: function () {
+        active = false;
+        cancelGraphRead();
+        if (mode === "graph") clear();
+        if (noteText.textContent === "Проверка обратных ссылок…") setNote("");
+      },
       search: function (query, direction) {
         navigationQuery = String(query || "").trim();
         renderNavigation();
@@ -634,7 +674,9 @@
       },
       subscribeStatus: function (listener) {
         if (typeof listener !== "function") return function () {};
-        statusListeners.push(listener); emitStatus();
+        statusListeners.push(listener);
+        if (mode === "graph") setNote("");
+        emitStatus();
         return function () { var index = statusListeners.indexOf(listener); if (index >= 0) statusListeners.splice(index, 1); };
       },
       chrome: {
@@ -661,6 +703,7 @@
       },
       destroy: function () {
         disposed = true; generation++;
+        cancelGraphRead();
         if (compactObserver) compactObserver.disconnect();
         else window.removeEventListener("resize", syncCompactLayout);
         if (window.RNAssistantNavigationTree) window.RNAssistantNavigationTree.unmount(tree);

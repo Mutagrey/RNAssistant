@@ -749,6 +749,12 @@ ordinary text-window reads. Partial source text is never parsed as a complete ma
 bounded to 200 characters; `nameTruncated=true` directs callers to source windows
 instead of passing the shortened label as a section selector.
 
+The Markdown viewer graph uses explicit links and `[[wiki references]]` from that
+same parse. Its lookup stays within the opened document's catalog or the requested
+folder of one Workspace. Duplicate names remain ambiguous. An incomplete corpus
+or graph budget leaves unresolved destinations pending. The graph is a presentation
+snapshot with source lines. Model reads still use the semantic target contract above.
+
 Markdown heading names and code declarations are navigation hints. The code
 symbol grammar is deliberately partial (`symbolsComplete=false`), including
 minified/very long lines. `core.read` accepts `partNumber` for indexed

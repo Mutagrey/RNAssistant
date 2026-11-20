@@ -115,20 +115,23 @@ starts at the content edge; formatted MD/plan content keeps the document inset. 
 analysis failure shows its retry next to the reason in the status bar, not as an isolated
 toolbar button.
 
-Saved material Markdown uses the same `preview` mode as Browser: a play icon for the
-formatted document, a code icon for read-only source and a graph icon for a bounded
-local graph of headings and explicit links. Generated HTML remains internal. The code
-icon is not an editor.
-The existing Plan editor keeps its own draft/save owner; generic editable Markdown is
-still pending.
+Saved material Markdown has a play icon for the formatted document, a code icon for
+read-only source and a graph icon for explicit Markdown and wiki references. In the
+graph, **Рядом** shows the opened document and its direct links, **Все** shows the
+scanned scope, and **Иерархия** changes the layout. Selecting a node shows outgoing
+and incoming mentions with their source lines. **Вписать** resets the canvas view,
+and **Обновить** reads the scope again. The shared bottom status bar displays the
+number of visible nodes and edges.
 
 The adjacent outline toggle opens the local NavigationTree: heading hierarchy and
-explicit outgoing links grouped by destination. Heading selection scrolls to the
-rendered anchor; link occurrence selection opens its source line. Relative and
-external destinations are displayed, not guessed into file paths. Same-document
-anchors can navigate within the rendered document. The graph contains only the current
-document's bounded sections and explicit outgoing links; it is not a resolved
-cross-document graph or backlink index.
+outgoing links grouped by destination and **Обратные ссылки**. Heading selection
+scrolls to the rendered anchor. An outgoing mention opens its source line, and a
+backlink opens the exact referring material.
+
+The project row's **… → Граф Markdown** opens the same graph in a dialog. The
+first scan starts at the project root. **Сканировать** accepts a relative folder.
+The details pane shows paths and source lines. Selecting a mention moves to its
+connected node. Partial scans and unresolved references carry explicit statuses.
 
 Partial text keeps page navigation and can request the existing full read.
 Only complete readable text gets formatted/source/outline modes. Failed analysis

@@ -97,10 +97,12 @@ The header owns title/meta, search, common download/menu/version actions and for
 modes. Search expands over the header and filters outline/collection where available;
 text-like viewers report matches and next/previous navigation. The status bar reports
 viewer status plus useful metadata such as source line/column, page, dimensions or
-MD section/link counts. MD modes are MD, read-only source and a bounded local graph of
-headings and explicit links. Generated HTML remains internal. Authored Markdown,
-resolved cross-document links/backlinks and native Windows visual acceptance remain
-separate.
+MD section/link counts. The graph mode fills the existing content slot and publishes
+node and edge counts to the MaterialSurface status bar. It uses `view-switch`,
+shared `icon-btn` controls and navigation rows. The selected document and its source
+lines appear beside the canvas, or below it at narrow widths. Unresolved edges
+are dashed and their status appears as text. The project entry point uses the
+same layout and the common dialog status.
 
 Browser has no duplicate title/meta: its address is the identity. Its navigation and
 address use a provider row, while common modes/search/actions stay in one header. The

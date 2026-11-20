@@ -65,6 +65,7 @@ namespace RNAssistant.Harness
             var tests = new List<HarnessTest>
             {
                 Test("markdown analysis: shared AST and exact spans", MarkdownAnalysisContract),
+                Test("markdown analysis: scoped Markdown graph", MarkdownGraphContract),
                 Test("markdown resources: workspace sections and coverage", MarkdownResourceWorkspaceSections),
                 Test("markdown resources: artifact outline and sections", MarkdownResourceArtifactOutline),
                 Test("power query: inspection matches exact view", PowerQueryInspectionRequiresMatchingView),

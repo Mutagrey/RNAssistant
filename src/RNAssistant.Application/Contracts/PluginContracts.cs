@@ -150,6 +150,12 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("pluginId")] public string PluginId { get; set; }
         [JsonProperty("stamp")] public string Stamp { get; set; }
     }
+    public sealed class ProjectMarkdownGraphRequest
+    {
+        [JsonProperty("workspaceId", Required = Required.Always)] public string WorkspaceId { get; set; }
+        [JsonProperty("directory")] public string Directory { get; set; }
+    }
+
     public sealed class ProjectChatRequest
     {
         [JsonProperty("workspaceId", Required = Required.Always)] public string WorkspaceId { get; set; }

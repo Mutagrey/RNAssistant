@@ -25,6 +25,24 @@ namespace RNAssistant.Core.Storage
             if (string.IsNullOrWhiteSpace(section) || section.Length > 200 || maxCharacters < 1 || maxCharacters > ResourceReadRequest.MaximumCharacters)
                 throw new MarkdownSectionException("Use a complete heading title of at most 200 characters.", "resource_section_invalid");
             var artifact = Read(ConversationMetadata.From(session), reference, false);
+            var text = ReadMarkdownText(session, reference, artifact, out var hash);
+            var selected = MarkdownSectionSelector.Select(text, section, maxCharacters);
+            var end = selected.End;
+            return new ResourceReadResult { Representation = ResourceRepresentations.Text, Text = text.Substring(selected.Start, end - selected.Start),
+                ContentSha256 = hash, Offset = selected.Start, ReturnedCharacters = end - selected.Start, TotalCharacters = text.Length,
+                Coverage = new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: selected.Start, end: end),
+                Complete = true, Truncated = false, RawContentIncluded = true };
+        }
+
+        internal MarkdownDocumentAnalysis AnalyzeMarkdown(ChatSession session, ChatArtifact artifact)
+        {
+            var reference = ChatResourceUri.CreateArtifactRevision(session, artifact);
+            if (!Owns(session, reference)) throw new InvalidDataException("The Markdown belongs to another document.");
+            return MarkdownAnalysisService.Analyze(ReadMarkdownText(session, reference, artifact, out _), false);
+        }
+
+        private string ReadMarkdownText(ChatSession session, ResourceRef reference, ChatArtifact artifact, out string hash)
+        {
             var original = artifact.OriginalAttachment;
             if (original == null ? artifact.Kind != ChatArtifactKinds.Markdown && artifact.Kind != ChatArtifactKinds.PlanDocument &&
                 !(artifact.Kind == ChatArtifactKinds.File && FileEncoding(artifact) != null && IsMarkdownPath(artifact.Title)) : !IsMarkdownOriginal(original))
@@ -43,12 +61,8 @@ namespace RNAssistant.Core.Storage
             var text = _payloads.ReadText(body.ToBlobReference());
             if (text == null || text.Length > MaximumIndexedCharacters || original != null && original.ExtractedCharCount != text.Length)
                 throw new MarkdownSectionException("The exact Markdown source is unavailable or incomplete.", "RESOURCE_SNAPSHOT_UNAVAILABLE");
-            var selected = MarkdownSectionSelector.Select(text, section, maxCharacters);
-            var end = selected.End;
-            return new ResourceReadResult { Representation = ResourceRepresentations.Text, Text = text.Substring(selected.Start, end - selected.Start),
-                ContentSha256 = body.Sha256, Offset = selected.Start, ReturnedCharacters = end - selected.Start, TotalCharacters = text.Length,
-                Coverage = new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: selected.Start, end: end),
-                Complete = true, Truncated = false, RawContentIncluded = true };
+            hash = body.Sha256;
+            return text;
         }
 
         internal static string OutlineHeadingTitle(string title)

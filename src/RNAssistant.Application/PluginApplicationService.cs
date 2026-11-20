@@ -970,6 +970,15 @@ namespace RNAssistant.Application
             }
         }
 
+        public MarkdownGraphSnapshot ReadProjectMarkdownGraph(ProjectMarkdownGraphRequest request, CancellationToken token)
+        {
+            using (PluginStore.AcquireRuntimeUse(_paths))
+            {
+                var workspace = RequireProjectWorkspace(request?.WorkspaceId);
+                return Conversations.ReadMarkdownGraph(workspace, request.Directory, token);
+            }
+        }
+
         public ProjectChatStateDto CreateProjectChat(ProjectChatRequest request)
         {
             using (PluginStore.AcquireRuntimeUse(_paths))

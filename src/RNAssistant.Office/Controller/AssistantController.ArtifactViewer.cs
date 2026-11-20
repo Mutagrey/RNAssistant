@@ -192,6 +192,11 @@ namespace RNAssistant.Office
                 .Read(session, request.RunId, request.ToolCallId);
         }
 
+        public MarkdownGraphSnapshot ReadArtifactMarkdownGraph(string chatId, string documentId, string resourceUri, CancellationToken token)
+        {
+            return _artifactViewer.ReadMarkdownGraph(ReadArtifactActor(chatId, documentId, resourceUri), resourceUri, _artifacts, token);
+        }
+
         public ArtifactViewerPageDto ReadArtifactViewerPage(
             string chatId,
             string resourceUri,

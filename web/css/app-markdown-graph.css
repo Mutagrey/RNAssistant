@@ -1,0 +1,86 @@
+.rn-markdown-graph { height: 100%; min-width: 0; }
+.rna-md-graph {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 18rem;
+  min-width: 0;
+  color: var(--ink);
+  container-type: inline-size;
+}
+.rna-md-graph-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--line);
+}
+.rna-md-graph-actions { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-left: auto; }
+.rna-md-graph-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(12rem, 16rem);
+  min-height: 0;
+  min-width: 0;
+  background: var(--surface);
+}
+.rna-md-graph-canvas {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  background: radial-gradient(circle, var(--line) 0.6px, transparent 0.8px) 0 0 / var(--space-4) var(--space-4);
+}
+.rna-md-graph-canvas :focus-visible { outline: 2px solid var(--focus); outline-offset: -3px; }
+.rna-md-graph-canvas .vis-tooltip {
+  z-index: 1;
+  max-width: min(17rem, 100%);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: var(--text-xs)/1.4 var(--font);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  box-shadow: var(--shadow);
+}
+.rna-md-graph-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-3);
+  border-left: 1px solid var(--line);
+  background: var(--surface-subtle);
+  overflow-wrap: anywhere;
+}
+.rna-md-graph-info-title { font-size: var(--text-base); font-weight: 600; }
+.rna-md-graph-meta { color: var(--ink-muted); font-size: var(--text-xs); }
+.rna-md-graph-info h4 {
+  width: 100%;
+  margin: var(--space-2) 0 0;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--line);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.rna-md-graph-mentions { width: 100%; }
+.rna-md-graph-mention-state { display: block; color: var(--warning); }
+@container (max-width: 36rem) {
+  .rna-md-graph-stage { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) min(38%, 10rem); }
+  .rna-md-graph-info { border-top: 1px solid var(--line); border-left: 0; }
+}
+.rna-md-project-dialog[open] {
+  --dialog-width: 63rem;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  height: min(46rem, calc(100% - 2 * var(--space-4)));
+}
+.rna-md-project-content { display: flex; flex-direction: column; gap: var(--space-2); min-height: 0; min-width: 0; }
+.rna-md-project-content .rna-md-project-controls { grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: var(--space-2); }
+.rna-md-project-graph { flex: 1; min-height: 0; min-width: 0; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); }

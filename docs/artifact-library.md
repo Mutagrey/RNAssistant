@@ -530,6 +530,11 @@ all Markdown bodies. Fork and dialogue changes preserve shared identities/histor
 Unlink is chat-local and still works with missing body bytes; origin-chat deletion
 and CAS collection retain published revisions.
 
+The Markdown graph reads current catalog entries across chats in the same document
+and keeps the opened revision as its focus. An opened historical revision contributes
+its links while name resolution uses current entries. Backlinks identify an exact
+referring material and its source line. See the [Material viewer](ui/UI_SCREEN_MAP.md#materialsurface-and-markdown-modes--in-review-2026-11-17).
+
 `shared Markdown:` covers cross-chat read/write, concurrent and prepared stale
 writers, duplicate titles, same-step independent calls, restore, immutable uploads,
 failed link publication, foreign documents, metadata-only restart, fork, unlink,

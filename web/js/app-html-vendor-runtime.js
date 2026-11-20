@@ -83,8 +83,8 @@
         .then(function(source){ resolved[identity]=Object.freeze(source); }).catch(function(error){delete pending[identity];throw error;});
       return pending[identity];
     }
-    if (pending[vendor.id]) return pending[vendor.id];
     if (vendor.loader === "echarts-factory") {
+      if (pending[vendor.id]) return pending[vendor.id];
       var echarts = window.RNAssistantEChartsSandboxRuntime;
       if (!echarts || typeof echarts.load !== "function")
         return Promise.reject(new Error("Bundled ECharts loader is unavailable."));
@@ -93,6 +93,12 @@
       }).catch(function (error) { pending[vendor.id] = null; throw error; });
       return pending[vendor.id];
     }
+    return loadCarrier(vendor);
+  }
+
+  function loadCarrier(vendor) {
+    if (registered[vendor.id]) return Promise.resolve();
+    if (pending[vendor.id]) return pending[vendor.id];
     if (!window.document || !window.document.createElement)
       return Promise.reject(new Error("Bundled HTML vendors can only load in the WebView."));
     pending[vendor.id] = new Promise(function (resolve, reject) {
@@ -100,10 +106,14 @@
       script.src = vendor.loader;
       script.async = true;
       script.onload = function () {
-        if (ready(vendor)) resolve();
+        script.remove();
+        if (registered[vendor.id]) resolve();
         else reject(new Error("Bundled " + vendor.id + " " + vendor.version + " did not register."));
       };
-      script.onerror = function () { reject(new Error("Bundled " + vendor.id + " " + vendor.version + " failed to load.")); };
+      script.onerror = function () {
+        script.remove();
+        reject(new Error("Bundled " + vendor.id + " " + vendor.version + " failed to load."));
+      };
       (document.head || document.documentElement).appendChild(script);
     }).catch(function (error) { pending[vendor.id] = null; throw error; });
     return pending[vendor.id];
@@ -143,6 +153,13 @@
 
   window.RNAssistantHtmlVendorRuntime = Object.freeze({
     used: used, missing: missing, ensure: ensure, dependencies: dependencies,
-    source: source, register: register
+    source: source, register: register,
+    loadMainGraphSource: function () {
+      // Main-window code only comes from the pinned, packaged carrier. The native
+      // catalog can resolve user-local packages for the isolated HTML iframe.
+      var vendor = vendors.find(function (item) { return item.id === "vis-network" && item.version === "10.1.2"; });
+      if (!vendor) return Promise.reject(new Error("Локальный пакет vis.Network 10.1.2 недоступен."));
+      return loadCarrier(vendor).then(function () { return registered[vendor.id].js; });
+    }
   });
 }());

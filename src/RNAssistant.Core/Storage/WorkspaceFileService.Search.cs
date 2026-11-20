@@ -19,7 +19,7 @@ namespace RNAssistant.Core.Storage
     {
         // Metadata only. No body capture or authority publication during traversal.
         public WorkspaceSearchPaths FindPaths(WorkspaceDescriptor workspace, string directory, bool recursive,
-            string[] include, string[] exclude, CancellationToken token)
+            string[] include, string[] exclude, CancellationToken token, bool reportLinkedEntries = false)
         {
             var filters = new ResourcePathFilter(include, exclude);
             ResolvePath(workspace, directory, true);
@@ -38,8 +38,13 @@ namespace RNAssistant.Core.Storage
                         token.ThrowIfCancellationRequested();
                         if (++scanned > 5000) { result.Complete = false; result.Paths.Sort(StringComparer.Ordinal); return result; }
                         var name = Path.GetFileName(entry);
-                        if (!IsVisibleFileName(name) || StorageFileSystem.IsReparsePoint(entry)) continue;
+                        if (!IsVisibleFileName(name)) continue;
                         var target = string.IsNullOrEmpty(relative) ? name : relative.TrimEnd('/', '\\') + "/" + name;
+                        if (StorageFileSystem.IsReparsePoint(entry))
+                        {
+                            if (reportLinkedEntries) { result.Complete = false; result.Unavailable.Add(target); }
+                            continue;
+                        }
                         // Recheck every component, including renamed parent directories.
                         var checkedPath = ResolvePath(workspace, target, false);
                         if (Directory.Exists(checkedPath))
