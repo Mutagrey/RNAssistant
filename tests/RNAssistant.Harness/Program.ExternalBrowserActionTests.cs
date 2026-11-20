@@ -153,11 +153,16 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void ExternalBrowserWorkspaceAction()
+        private static void ExternalBrowserWorkspaceAction(bool withOffice)
         {
-            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            WithTempPaths(paths =>
             {
+                var adapter = FakeOfficeAdapter.ForHost("Excel");
+                var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), new ToolStore(paths), paths: paths);
                 var session = new ChatSession { Id = "workspace-browser", WorkspaceId = "workspace" };
+                var office = withOffice ? new WorkspaceOfficeCapabilityService(adapter, executor, paths) : null;
+                var officeSet = office?.ForTarget(office.CaptureCurrentTarget(), session, new AppSettings(), "run");
+                if (withOffice) AssertTrue(officeSet.Available && officeSet.MutationObserver != null, "Office contributes its own bound observer");
                 var source = new HarnessBrowserActionSource { Target = new BrowserPageHandle(session.Id, "page", 1) };
                 executor.ExternalBrowserReadSource = source;
                 var bound = new BrowserCapabilityService(() => source).ForOwner(new BrowserOwnerScope {
@@ -170,7 +175,8 @@ namespace RNAssistant.Harness
                         contribution.Entry.Description, contribution.Entry.ArgumentSchemaJson),
                         contribution.Entry.Policy, contribution.Entry.Binding), contribution.Handler);
                 var runtime = new ToolRuntime(registry, "agent", true, true, mutationObserver:
-                    new RNAssistant.Runtime.WorkspacePlanningObserver(null, null, browser: bound));
+                    new RNAssistant.Runtime.WorkspacePlanningObserver(null, null, officeSet?.MutationObserver,
+                        officeSet?.Tools.Select(tool => tool.Entry.Id), bound));
                 var readCall = new ToolCall("read", "core.read", "{}");
                 var read = bound.ResourceRead.ExecuteAsync(new ToolHandlerContext(new ToolExecutionContext(readCall,
                     new ToolPolicySnapshot(readCall.Name, "test", ResourceReadToolHandler.Policy), "run", "turn", "read-step", DateTime.UtcNow, false, 1),
@@ -181,10 +187,13 @@ namespace RNAssistant.Harness
                     JsonConvert.SerializeObject(new { target = ExternalBrowserResourceProvider.Target, name = "Name", value = "Test" }));
                 session.Messages.Add(new ChatMessage { Role = "assistant", RunId = "run", ToolCallId = call.Id,
                     AcceptedCallOrigin = new AcceptedToolCallOrigin("step", "attempt", 0), ResourceEvidence = read.ResourceEvidence.ToList() });
+                if (withOffice) source.AfterDispatch = () => { throw new System.IO.IOException("Browser acknowledgement lost"); };
                 var result = runtime.ExecuteAsync(new ToolExecutionContext(call, runtime.Describe(call), "run", "turn", "step", DateTime.UtcNow, false, 1),
                     CancellationToken.None).GetAwaiter().GetResult();
-                AssertEqual(ToolExecutionOutcome.Ok, result.Outcome, result.Message);
+                AssertEqual(withOffice ? ToolExecutionOutcome.Unknown : ToolExecutionOutcome.Ok, result.Outcome, result.Message);
                 AssertTrue(result.AuthorityCommitId != null, "Workspace observer publishes the Browser terminal");
+                if (withOffice) AssertTrue(ToolExecutionProgress.Capture(result).ManualVerificationRequired,
+                    "a bound Office target cannot turn a lost Browser acknowledgement into success");
                 AssertEqual(1, source.Dispatches, "bound Workspace shares the same native action owner and runtime evidence");
             });
         }

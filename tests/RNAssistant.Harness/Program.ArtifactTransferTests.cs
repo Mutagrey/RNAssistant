@@ -42,10 +42,14 @@ namespace RNAssistant.Harness
                     }
                     chats.Commit(chat, new ConversationCommit());
                     var batches = chatJournal.OriginalBindingBatches;
+                    var casReads = ChatBlobStore.CachedBodyDecodes + ChatBlobStore.CachedBodyHits;
+                    var casBytes = ChatBlobStore.CachedStoredBytes;
                     var timer = System.Diagnostics.Stopwatch.StartNew();
                     for (var title = 0; title < 3; title++) { chat.Title = "Title " + title; chats.Commit(chat, new ConversationCommit()); }
                     AssertEqual(batches, chatJournal.OriginalBindingBatches, "unchanged original bindings reused at count=" + count);
-                    Console.WriteLine("journal material commit originals=" + count + " warmBindingBatches=0 meanMs=" + timer.ElapsedMilliseconds / 3);
+                    Console.WriteLine("journal material commit originals={0} commits=3 warmBindingBatches=0 smallCasReads={1} smallCasBytes={2} meanMs={3}",
+                        count, ChatBlobStore.CachedBodyDecodes + ChatBlobStore.CachedBodyHits - casReads,
+                        ChatBlobStore.CachedStoredBytes - casBytes, timer.ElapsedMilliseconds / 3);
                 }
                 var query = new ArtifactCatalogRequest { ChatId = chat.Id, Scope = "chat", SortBy = "title" };
                 var selected = ChatResourceUri.CreateArtifactRevision(chat, chat.Artifacts.Last());

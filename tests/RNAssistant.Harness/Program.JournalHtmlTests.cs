@@ -113,6 +113,71 @@ namespace RNAssistant.Harness
             var independent = new ChatMessage { Role = "user", Content = "Independent input" };
             chat.Messages.Add(independent); store.Commit(chat, ConversationCommit.UserInput(independent));
             AssertEqual(independent.Id, store.Load(chat.Id).Messages.Last().Id, "unknown HTML does not disable chat input");
+            VerifyJournalHtmlLeaseCost(journal, chat, owner, authority, links, exact);
+        }
+
+        private static void VerifyJournalHtmlLeaseCost(ConversationJournal journal, ChatSession chat,
+            DocumentArtifactStore artifacts, ResourceAuthorityService authority, ArtifactWorkingSetService links, ResourceRef html)
+        {
+            IConversationStore store = journal;
+            var binary = new byte[] { 10, 20, 30, 40, 50, 60 };
+            var original = artifacts.ImportOriginal(chat, "lease.png", "image/png", binary, Guid.NewGuid().ToString("N"));
+            chat.Artifacts.Add(original);
+            store.Commit(chat, new ConversationCommit());
+            var reference = ChatResourceUri.CreateArtifactRevision(chat, original);
+            var ownerId = chat.ActiveHtmlArtifactId;
+            var gateway = new ResourceGatewayService(null, null, null, authority: authority,
+                readAttachmentBytes: file => authority.Payloads.ReadBytes(new ChatBlobReference {
+                    Sha256 = file.ContentSha256, ByteLength = file.ContentByteLength.Value }));
+            using (var data = new ResourceDataPlaneService(gateway, journal.HasActiveHtml))
+            {
+                long? firstRecords = null, firstBodies = null;
+                foreach (var height in Environment.GetEnvironmentVariable("RNA_DIAGNOSTIC_COST_CURVE") == "1"
+                    ? new[] { 100, 10000 } : new[] { 100 })
+                {
+                    while (chat.Messages.Count < height)
+                    {
+                        var batch = Enumerable.Range(0, Math.Min(100, height - chat.Messages.Count))
+                            .Select(_ => new ChatMessage { Role = "user", Content = "lease history" }).ToArray();
+                        chat.Messages.AddRange(batch);
+                        store.Commit(chat, new ConversationCommit(batch));
+                    }
+                    var actor = journal.ReadArtifactActor(chat.Id, reference.Uri);
+                    var lease = data.Open(actor, ownerId, reference, "raw");
+                    var records = journal.Journal.ReadRecords;
+                    var bodies = journal.ChatBodyReads;
+                    var payload = new List<byte>();
+                    for (int offset = 0; offset < binary.Length; offset += 2)
+                        payload.AddRange(data.Read(lease.LeaseId, offset, 2, CancellationToken.None));
+                    AssertTrue(payload.SequenceEqual(binary), "all three chunks return the same immutable bytes");
+                    var recordReads = journal.Journal.ReadRecords - records;
+                    var bodyReads = journal.ChatBodyReads - bodies;
+                    Console.WriteLine("HTML lease H={0} chunks=3 journalRecords={1} chatBodies={2} payloadBytes={3}",
+                        height, recordReads, bodyReads, payload.Count);
+                    AssertTrue(recordReads <= 12 && bodyReads <= 3, "bounded card and binding lookup for three chunks");
+                    AssertEqual(firstRecords ?? recordReads, recordReads, "owner journal reads independent of history size");
+                    AssertEqual(firstBodies ?? bodyReads, bodyReads, "owner CAS body reads independent of history size");
+                    firstRecords = recordReads; firstBodies = bodyReads;
+                    data.Close(chat.Id, ownerId, lease.LeaseId);
+                    AssertEqual("RESOURCE_LEASE_EXPIRED", RuntimeThrows<ResourceRequestException>(() =>
+                        data.Read(lease.LeaseId, 0, 2, CancellationToken.None)).ErrorCode, "closed lease cannot be reused");
+                }
+                AssertEqual("RESOURCE_ACCESS_DENIED", RuntimeThrows<ResourceRequestException>(() =>
+                    data.Open(chat, "foreign-html", reference, "raw")).ErrorCode, "foreign binding cannot open a lease");
+                var pending = data.Open(chat, ownerId, reference, "raw");
+                links.Change(chat, LinkRequest(chat, html.Uri, true), current => store.Commit(current, new ConversationCommit()));
+                AssertEqual("RESOURCE_LEASE_EXPIRED", RuntimeThrows<ResourceRequestException>(() =>
+                    data.Read(pending.LeaseId, 0, 2, CancellationToken.None)).ErrorCode, "changed HTML owner invalidates the pending lease");
+            }
+            using (var viewer = new ResourceDataPlaneService(gateway, (id, binding) => binding == "viewer" && store.ReadMetadata(id) != null))
+            {
+                var beforeDelete = viewer.Open(chat, "viewer", reference, "raw");
+                AssertTrue(viewer.Read(beforeDelete.LeaseId, 0, 2, CancellationToken.None).SequenceEqual(binary.Take(2)),
+                    "detaching HTML preserves authorized immutable viewer bytes");
+                AssertTrue(store.Delete(chat.Host, chat.DocumentKey, chat.Id), "fixture chat removed");
+                AssertEqual("RESOURCE_LEASE_EXPIRED", RuntimeThrows<ResourceRequestException>(() =>
+                    viewer.Read(beforeDelete.LeaseId, 2, 2, CancellationToken.None)).ErrorCode, "deleted chat cannot consume a pending lease");
+            }
         }
 
         private static void JournalWorkspaceHtml()
