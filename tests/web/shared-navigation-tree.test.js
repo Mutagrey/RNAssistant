@@ -55,6 +55,11 @@ const root=path.resolve(__dirname,'../..');
   await stableDelete.click();
   assert.deepEqual(await stableDelete.evaluate(n=>[calls.confirm,n.getAttribute('aria-label'),n.classList.contains('is-confirming')]),[0,'Подтвердить удаление',true],
    'first destructive click becomes an inline confirmation');
+  assert.deepEqual(await stableDelete.evaluate(n=>[n,n.parentElement].map(node=>getComputedStyle(node).backgroundColor)),
+   ['rgba(0, 0, 0, 0)','rgba(0, 0, 0, 0)'],'the confirmation and action strip are transparent');
+  await standalone.evaluate(()=>{stableNodes[0].actions[1].confirmRevision='new';RNAssistantNavigationTree.render(document.getElementById('stableTree'),stableNodes);});
+  await stableDelete.click();
+  assert.equal(await standalone.evaluate(()=>calls.confirm),0,'an updated target needs a new first click');
   await stableDelete.click();
   assert.equal(await standalone.evaluate(()=>calls.confirm),1,'second destructive click executes once');
   const stableLabel=standalone.locator('#stableTree [data-tree-key="row-0"] .navigation-tree-label');
@@ -127,6 +132,7 @@ const root=path.resolve(__dirname,'../..');
    assert.equal(geometry.divider,geometry.edge,'no legacy grid gap beside navigation: '+section);assert.equal(geometry.width,4);
   }
   await product.locator('#libraryRootTab').click();
+  await product.locator('#libraryNavigationHeading .panel-pin').click();
   await product.locator('#instructionsList [data-tree-key="skill:excel.sales_analysis"]').click();
   assert.equal(await product.locator('#skillTitle').textContent(),'Анализ продаж');
   assert.equal(await product.evaluate(()=>RNAssistantDockWorkspace.openTarget({view:'library-object',kind:'skill',id:'excel.sales_analysis',host:'other',revision:''})),false,'wrong host cannot retarget a library object');
@@ -135,6 +141,38 @@ const root=path.resolve(__dirname,'../..');
   await product.locator('#skillSearchInput').fill('несуществующий объект');
   assert.deepEqual(await product.evaluate(()=>[state.selectedInstructionKind,state.selectedSkillIndex,state.selectedToolIndex,state.selectedPromptIndex]),original,'filter preserves the open editor');
   await product.keyboard.press('Escape');
+  await product.evaluate(()=>{
+   window.deletions=[];const bridge=window.chrome.webview, post=bridge.postMessage.bind(bridge);
+   bridge.postMessage=function(message){if(message.type==='saveSkills'||message.type==='saveTools')deletions.push(message.type);return post(message);};
+   const tool=state.tools[0];window.toolRevision=tool._baseRevision;
+   state.tools.push({...tool,Id:'excel.unsaved',Name:'Черновик',_baseId:'',_baseRevision:''});
+   renderInstructions(true);
+  });
+  const library=product.locator('#instructionsList');
+  assert.equal(await library.locator('.navigation-tree-badge').filter({hasText:/По запросу|^Core$/i}).count(),0);
+  assert.equal(await library.locator('[data-tree-key="skill:excel.sales_analysis"]').getAttribute('data-parent-key'),'library:skills:excel');
+  async function armDeletion(key) {
+   const row=library.locator('[data-tree-key='+JSON.stringify(key)+'] > .navigation-tree-row');
+   await row.hover();const action=row.locator('.tree-action.is-danger');
+   await action.click();assert.equal(await action.evaluate(node=>node.classList.contains('is-confirming')),true);
+   return action;
+  }
+  const skillRow='skill:excel.sales_analysis',toolRow='tool:excel.format_sales';
+  await armDeletion(skillRow);assert.deepEqual(await product.evaluate(()=>deletions),[]);
+  await product.keyboard.press('Escape');
+  await (await armDeletion(skillRow)).click();
+  await library.locator('[data-tree-key='+JSON.stringify(skillRow)+']').waitFor({state:'detached'});
+  await product.evaluate(()=>{state.tools.find(tool=>tool.Id==='excel.format_sales')._baseRevision='stale';renderInstructions(true);});
+  await (await armDeletion(toolRow)).click();
+  const notice=product.locator('#workspaceLayoutNotice');
+  await product.waitForFunction(()=>document.getElementById('workspaceLayoutNotice').textContent);
+  assert.match(await notice.textContent(),/Инструмент изменился перед удалением/);
+  assert.equal(await library.locator('[data-tree-key='+JSON.stringify(toolRow)+']').count(),1,'refused deletion keeps the catalog item');
+  await product.evaluate(()=>{state.tools.find(tool=>tool.Id==='excel.format_sales')._baseRevision=toolRevision;renderInstructions(true);});
+  await (await armDeletion(toolRow)).click();
+  await library.locator('[data-tree-key='+JSON.stringify(toolRow)+']').waitFor({state:'detached'});
+  assert.deepEqual(await product.evaluate(()=>[deletions,state.tools.map(tool=>tool.Id),canDeleteLibraryTool({BuiltIn:true}),
+   canDeleteLibraryTool({Scope:'document'}),canDeleteLibrarySkill({BuiltIn:true})]),[['saveSkills','saveTools','saveTools'],['excel.unsaved'],false,false,false]);
   await product.locator('.rail-button[data-tab="settings"]').click();
   const rowStyle=(page,selector)=>page.locator(selector).first().evaluate(n=>{const s=getComputedStyle(n);return[s.minHeight,s.borderRadius,s.padding,s.fontSize,s.lineHeight];});
   assert.deepEqual(await rowStyle(product,'#settingsNavTree .navigation-tree-row'),await rowStyle(standalone,'#tree [data-tree-key=c] > .navigation-tree-row'));

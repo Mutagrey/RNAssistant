@@ -240,6 +240,7 @@ var toolActions = window.RNAssistantToolActions.create({
   validateAll: validateAllToolDefinitions,
   mutationRequest: toolLibraryMutationRequest,
   captureSave: function () { return toolLibraryRecords(state.tools); },
+  removeLocal: removeLocalTool,
   acknowledgeSave: acknowledgeToolSaves,
   parseMutation: toolLibraryMutationFromContract,
   parseLibrary: toolLibraryItemsFromContract,
@@ -596,12 +597,35 @@ function toolLibraryMutations() {
   return mutations;
 }
 
-function toolLibraryMutationRequest() {
+function toolLibraryMutationRequest(mutations) {
   return {
     type: toolLibraryMutationRequestType,
     contractVersion: toolLibraryContractVersion,
-    mutations: toolLibraryMutations()
+    mutations: mutations || toolLibraryMutations()
   };
+}
+
+function canDeleteLibraryTool(tool) {
+  return !!tool && !tool.BuiltIn && String(tool.Scope || "").toLowerCase() !== "document" &&
+    (!tool._baseId || !!tool._baseRevision);
+}
+
+function removeLocalTool(tool) {
+  var index = state.tools.indexOf(tool);
+  if (index < 0) return;
+  var selected = state.tools[state.selectedToolIndex];
+  state.tools.splice(index, 1);
+  state.selectedToolIndex = selected === tool ? Math.min(index, state.tools.length - 1) : state.tools.indexOf(selected);
+  if (selected === tool) state.selectedToolComponentIndex = 0;
+  updateToolLibraryDirty();
+}
+
+async function deleteLibraryTool(tool) {
+  if (!canDeleteLibraryTool(tool) || state.bridgeUnavailable || !state.tools.includes(tool)) return;
+  if (state.toolLibraryWriting) { RNAssistantShellLayout.notice("Дождитесь завершения записи библиотеки инструментов."); return; }
+  if (!tool._baseId) { removeLocalTool(tool); renderTools(); return; }
+  try { await toolActions.remove(tool); }
+  catch (error) { RNAssistantShellLayout.notice(error.message); }
 }
 
 function selectedToolComponent(tool) {
@@ -1011,16 +1035,9 @@ function bindToolActions() {
   $("saveToolsButton").addEventListener("click", toolActions.save);
 
   $("deleteToolButton").addEventListener("click", function () {
-    var skill = state.tools[state.selectedToolIndex];
-    if (!skill || skill.BuiltIn) {
-      return;
-    }
-
-    state.tools.splice(state.selectedToolIndex, 1);
-    if (state.selectedToolIndex >= state.tools.length) {
-      state.selectedToolIndex = state.tools.length - 1;
-    }
-    updateToolLibraryDirty();
+    var tool = state.tools[state.selectedToolIndex];
+    if (state.toolLibraryWriting || !canDeleteLibraryTool(tool)) return;
+    removeLocalTool(tool);
     renderTools();
   });
 

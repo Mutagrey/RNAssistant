@@ -302,8 +302,9 @@
         if (catalog && accepted) catalog.editor();
         return accepted;
       },
-      onDelete: function (item) {
-        if (typeof options.onDelete === "function") options.onDelete(item.type, item.id);
+      onDelete: function (item, anchor) {
+        if (catalog && item.id.indexOf("rna://") === 0) return catalog.treeAction("delete-document", item.id, anchor);
+        if (typeof options.onDelete === "function") return options.onDelete(item.type, item.id);
       },
       onAction: function (item, actionId, anchor) {
         if (catalog && item.id.indexOf("rna://") === 0) catalog.treeAction(actionId, item.id, anchor);

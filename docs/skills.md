@@ -516,10 +516,11 @@ confirmation.
 
 ## Target Skill Library UX
 
-Skills remain in Library, grouped by type and then by the first dot namespace only
-(`skills.vba.*`, `skills.html.*`, etc.); the initial `skills` segment is omitted
-inside the skill section. Built-in IDs follow the shared naming contract;
-existing custom package IDs are not rewritten automatically.
+The Library groups skills by the application's declared Host. Common packages
+appear under «Общие», Workspace packages under «Проекты», and Office packages
+under their application name. Package IDs retain the shared naming contract.
+The inline checkmark confirms deletion of one custom package revision through
+the existing SkillAuthoringService.
 They are not rows in
 the Artifact Library. Each skill row/editor shows:
 

@@ -178,8 +178,8 @@
     log: log,
     cancelRequest: function (requestId) { return cancelBridgeRequest(requestId); },
     getSelection: workspaceActionSelection,
-    deleteDocumentArtifact: function (artifact) {
-      if (!window.confirm("Удалить «" + artifactTitle(artifact) + "» из документа и всех его чатов?")) return false;
+    deleteDocumentArtifact: function (artifact, confirmed) {
+      if (!confirmed && !window.confirm("Удалить «" + artifactTitle(artifact) + "» из документа и всех его чатов?")) return false;
       return send("deleteDocumentArtifact", { chatId: target.chatId, expectedSessionRevision: state.chatProjectionRevisions[target.chatId],
         resourceUri: prop(artifact, "ResourceUri", "resourceUri", ""), confirmed: true }).then(function () { return ready(true); });
     },
@@ -316,7 +316,7 @@
       window.alert("Сначала сохраните изменения текущего артефакта.");
       return;
     }
-    return workspaceActions.deleteSelection(workspaceActionSelection(type, id));
+    return workspaceActions.deleteSelection(workspaceActionSelection(type, id), true);
   }
 
   function workspaceActionState() {
@@ -497,7 +497,7 @@
     });
     $("saveHtmlWorkspaceButton").addEventListener("click", workspaceActions.saveSelection);
     $("reloadHtmlWorkspaceSourceButton").addEventListener("click", reloadHtmlWorkspaceSources);
-    $("deleteHtmlWorkspaceButton").addEventListener("click", workspaceActions.deleteSelection);
+    $("deleteHtmlWorkspaceButton").addEventListener("click", function () { workspaceActions.deleteSelection(); });
     $("undoHtmlWorkspaceButton").addEventListener("click", workspaceActions.undo);
     $("redoHtmlWorkspaceButton").addEventListener("click", workspaceActions.redo);
     $("recoverHtmlWorkspaceButton").addEventListener("click", workspaceActions.recoverRevision);

@@ -180,10 +180,6 @@ async function deleteVbaModule(moduleName) {
     window.alert("Сначала сохраните изменения текущего VBA-модуля.");
     return false;
   }
-  var warning = "Удалить VBA-модуль «" + moduleName + "»? Перед удалением будет создана резервная копия.";
-  if (state.vbaEditorDirty) warning = "Есть несохранённые изменения. " + warning;
-  if (!window.confirm(warning)) return false;
-
   try {
     var deleted = await vbaActions.deleteModule(moduleName);
     if (!deleted) return false;

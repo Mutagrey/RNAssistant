@@ -81,11 +81,16 @@
         ? message + " Обновите Library перед повтором: результат записи не подтверждён в редакторе." : message;
     }
 
-    async function saveUploaded(operation) {
+    async function saveUploaded(operation, removal) {
       operation.active();
-      if (!options.validateSelected()) throw new Error("Исправьте JSON перед сохранением.");
-      options.syncSelected(); options.validateAll();
-      var body = options.mutationRequest(), submitted = options.captureSave();
+      var body, submitted = [];
+      if (removal) {
+        body = options.mutationRequest([{ kind: "delete", baseId: removal._baseId, expectedRevision: removal._baseRevision }]);
+      } else {
+        if (!options.validateSelected()) throw new Error("Исправьте JSON перед сохранением.");
+        options.syncSelected(); options.validateAll();
+        body = options.mutationRequest(); submitted = options.captureSave();
+      }
       if (!Array.isArray(body.mutations) || body.mutations.length > 256) throw new Error("RESOURCE_BATCH_TOO_LARGE");
       function validateUnicode(value) {
         if (typeof value === "string") {
@@ -125,6 +130,13 @@
                   !(result.status !== "ok" && result.id === mutation.baseId) ||
                 result.status !== "ok" && index !== saved.results.length - 1;
             })) throw new Error("Результат записи Tool Library не совпадает с отправленным набором.");
+        if (removal && !saved.failure) {
+          var result = saved.results[0], mutation = body.mutations[0];
+          if (result.operation !== "delete" || result.previousRevision !== mutation.expectedRevision || result.effect !== "verified_change" ||
+              saved.tools.some(function (tool) { return tool.Id.toLowerCase() === mutation.baseId.toLowerCase(); }))
+            throw new Error("Удаление инструмента не подтверждено.");
+          options.removeLocal(removal);
+        }
         operation.possibleEffect = saved.results.some(function (result) { return result.status === "unknown" || result.effect === "unknown"; });
         var selectedId = (state.tools[state.selectedToolIndex] || {}).Id;
         options.acknowledgeSave(submitted, saved);
@@ -249,10 +261,23 @@
       }
     }
 
+    async function removeTool(tool) {
+      var operation;
+      try {
+        operation = beginWrite();
+        await saveUploaded(operation, tool);
+      } catch (error) { throw new Error(writeError(error, operation)); }
+      finally {
+        await endWrite(operation);
+        options.renderTools();
+      }
+    }
+
     return {
       cancelWrite: cancelWrite,
       installVba: function () { return changeVbaInstallation("installVbaTool"); },
       next: function () { return runSelected(false, true); },
+      remove: removeTool,
       run: function () { return runSelected(false); },
       save: saveTools,
       uninstallVba: function () { return changeVbaInstallation("uninstallVbaTool"); },

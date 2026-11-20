@@ -217,7 +217,7 @@
       }
     }
 
-    async function deleteSelection(target) {
+    async function deleteSelection(target, confirmed) {
       var selected = target && typeof target.type === "string" ? target : options.getSelection();
       if (!selected || selected.type === "artifact" || selected.type === "collection" ||
           state.bridgeUnavailable || detailUnavailable()) return;
@@ -225,7 +225,7 @@
 
       try {
         if (selected.type === "plan") {
-          return options.deleteDocumentArtifact ? await options.deleteDocumentArtifact(selected.item) : false;
+          return options.deleteDocumentArtifact ? await options.deleteDocumentArtifact(selected.item, confirmed) : false;
         }
         if (htmlActionPending || workspaceWrite) return;
         htmlActionPending = true;
@@ -233,7 +233,7 @@
         var action = captureWorkspaceAction();
         var warning = "Удалить «" + selected.label + "» из HTML? Удаление можно отменить через Undo.";
         if (state.htmlWorkspaceDirty) warning = "Есть несохраненные изменения. " + warning;
-        if (!window.confirm(warning)) return;
+        if (!confirmed && !window.confirm(warning)) return;
         var response = selected.type === "data"
           ? await sendWorkspaceAction("deleteHtmlWorkspaceData", action, { name: selected.name })
           : await sendWorkspaceAction("deleteHtmlWorkspaceFile", action, { path: selected.path });

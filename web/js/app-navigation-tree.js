@@ -6,6 +6,9 @@
   var confirmations = new WeakMap();
   var sequence = 0;
   function icon(name) { return window.RNAssistantIcons.render(name); }
+  function deleteAction(options) {
+    return Object.assign({ iconHtml: icon("trash"), danger: true, confirmTitle: "Подтвердить удаление" }, options);
+  }
 
   function element(tag, className, text) {
     var node = document.createElement(tag);
@@ -94,7 +97,9 @@
       if (row) startMarquee(row);
     }
 
-    function actionKey(node, action, index) { return node.key + "|" + index + "|" + action.title; }
+    function actionKey(node, action, index) {
+      return JSON.stringify([node.key, index, action.title, action.confirmTitle, action.confirmRevision || ""]);
+    }
     function paintAction(button, action, confirming) {
       button.classList.toggle("is-confirming", !!confirming);
       button.title = confirming ? action.confirmTitle : action.title;
@@ -191,12 +196,14 @@
             button.tabIndex = -1;
             button.disabled = !!action.disabled;
             button.dataset.treeAction = String(actionIndex);
-            var key = action.confirmTitle ? actionKey(node, action, actionIndex) : "";
+            var key = action.confirmTitle && !action.disabled ? actionKey(node, action, actionIndex) : "";
             var pending = key && confirmations.get(root);
             if (key) confirmKeys.add(key);
             if (key) button.dataset.treeConfirmKey = key;
             if (action.menu) { button.setAttribute("aria-haspopup", "menu"); button.setAttribute("aria-expanded", "false"); }
-            paintAction(button, action, !!pending && pending.key === key);
+            var confirming = !!pending && pending.key === key;
+            if (confirming) { pending.button = button; pending.action = action; }
+            paintAction(button, action, confirming);
             actions.appendChild(button);
           });
           appendTrailing(actions);
@@ -313,6 +320,7 @@
         action.onClick(node, actionButton);
         return;
       }
+      clearConfirmation();
       if (event.target.closest("[data-tree-toggle]")) toggle(item, !record.nodes.get(item.dataset.treeKey).expanded);
       else select(item);
     });
@@ -321,7 +329,13 @@
       if (item && root.contains(item)) setFocus(item, false);
       refreshMarquee();
     });
-    on("focusout", function () { queueMicrotask(refreshMarquee); });
+    on("focusout", function () {
+      queueMicrotask(function () {
+        if (mounts.get(root) !== record) return;
+        refreshMarquee();
+        if (!root.contains(document.activeElement)) clearConfirmation();
+      });
+    });
     on("pointerover", function (event) {
       if (event.pointerType === "touch") return;
       var label = event.target.closest(".navigation-tree-label"), row = label && label.parentNode;
@@ -388,6 +402,6 @@
     mounts.delete(root);
   }
 
-  window.RNAssistantNavigationTree = { render: render, unmount: unmount, icon: icon,
+  window.RNAssistantNavigationTree = { render: render, unmount: unmount, icon: icon, deleteAction: deleteAction,
     setSelected: function (root, key, options) { var record = mounts.get(root); return !!record && record.setSelected(key, options); } };
 })();

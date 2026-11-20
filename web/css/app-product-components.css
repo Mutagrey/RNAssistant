@@ -215,7 +215,8 @@ select:not([multiple]):not([size]) { appearance: none; padding-inline-end: 34px;
 .navigation-tree-badge.is-warning, .navigation-tree-badge.is-critical { color: var(--warning); }
 .navigation-tree .navigation-tree-label { flex: 1; min-width: 0; min-height: 0; display: block; padding: 0; text-align: left; white-space: nowrap; overflow: hidden; border: 0; border-radius: 0; background: none; font: inherit; color: inherit; }
 @media (hover: hover) {
-  .navigation-tree-row:is(:hover, :has(:focus-visible, .tree-action:is([aria-expanded="true"], .is-confirming))) > .navigation-tree-label {
+  .navigation-tree-item:focus > .navigation-tree-row > .navigation-tree-label,
+  .navigation-tree-row:is(:hover, :focus-within, :has(.tree-action:is([aria-expanded="true"], .is-confirming))) > .navigation-tree-label {
     padding-right: calc(var(--tree-action-count, 0) * (var(--shell-group-action) + var(--shell-group-action-gap)) + var(--tree-gap));
   }
 }
@@ -225,12 +226,13 @@ select:not([multiple]):not([size]) { appearance: none; padding-inline-end: 34px;
 .navigation-tree-row.is-group .navigation-tree-label { color: var(--ink-muted); font-size: 11px; }
 .navigation-tree .tree-trailing { position: relative; display: flex; flex: none; align-items: center; gap: var(--tree-gap); }
 .navigation-tree .tree-actions { position: absolute; z-index: 1; top: 50%; right: 100%; display: flex; visibility: hidden; pointer-events: none; align-items: center; gap: var(--shell-group-action-gap); transform: translateY(-50%); }
-.navigation-tree-row:is(:hover, :has(:focus-visible, .tree-action:is([aria-expanded="true"], .is-confirming))) .tree-actions { visibility: visible; pointer-events: auto; }
+.navigation-tree-item:focus > .navigation-tree-row .tree-actions,
+.navigation-tree-row:is(:hover, :focus-within, :has(.tree-action:is([aria-expanded="true"], .is-confirming))) .tree-actions { visibility: visible; pointer-events: auto; }
 .navigation-tree .tree-actions.has-menu { position: static; transform: none; margin-block: calc(-1 * var(--tree-parent-inset)); }
 .navigation-tree .tree-action { box-sizing: border-box; display: grid; place-items: center; width: var(--shell-group-action); min-width: var(--shell-group-action); height: var(--shell-control); min-height: 0; padding: 0; border: 0; border-radius: var(--shell-radius); background: transparent; color: var(--ink-muted); }
 .navigation-tree .tree-action:hover { color: var(--ink); }
 .navigation-tree .tree-action.is-danger:hover { color: var(--danger); }
-.navigation-tree .tree-action.is-confirming { color: var(--danger); background: var(--danger-soft); }
+.navigation-tree .tree-action.is-confirming { color: var(--danger); }
 .navigation-tree .tree-action:focus-visible { outline-offset: -2px; }
 .navigation-tree .tree-action svg { width: var(--shell-group-action-icon); height: var(--shell-group-action-icon); }
 .tree-status { flex-shrink: 0; width: 7px; height: 7px; margin: 0 10px 0 4px; border-radius: 50%; background: var(--accent); }

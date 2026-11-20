@@ -86,20 +86,18 @@
     // A custom dialog yields to host updates; keep the exact displayed target/revision, not live objects.
     var boundScope = Object.assign({}, scope), boundGroup = group && { id: group.id, name: group.name, revision: group.revision };
     var openedLifetime = lifetime, openedScope = navigationScope(), restore = focusResolver(button), current = {};
-    var naming = action !== "Delete";
     dialog = current;
     current.view = RNAssistantDialog.open({
-      title: action === "Create" ? "Новая группа чатов" : naming ? "Переименовать группу" : "Удалить группу",
-      label: naming ? "Название группы" : null, value: group ? group.name : "",
-      message: naming ? null : "Удалить группу «" + boundGroup.name + "»? Чаты и их история сохранятся.",
-      submitLabel: action === "Create" ? "Создать" : naming ? "Сохранить" : "Удалить", danger: !naming,
-      validate: function (value) { return naming && !value.trim() ? "Введите название группы." : ""; },
+      title: action === "Create" ? "Новая группа чатов" : "Переименовать группу",
+      label: "Название группы", value: group ? group.name : "",
+      submitLabel: action === "Create" ? "Создать" : "Сохранить",
+      validate: function (value) { return !value.trim() ? "Введите название группы." : ""; },
       onSubmit: async function (value) {
         if (dialog !== current || openedLifetime !== lifetime || openedScope !== navigationScope()) return;
         if (disabled(boundScope)) throw new Error("Группы недоступны. Закройте окно и обновите список.");
-        var name = naming ? value.trim() : null;
-        if (naming && (!name || boundGroup && name === boundGroup.name)) return;
-        var error = await change(boundScope, action, boundGroup, naming ? { name: name } : null);
+        var name = value.trim();
+        if (!name || boundGroup && name === boundGroup.name) return;
+        var error = await change(boundScope, action, boundGroup, { name: name });
         if (error) throw new Error(error);
       },
       restoreFocus: function () { return openedLifetime === lifetime && openedScope === navigationScope() ? restore() : null; },
@@ -185,10 +183,16 @@
       var id = "chat-group:" + key(scope) + ":" + group.id;
       return { key: id, kind: "parent", title: group.name, tooltip: group.name, chatGroupBranch: true,
         iconHtml: RNAssistantNavigationTree.icon("group"), expanded: !!query || !collapsed.get(id),
-        children: forest(group.members, group), actions: [menuAction("Действия группы «" + group.name + "»", function (node, button) {
-          return [{ label: "Переименовать группу", icon: "edit", disabled: disabled(scope), onSelect: function () { editGroup(scope, "Rename", group, button); } },
-            { label: "Удалить группу", icon: "trash", disabled: disabled(scope), onSelect: function () { editGroup(scope, "Delete", group, button); } }];
-        })] };
+        children: forest(group.members, group), actions: [
+          RNAssistantNavigationTree.deleteAction({ title: "Удалить группу «" + group.name + "»",
+            confirmTitle: "Подтвердить удаление группы «" + group.name + "»",
+            confirmRevision: group.revision, disabled: disabled(scope),
+            onClick: function () { return change(scope, "Delete", group); } }),
+          menuAction("Действия группы «" + group.name + "»", function (node, button) {
+            return [{ label: "Переименовать группу", icon: "edit", disabled: disabled(scope),
+              onSelect: function () { editGroup(scope, "Rename", group, button); } }];
+          })
+        ] };
     });
     if (view.error) result.push({ key: "group-error:" + key(scope), kind: "leaf", title: "Группы недоступны", tooltip: view.error, disabled: true });
     result = result.concat(forest(Array.from(byId.keys()).filter(function (id) { return !assigned.has(id); }), null));

@@ -152,14 +152,14 @@
                 options.onAction({ type: item.rnItemType, id: item.rnItemId, title: item.title }, action.id, anchor);
               }
             } };
-        }).concat(item.rnDeletable ? [{
-          title: "Удалить " + item.title, iconHtml: tree.icon("trash"), danger: true,
-          onClick: function () {
+        }).concat(item.rnDeletable ? [tree.deleteAction({
+          title: "Удалить «" + item.title + "»", confirmTitle: "Подтвердить удаление «" + item.title + "»",
+          onClick: function (node, button) {
             if (typeof options.onDelete === "function") {
-              options.onDelete({ type: item.rnItemType, id: item.rnItemId, title: item.title });
+              return options.onDelete({ type: item.rnItemType, id: item.rnItemId, title: item.title }, button);
             }
           }
-        }] : [])
+        })] : [])
       };
     });
   }

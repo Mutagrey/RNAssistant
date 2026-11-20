@@ -59,10 +59,15 @@ assert.match(preparedText, /repeat/);
 assert.match(preparedText, /done/);
 const groups = context.window.RNAssistantLibraryGroups;
 const tree = groups.tree(['html.data.read', 'html.assets.import', 'core.write', 'excel.range.write'].map(Id => ({ value: { Id } })), 'tools', row => ({ kind: 'leaf', title: row.value.Id }), () => true);
-assert.equal(tree[0].title, 'Core');
+assert.equal(tree[0].title, 'Основные');
 const html = tree.find(group => group.title === 'HTML');
 assert.equal(html.children.map(row => row.title).join(','), 'html.assets.import,html.data.read');
 assert(tree.every(group => group.children.every(row => row.kind === 'leaf')), 'only one namespace grouping level');
-assert.equal(groups.path('skills.excel.reporting', 'skills').join('.'), 'excel');
-assert.equal(groups.path('skills.vba.code.editing', 'skills').join('.'), 'vba');
-console.log('PASS universal tools: bounded inert inline diff, unknown effect and first-namespace groups');
+const skillGroups = groups.tree([
+  { value: { Id: 'skills.vba.edit', Host: 'Excel' } },
+  { value: { Id: 'skills.html.publish', Host: 'Workspace' } },
+  { value: { Id: 'skills.excel.guide', Host: 'Common' } }
+], 'skills', row => ({ kind: 'leaf', title: row.value.Id }), () => true);
+assert.deepEqual(Object.fromEntries(skillGroups.map(group => [group.title, group.children[0].title])),
+  { Excel: 'skills.vba.edit', Проекты: 'skills.html.publish', Общие: 'skills.excel.guide' });
+console.log('PASS universal tools: bounded inert inline diff, unknown effect, and tool/skill groups');

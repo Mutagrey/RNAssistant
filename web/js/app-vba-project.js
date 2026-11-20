@@ -91,6 +91,7 @@ function renderVbaModuleList(modules, query) {
   var list = $("vbaModuleList");
   if (!list) return;
   var selectedName = $("vbaModuleSelect").value;
+  var chatId = state.activeChatId;
   var tree = window.RNAssistantNavigationTree;
   var nodes = groupVbaModules(modules).map(function (group) {
     var key = "vba:" + group.label;
@@ -106,10 +107,13 @@ function renderVbaModuleList(modules, query) {
           iconHtml: tree.icon(vbaModuleIcon(type)), selected: name === selectedName,
           tooltip: [name, type, lineCount ? lineCount + " строк" : ""].filter(Boolean).join(" · "),
           moduleName: name,
-          actions: isDeletableVbaModule(module) ? [{
-            title: "Удалить VBA-модуль " + name, iconHtml: tree.icon("trash"), danger: true,
-            onClick: function () { deleteVbaModule(name); }
-          }] : []
+          actions: isDeletableVbaModule(module) ? [tree.deleteAction({
+            title: "Удалить VBA-модуль " + name,
+            confirmTitle: "Подтвердить удаление «" + name + "»" +
+              (state.vbaEditorDirty && name === selectedName ? " с несохранёнными правками" : ""),
+            confirmRevision: JSON.stringify([chatId, module.codeSha256 || module.CodeSha256]),
+            onClick: function () { if (state.activeChatId === chatId && state.vba.modules.includes(module)) return deleteVbaModule(name); }
+          })] : []
         };
       })
     };

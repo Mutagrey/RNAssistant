@@ -165,9 +165,9 @@ async function serve() {
     await normal.locator('.section-rail [data-section="library"]').click();
     assert.deepEqual(await normal.evaluate(() => ['core.read', 'html.source.write',
       'plan.document.save', 'excel.inspect'].map(id => RNAssistantLibraryGroups.category(id).title)),
-      ['Ресурсы', 'HTML', 'Планы', 'Excel']);
+      ['Основные', 'HTML', 'Планы', 'Excel']);
     assert.equal(await normal.locator('#instructionsList [data-tree-key="library:skills:excel"]').count(), 1,
-      "skills use the shared Excel namespace group");
+      "skills use the Excel application group");
     assert.equal(await normal.locator('#instructionsList [data-tree-key="library:tools:excel"]').count(), 1,
       "tools use the shared Excel namespace group");
     await normal.locator('#instructionsList [data-tree-key="skill:excel.sales_analysis"]').click();

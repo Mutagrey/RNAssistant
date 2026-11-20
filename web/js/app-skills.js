@@ -848,7 +848,11 @@ async function uploadSkillMutation(operation, action, body) {
   } finally { await closeSkillMutationUpload(operation); }
 }
 
-async function saveSelectedSkillResource() {
+function saveSelectedSkillResource() {
+  return withSkillLibraryWrite(saveSkillResources);
+}
+
+async function withSkillLibraryWrite(write) {
   if (skillWriteOperation) throw new Error("Дождитесь завершения сохранения навыков.");
   var operation = { chatId: state.activeChatId, library: state.skills, abort: new AbortController(),
     requestId: null, lease: null, closed: false, possibleEffect: false };
@@ -857,7 +861,7 @@ async function saveSelectedSkillResource() {
   operation.active = function () { if (!operation.current()) throw new Error("Сохранение навыков остановлено: контекст Library изменился."); };
   skillWriteOperation = operation;
   updateSkillSaveButton(); updateSkillWriteControls();
-  try { operation.active(); await saveSkillResources(operation); }
+  try { operation.active(); return await write(operation); }
   catch (error) {
     if (operation.possibleEffect) error.detail = (error.detail || error.message) + " Обновите Library перед повтором: результат записи не подтверждён в редакторе.";
     throw error;
@@ -865,6 +869,50 @@ async function saveSelectedSkillResource() {
     await closeSkillMutationUpload(operation);
     if (skillWriteOperation === operation) skillWriteOperation = null;
     updateSkillSaveButton(); updateSkillWriteControls();
+  }
+}
+
+function canDeleteLibrarySkill(skill) {
+  return !!skill && !skill.BuiltIn && (!skill._baseId || !!skill._baseRevision);
+}
+
+function removeLocalSkill(skill) {
+  var index = state.skills.indexOf(skill);
+  if (index < 0) return;
+  var selected = state.skills[state.selectedSkillIndex];
+  state.skills.splice(index, 1);
+  state.selectedSkillIndex = selected === skill ? Math.min(index, state.skills.length - 1) : state.skills.indexOf(selected);
+  updateSkillLibraryDirty();
+}
+
+async function deleteLibrarySkill(skill) {
+  if (!canDeleteLibrarySkill(skill) || state.bridgeUnavailable || !state.skills.includes(skill)) return;
+  if (skillWriteOperation) { RNAssistantShellLayout.notice("Дождитесь завершения записи библиотеки навыков."); return; }
+  if (!skill._baseId) { removeLocalSkill(skill); renderSkills(); return; }
+  try {
+    await withSkillLibraryWrite(async function (operation) {
+      var mutation = { kind: "delete", baseId: skill._baseId, expectedRevision: skill._baseRevision };
+      var response = await uploadSkillMutation(operation, "saveSkills", {
+        type: skillLibraryMutationRequestType, contractVersion: skillLibraryContractVersion, mutations: [mutation]
+      });
+      var saved = skillLibraryMutationFromContract(response), result = saved.results[0];
+      if (saved.failure) {
+        operation.possibleEffect = saved.failure.status === "unknown" || saved.failure.effect === "unknown";
+        throw new Error(saved.failure.message || "Навык не удалён.");
+      }
+      if (saved.results.length !== 1 || result.operation !== "delete" || result.id !== mutation.baseId ||
+          result.previousRevision !== mutation.expectedRevision || result.effect !== "verified_change" ||
+          saved.skills.some(function (item) { return item.Id.toLowerCase() === mutation.baseId.toLowerCase(); }))
+        throw new Error("Удаление навыка не подтверждено.");
+      operation.possibleEffect = false;
+      removeLocalSkill(skill);
+      var selected = (state.skills[state.selectedSkillIndex] || {}).Id;
+      operation.library = reconcileSkillLibraryCatalog(saved.skills);
+      state.selectedSkillIndex = state.skills.findIndex(function (item) { return item.Id === selected; });
+      renderSkills();
+    });
+  } catch (error) {
+    RNAssistantShellLayout.notice(error.detail || error.message);
   }
 }
 
@@ -1149,17 +1197,9 @@ function bindSkillActions() {
   });
 
   $("deleteSkillButton").addEventListener("click", function () {
-    if (skillWriteOperation) return;
     var skill = state.skills[state.selectedSkillIndex];
-    if (!skill || skill.BuiltIn) {
-      return;
-    }
-
-    state.skills.splice(state.selectedSkillIndex, 1);
-    if (state.selectedSkillIndex >= state.skills.length) {
-      state.selectedSkillIndex = state.skills.length - 1;
-    }
-    updateSkillLibraryDirty();
+    if (skillWriteOperation || !canDeleteLibrarySkill(skill)) return;
+    removeLocalSkill(skill);
     renderSkills();
   });
 

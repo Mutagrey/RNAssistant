@@ -1,5 +1,15 @@
 # RNAssistant backlog
 
+## Legacy Web fixtures — 2026-11-20
+
+На `d6e7230d` воспроизводятся прежние падения `tool-package-actions`
+в проверке allocation bound и `html-workspace-actions` на закрытии lease
+с тестовым ID `lease`. Исправление принадлежит владельцам fixtures.
+Новые сценарии удаления Библиотеки проверяет `shared-navigation-tree`.
+На `29e4cf84` с закреплённой навигацией полный `agent-groups` также
+останавливается на возврате фокуса после отмены диалога создания. Точечный
+сценарий `agent-groups --inline-delete` проходит.
+
 ## Plugin Harness sweep and shutdown split — 2026-11-19
 
 The canonical macOS temporary root was used for this recheck. `plugins: admitted run

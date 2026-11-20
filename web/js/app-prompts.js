@@ -201,20 +201,36 @@
 
   function instructionTreeNode(row, activeKey) {
     var value = row.value || {};
+    var tree = window.RNAssistantNavigationTree;
     var meta = "";
     if (row.kind === "skill") meta = value.BuiltIn ? "Встроенный" : "Пользовательский";
     if (row.kind === "tool") meta = value.BuiltIn ? "Встроенный" : (value.Executor || "vba");
     var title = row.kind === "prompt" ? value.label : (row.kind === "tool" && value.BuiltIn ? value.Id : value.Name || value.Id || (row.kind === "tool" ? "Инструмент" : "Навык"));
+    var actions = [], chatId = state.activeChatId;
+    if (!state.bridgeUnavailable && chatId && (row.kind === "skill" ? canDeleteLibrarySkill(value) :
+        row.kind === "tool" && canDeleteLibraryTool(value))) {
+      var name = row.kind === "skill" ? "навык" : "инструмент";
+      var baseId = value._baseId, revision = value._baseRevision;
+      actions.push(tree.deleteAction({
+        title: "Удалить " + name + " «" + title + "»",
+        confirmTitle: "Подтвердить удаление «" + title + "»",
+        confirmRevision: JSON.stringify([chatId, baseId, revision]),
+        onClick: function () {
+          if (state.activeChatId !== chatId || value._baseId !== baseId || value._baseRevision !== revision) return;
+          syncSelectedInstruction();
+          return row.kind === "skill" ? deleteLibrarySkill(value) : deleteLibraryTool(value);
+        }
+      }));
+    }
     return {
       key: instructionRowKey(row), kind: "leaf", title: title,
-      iconHtml: window.RNAssistantNavigationTree.icon(row.kind),
+      iconHtml: tree.icon(row.kind),
       selected: instructionRowKey(row) === activeKey,
       badge: row.kind === "prompt" ? "" : value.Enabled === false || value.CapabilityStatus && ["available", "partial"].indexOf(value.CapabilityStatus) < 0 ? "Недоступен" :
-        (window.RNAssistantChatInspector && window.RNAssistantChatInspector.libraryCapabilityStatus ? window.RNAssistantChatInspector.libraryCapabilityStatus(value.Id, row.kind) : null) ||
-        (row.kind === "tool" && String(value.Id).indexOf("core.") === 0 ? "Core" : "По запросу"),
+        (window.RNAssistantChatInspector && window.RNAssistantChatInspector.libraryCapabilityStatus ? window.RNAssistantChatInspector.libraryCapabilityStatus(value.Id, row.kind) : null) || "",
       tooltip: [title, value.Id && value.Id !== title ? value.Id : "", meta,
         row.kind === "prompt" ? value.description : value.Description].filter(Boolean).join(" · "),
-      row: row
+      row: row, actions: actions
     };
   }
 

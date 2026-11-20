@@ -223,9 +223,9 @@
     if (copied) { editor(null, true); render(); }
     return copied;
   }
-  function remove(item, listed, button) {
+  function remove(item, listed, button, confirmed) {
     if (!canMutate()) return;
-    if (!window.confirm("Удалить «" + item.title + "» из документа «" + item.documentTitle + "»?\n\nАртефакт исчезнет из библиотеки и всех чатов этого документа. Его нельзя будет подключить или редактировать. Ссылки в истории и сохранённые старые версии останутся.")) return;
+    if (!confirmed && !window.confirm("Удалить «" + item.title + "» из документа «" + item.documentTitle + "»?\n\nАртефакт исчезнет из библиотеки и всех чатов этого документа. Его нельзя будет подключить или редактировать. Ссылки в истории и сохранённые старые версии останутся.")) return;
     return mutate("deleteDocumentArtifact", { chatId: listed.chatId, expectedSessionRevision: listed.sessionRevision,
       resourceUri: item.resourceUri, confirmed: true }, button).then(function (removed) {
         if (removed && selected && selected.resourceUri === item.resourceUri) {
@@ -239,15 +239,15 @@
     var listed = response;
     var item = listed && listed.items.find(function (entry) { return entry.resourceUri === uri; });
     if (!item) return false;
-    if (actionId === "menu" && anchor) return RNAssistantActionMenu.open(anchor, itemCommands(item, listed));
+    if (actionId === "menu" && anchor) return RNAssistantActionMenu.open(anchor, itemCommands(item, listed, true));
     if (item.documentId !== listed.documentId) return false;
     if (actionId === "detach" && item.linked) {
       return changeLink(listed.chatId, listed.sessionRevision, uri, true);
     }
-    if (actionId === "delete-document" && item.canDelete) return remove(item, listed);
+    if (actionId === "delete-document" && item.canDelete) return remove(item, listed, anchor, true);
     return false;
   }
-  function itemCommands(item, listed) {
+  function itemCommands(item, listed, fromTree) {
     var id = listed.chatId, nav = state.chatNavigationVersion, artifact = localArtifact(item), items = [];
     function add(label, icon, run, disabled, danger) {
       items.push({ label: label, icon: icon, disabled: pending || !!disabled, danger: !!danger,
@@ -265,7 +265,7 @@
       });
     if (item.canTransfer) add("Независимая копия", "copy", function (button) { return copyItem(item, button, listed); });
     if (item.kind === "html_workspace" && item.canTransfer) add("Экспорт проекта", "download", function () { return download(item); });
-    if (item.canDelete) add("Удалить из документа…", "trash", function (button) { return remove(item, listed, button); }, false, true);
+    if (item.canDelete && !fromTree) add("Удалить из документа…", "trash", function (button) { return remove(item, listed, button); }, false, true);
     return items;
   }
   function localArtifact(item) {
@@ -311,8 +311,9 @@
       var entry = { key: "catalog::" + item.resourceUri, itemType: "artifact", itemId: item.resourceUri,
         title: item.title, iconKind: icon(item), meta: item.availabilityIssue ? "Недоступен" : (item.linked ? "В чате" : ""),
         tooltip: item.title + " · " + item.documentTitle,
-        expanded: !collapsed["catalog::" + item.resourceUri] };
-      if (itemCommands(item, response).length) entry.rowActions = [{ id: "menu", title: "Действия с материалом", iconKind: "more", disabled: pending }];
+        expanded: !collapsed["catalog::" + item.resourceUri],
+        deletable: item.canDelete && item.documentId === response.documentId && !pending };
+      if (itemCommands(item, response, true).length) entry.rowActions = [{ id: "menu", title: "Действия с материалом", iconKind: "more", disabled: pending }];
       if (item.kind === "html_workspace" && item.documentId === response.documentId && item.selected) {
         entry.children = htmlChildren; entry.groupKey = "catalog::" + item.resourceUri;
       }

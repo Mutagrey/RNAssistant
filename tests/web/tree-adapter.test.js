@@ -15,13 +15,12 @@ const root = {
 let rendered = null, released = false;
 const context = vm.createContext({ Promise, AbortController,
   document: { getElementById: id => id === root.id ? root : null, createElement: tag => ({ tagName: tag, setAttribute() {}, textContent: "" }) },
-  RNAssistantNavigationTree: {
-    icon: name => `<svg data-icon="${name}"></svg>`,
-    render: (target, nodes, options) => { rendered = { target, nodes, options }; },
-    unmount: () => { released = true; }
-  }
+  RNAssistantIcons: { render: name => `<svg data-icon="${name}"></svg>` }
 });
 context.window = context;
+vm.runInContext(read("js/app-navigation-tree.js"), context, { filename: "app-navigation-tree.js" });
+context.RNAssistantNavigationTree.render = (target, nodes, options) => { rendered = { target, nodes, options }; };
+context.RNAssistantNavigationTree.unmount = () => { released = true; };
 vm.runInContext(read("js/app-tree-adapter.js"), context, { filename: "app-tree-adapter.js" });
 const adapter = context.RNAssistantTreeAdapter;
 
@@ -64,7 +63,10 @@ assert.equal(activated.at(-1).id, "2");
 rendered.nodes[0].children[0].actions[0].onClick();
 assert.deepEqual(rowActions.at(-1), ["1", "detach"]);
 assert.match(rendered.nodes[0].children[0].actions[0].iconHtml, /minus/);
-rendered.nodes[0].children[0].actions[1].onClick();
+const removal = rendered.nodes[0].children[0].actions[1];
+assert.match(removal.iconHtml, /trash/);
+assert.match(removal.confirmTitle, /Подтвердить удаление/);
+removal.onClick();
 assert.equal(deleted.at(-1).id, "1");
 rendered.options.onToggle(rendered.nodes[0], false);
 assert.deepEqual(toggled.at(-1), ["files", false]);

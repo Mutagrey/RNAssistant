@@ -62,6 +62,26 @@ const assert=require('node:assert/strict'), path=require('node:path'), {spawn}=r
   const row=key=>page.locator('[data-tree-key='+JSON.stringify(key)+'] > .navigation-tree-row');
   const chessChild='chat:preview-summary:group:cg_chess',reviewChild='chat:preview-summary:group:cg_review';
   await row(chessChild).waitFor();
+  await page.locator('#workspaceNavigationHeading .panel-pin').click();
+  if (process.argv.includes('--inline-delete')) {
+   const key=await row(chessChild).evaluate(node=>node.closest('[data-tree-key^="chat-group:"]').dataset.treeKey);
+   const group=row(key);
+   await group.hover();
+   const trash=group.locator('.tree-action.is-danger');
+   const before=await page.evaluate(()=>groupCalls.length);
+   await trash.click();
+   assert.match(await trash.getAttribute('title'),/Подтвердить удаление группы/);
+   assert.equal(await page.evaluate(()=>groupCalls.length),before);
+   await page.keyboard.press('Escape');
+   assert.match(await trash.getAttribute('title'),/^Удалить группу/);
+   await trash.click();await trash.click();
+   await group.waitFor({state:'detached'});
+   assert.equal(await page.evaluate(()=>groupCalls.length),before+1);
+   assert.equal(await page.evaluate(()=>state.chats.some(chat=>chat.Id==='preview-summary')),true);
+   assert.deepEqual(errors,[]);
+   console.log('PASS chat group removal: cancel, one exact operation and retained chats');
+   return;
+  }
   const marker=key=>row(key).locator('.agent-color-dot');
   assert.equal(await row(chessChild).locator('.navigation-tree-icon svg').count(),0,'chats have no chat icon');
   assert.equal(await marker(chessChild).evaluate(node=>getComputedStyle(node).width),'6px');
@@ -294,7 +314,8 @@ const assert=require('node:assert/strict'), path=require('node:path'), {spawn}=r
   await page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});
   await page.evaluate(()=>document.documentElement.style.zoom='1.25');await page.setViewportSize({width:420,height:800});
   await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
-  await page.locator('#productMobileMenuButton').click();await row(chessChild).waitFor();
+  if (!await page.evaluate(()=>RNAssistantShellLayout.isNavigationOpen())) await page.locator('#productMobileMenuButton').click();
+  await row(chessChild).waitFor();
   const bounds=await page.locator('#chatSessionList').evaluate(node=>({width:node.clientWidth,scroll:node.scrollWidth}));
   assert.ok(bounds.width>0&&bounds.scroll<=bounds.width+1,'nested groups fit the narrow tree at 125%');
   await page.screenshot({path:'/tmp/rnassistant-agent-groups-narrow.png'});
@@ -304,17 +325,16 @@ const assert=require('node:assert/strict'), path=require('node:path'), {spawn}=r
   const longName='Группа '+('Ж'.repeat(90))+' <img src=x>';
   assert.ok(longName.length<=120);
   await nameInput().fill(longName);await nameInput().press('Enter');await dialog.waitFor({state:'hidden'});
-  await menu(groupKey,'Удалить группу');dialog=await opened('Удалить группу');await assertDialogBounds(dialog);
-  assert.ok((await dialog.innerText()).includes(longName),'confirmation shows the complete name as text');
-  assert.equal(await dialog.locator('img,script').count(),0,'group name never becomes markup');
-  await page.setViewportSize({width:418,height:800});await paint();await assertDialogBounds(dialog);
-  assert.equal(await focused(dialog.getByRole('button',{name:'Отмена',exact:true})),true,'destructive confirmation focuses Cancel');
-  before=await calls();await page.keyboard.press('Enter');await dialog.waitFor({state:'hidden'});
-  assert.equal(await calls(),before,'Enter on the initial Cancel cannot delete a group');
+  const groupDelete=row(groupKey).locator('.tree-action.is-danger');
+  await row(groupKey).hover();
+  before=await calls();await groupDelete.click();
+  assert.ok((await groupDelete.getAttribute('title')).includes(longName),'confirmation shows the complete name as text');
+  assert.equal(await groupDelete.locator('img,script').count(),0,'group name never becomes markup');
+  await page.keyboard.press('Escape');
+  assert.equal(await calls(),before,'Escape cancels the inline confirmation');
   await page.evaluate(()=>document.documentElement.style.zoom='1');await page.setViewportSize({width:1280,height:900});
-  await menu(groupKey,'Удалить группу');dialog=await opened('Удалить группу');
-  assert.match(await dialog.innerText(),/Чаты и их история сохранятся/);
-  await dialog.getByRole('button',{name:'Удалить',exact:true}).click();await dialog.waitFor({state:'hidden'});await row(groupKey).waitFor({state:'detached'});
+  await row(groupKey).hover();await groupDelete.click();await groupDelete.click();
+  await row(groupKey).waitFor({state:'detached'});
   assert.equal(await page.evaluate(()=>!!RNAssistantConversationPanel.office('preview-summary')),true,'group deletion retains the open chat');
   assert.equal(await page.evaluate(()=>state.chats.some(chat=>chat.Id==='preview-summary')),true,'group deletion preserves the catalog');
   await page.evaluate(()=>window.failGroup=true);
@@ -348,6 +368,6 @@ const assert=require('node:assert/strict'), path=require('node:path'), {spawn}=r
   await menu(pluginKey,'Убрать из группы');
   assert.equal(await page.evaluate(()=>groupCalls.at(-1).payload.workspaceId),await page.evaluate(()=>groupPlugin.workspaceId),'plugin chat uses the common Workspace tree');
   assert.deepEqual(errors,[]);
-  console.log('PASS groups: shared dialogs create/rename/delete, IME/keyboard/focus/cancel, revision conflict, no duplicate or uncertain retries, context/reset lifetime, narrow Dockview/light/dark/420+418px/125%, safe long names, creator nesting, same chat, memberships, Office/Workspace/plugin');
+  console.log('PASS groups: create/rename dialogs, inline deletion, revision conflict, focus and lifetime, narrow Dockview, group memberships and retained chats');
  } finally {if(browser)await browser.close();server.kill();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

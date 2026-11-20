@@ -843,6 +843,8 @@ service or validation policy.
 Since 11T10 the existing Tools editor also uses lowercase
 `rnassistant.toolLibrary` v1 and explicit revision-guarded create/update/rename/
 delete mutation DTOs through the same `ToolAuthoringService` as model authoring.
+The Library tree dispatches one revision-guarded deletion after the inline
+checkmark. Global custom tools expose the action.
 Controller-owned catalog reconciliation, `StoragePath` identity, generic execution
 and unversioned response fallback are absent. This does not make the flat store
 immutable history.

@@ -29,7 +29,8 @@ const requests = [], applied = [], targets = [];
 const menus = [];
 const context = vm.createContext({ console, TextDecoder, TextEncoder, Blob, crypto: webcrypto, URL, setTimeout, clearTimeout, confirm: () => true,
   Option: function (text, value) { const e = new Element("option"); e.textContent = text; e.value = value; return e; },
-  document: { querySelectorAll: () => [], getElementById: id => elements[id], createElement: tag => new Element(tag) },
+  document: { querySelectorAll: () => [], getElementById: id => elements[id],
+    createElement: tag => new Element(tag), createDocumentFragment: () => new Element() },
   $: id => elements[id], state: { activeChatId: "a", chatNavigationVersion: 1, htmlWorkspaceEditVersion: 0 },
   send: (type, payload) => new Promise((resolve, reject) => requests.push({ type, payload, resolve, reject })),
   applyChatStateForChat: (data, id) => applied.push({ data, id }), fetch() {},
@@ -41,6 +42,7 @@ context.RNAssistantNavigationPane = { mount(options, adapter) { options.more.add
 context.RNAssistantActionMenu = { open: (anchor, commands) => menus.push(commands) };
 context.RNAssistantNavigationTree = { icon: () => "" };
 context.RNAssistantIcons = { render: () => "" };
+context.RNAssistantHtmlWorkspaceSurface = { isDirty: () => !!context.state.htmlWorkspaceDirty };
 context.window = context;
 vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-artifact-catalog.js"), "utf8"), context);
 const flush = () => new Promise(resolve => setImmediate(resolve));
@@ -78,7 +80,7 @@ const itemUri = answer().items[0].resourceUri;
   assert.equal(deletion.payload.resourceUri, itemUri); assert.equal(deletion.payload.expectedSessionRevision, 8); assert.equal(deletion.payload.confirmed, true);
   deletion.resolve({ activeChatId: "b" }); await flush();
   requests.shift().resolve({ ...answer("b", 9), items: [] }); await flush();
-  assert.equal(tree().length, 0); assert.equal(elements.artifactCatalogActions.hidden, true);
+  assert.equal(tree().length, 0); assert.equal(elements.artifactCatalogOverviewEmpty.hidden, false);
   context.RNAssistantArtifactCatalog.show(); requests.shift().resolve({ ...answer("b", 9), nextCursor: "page2" }); await flush();
   elements.artifactCatalogMore.click(); assert.equal(requests[0].payload.cursor, "page2");
   const second = { ...answer("b", 9).items[0], title: "Second", resourceUri: itemUri.replace("_a_", "_b_") };
@@ -91,7 +93,8 @@ const itemUri = answer().items[0].resourceUri;
     "a linked material exposes one action menu");
   context.RNAssistantArtifactCatalog.treeAction("menu", itemUri, new Element("button"));
   assert.equal(menus.at(-1).filter(command => command.label === "Убрать из чата").length, 1);
-  assert.equal(menus.at(-1).filter(command => command.label === "Удалить из документа…").length, 1);
+  assert.equal(menus.at(-1).filter(command => command.label === "Удалить из документа…").length, 0);
+  assert.equal(tree()[0].children[0].children[0].deletable, true, "the material row owns the inline delete action");
   const unlink = context.RNAssistantArtifactCatalog.treeAction("detach", itemUri);
   const detachment = requests.shift();
   assert.equal(detachment.type, "changeArtifactLink");

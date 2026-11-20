@@ -134,8 +134,12 @@
     return open(state.activeChatId, { selection: { type: type, id: id }, mode: "edit" });
   }
   function deleteHtmlWorkspaceTreeItem(type, id) {
-    if (!open(state.activeChatId)) return;
-    var editor = view(state.activeChatId); editor.ready().then(function (loaded) { if (loaded) editor.remove(type, id); });
+    var chatId = state.activeChatId;
+    if (!open(chatId)) return;
+    var editor = view(chatId);
+    return editor.ready().then(function (loaded) {
+      if (loaded && chatId === state.activeChatId) return editor.remove(type, id);
+    });
   }
   function renderHtmlWorkspace() {
     if (typeof isPanelActive === "function" && !isPanelActive("artifacts")) return;

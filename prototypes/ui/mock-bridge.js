@@ -423,6 +423,19 @@
       results: results, library: skillLibrary() };
   }
 
+  async function deletePreviewTool(payload) {
+    var body = await uploadedBody(payload), mutation = body.mutations && body.mutations[0];
+    if (body.type !== "rnassistant.toolLibraryMutationRequest" || body.contractVersion !== 1 ||
+        !Array.isArray(body.mutations) || body.mutations.length !== 1 || mutation.kind !== "delete")
+      fail("Операция записи инструмента недоступна в этом примере.", "preview_mutation_invalid");
+    if (!tool || tool.builtIn || mutation.baseId !== tool.id || mutation.expectedRevision !== tool.revision)
+      fail("Инструмент изменился перед удалением.", "preview_revision_changed");
+    var result = mutationResult(mutation, tool.revision, "");
+    result.type = "rnassistant.toolMutationResult";
+    tool = null;
+    return { type: "rnassistant.toolLibraryMutationResult", contractVersion: 1, results: [result], library: toolLibrary() };
+  }
+
   async function saveSkillReference(payload) {
     var body = await uploadedBody(payload);
     if (body.type !== "rnassistant.skillReferenceRequest" || body.contractVersion !== 1 ||
@@ -1203,17 +1216,18 @@
           revision: selectedSkill.revision },
         reference: selectedReference ? clone(selectedReference) : null, totalCharacters: selectedText.length, data: data };
     }
-    if (type === "resourceDataClose" || type === "closeArtifactTransfer" || type === "cancelSkillMutationUpload") {
+    if (type === "resourceDataClose" || type === "closeArtifactTransfer" || type === "cancelSkillMutationUpload" || type === "cancelToolMutationUpload") {
       delete downloads[payload.leaseId]; delete viewerBatches[payload.leaseId]; delete uploads[payload.leaseId];
       return { closed: true };
     }
-    if (type === "beginSkillMutationUpload") {
+    if (type === "beginSkillMutationUpload" || type === "beginToolMutationUpload") {
       requireChat(payload);
       var id = leaseId(); uploads[id] = { byteLength: payload.byteLength, bytes: new Uint8Array(0) };
       return { leaseId: id, byteLength: payload.byteLength,
         url: "https://rnassistant.local-resource/v1/upload/" + id, maxChunkBytes: 65536 };
     }
     if (type === "saveSkills") return saveSkills(payload);
+    if (type === "saveTools") return deletePreviewTool(payload);
     if (type === "saveSkillReference") return saveSkillReference(payload);
     if (type === "deleteSkillReference") return deleteSkillReference(payload);
     if (type === "saveSettings") {

@@ -1,32 +1,27 @@
 (function () {
   'use strict';
-  var names = { core: 'Core', resources: 'Ресурсы', skills: 'Навыки', tools: 'Инструменты',
+  var names = { core: 'Основные', common: 'Общие', resources: 'Ресурсы', skills: 'Навыки', tools: 'Инструменты',
     excel: 'Excel', word: 'Word', powerpoint: 'PowerPoint', outlook: 'Outlook', html: 'HTML',
     plugins: 'Плагины', workspace: 'Проекты', web: 'Web', office: 'Office',
     plan: 'Планы', task: 'Задачи', prompts: 'Инструкции', chat: 'Чаты' };
-  function path(id, kind) {
-    var parts = String(id || '').split('.').filter(Boolean);
-    if (kind === 'skills' && parts[0] === 'skills') parts.shift();
-    parts.pop();
-    return [parts.length ? parts[0] : 'other'];
-  }
   function category(id) {
-    var key = path(id)[0]; return { key: key, title: names[key] || key };
+    var parts = String(id || '').split('.').filter(Boolean);
+    var key = parts.length > 1 ? parts[0] : 'other';
+    return { key: key, title: names[key] || key };
   }
   function tree(rows, kind, leaf, expanded) {
     var root = { children: [], groups: Object.create(null) };
     rows.forEach(function (row) {
-      var node = root, prefix = 'library:' + kind;
-      path((row.value || {}).Id, kind).forEach(function (part) {
-        prefix += ':' + part;
-        if (!node.groups[part]) {
-          var group = { key: prefix, kind: 'group', title: names[part] || part,
-            expanded: expanded(prefix), children: [], groups: Object.create(null) };
-          node.groups[part] = group; node.children.push(group);
-        }
-        node = node.groups[part];
-      });
-      node.children.push(leaf(row));
+      var value = row.value || {};
+      var host = value.Host || "Common";
+      var part = kind === 'skills' ? host.toLowerCase() : category(value.Id).key;
+      var key = 'library:' + kind + ':' + part;
+      if (!root.groups[part]) {
+        var group = { key: key, kind: 'group', title: names[part] || (kind === 'skills' ? host : part),
+          expanded: expanded(key), children: [], groups: Object.create(null) };
+        root.groups[part] = group; root.children.push(group);
+      }
+      root.groups[part].children.push(leaf(row));
     });
     function sort(node) {
       node.children.sort(function (a, b) {
@@ -40,5 +35,5 @@
     }
     sort(root); return root.children;
   }
-  window.RNAssistantLibraryGroups = { category: category, path: path, tree: tree };
+  window.RNAssistantLibraryGroups = { category: category, tree: tree };
 }());

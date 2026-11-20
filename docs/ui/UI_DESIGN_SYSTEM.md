@@ -16,14 +16,16 @@
 
 ## Tree row actions — In Review, 2026-11-19
 
-`NavigationTree` shows the right-aligned actions on hover, keyboard focus, and
+`NavigationTree` shows the right-aligned actions on hover, row focus, and
 while a menu or confirmation is open. The action strip and its buttons are
 transparent. Project order is `+`, open, delete, `…`;
 chat order is delete, `…`. Label padding is derived from the current action count so
 text ends before the overlay instead of being painted underneath it. Action dimensions
 use the existing shell control/group tokens, 1 px action gaps and the common row radius.
-A destructive action's first click applies the shared confirming state and check icon;
-the second click executes it. No screen-specific sizes are copied into adapters.
+A destructive action's first click changes the trash glyph to a checkmark.
+The second click executes it. The checkmark uses the danger color and the
+same transparent surface as the other row actions across all trees.
+No screen-specific sizes are copied into adapters.
 The common Chat View places its compact folder button before the document or project name.
 
 ## Prepared replacement diff — In Review, 2026-11-19
