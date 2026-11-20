@@ -52,8 +52,8 @@
           var locator = item.displayLocator; closeCompletion(); invoke(function () { return owner.navigate(locator); }); };
         completion.appendChild(option);
       });
-      var changed = completion.hidden !== !suggestions.length; completion.hidden = !suggestions.length;
-      address.setAttribute("aria-expanded", String(!!suggestions.length)); if (changed) overlayChanged();
+      var wasOpen = !completion.hidden; completion.hidden = !suggestions.length;
+      address.setAttribute("aria-expanded", String(!completion.hidden)); if (wasOpen || !completion.hidden) overlayChanged();
     }
     function requestSuggestions(prefix, immediate) {
       var owner = presentation;
@@ -239,7 +239,6 @@
     }
     function closeMenus() { RNAssistantActionMenu.closeWithin(bar); RNAssistantActionMenu.closeWithin(actions); }
     return { actions: actions, discussButton: discuss, refresh: refresh, status: setStatus,
-      annotationButton: function () { return annotate; },
       canHome: function () { return !!(presentation && presentation.home); },
       goHome: function () { if (presentation && presentation.home) return presentation.home(); },
       setAnnotation: function (button) { annotate.replaceWith(button); annotate = button; button.classList.add("icon-btn", "compact", "preview-surface-annotation"); },

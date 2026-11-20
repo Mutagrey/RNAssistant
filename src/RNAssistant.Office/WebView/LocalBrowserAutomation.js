@@ -216,7 +216,7 @@
   function authored(node) { return !(node.nodeType === 1 ? node : node.parentElement)?.closest('[data-rna-browser-action-view],[data-rna-visual-highlight],[data-rna-visual-tooltip]'); }
   new MutationObserver(function (changes) {
     if (changes.some(function (value) {
-      return value.type === 'childList' ? Array.from(value.addedNodes).concat(Array.from(value.removedNodes)).some(authored) : authored(value.target);
+      return authored(value.target) && (value.type !== 'childList' || [...value.addedNodes, ...value.removedNodes].some(authored));
     })) changed();
   }).observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['class', 'style', 'hidden', 'src', 'width', 'height'] });
   addEventListener('scroll', changed, true); addEventListener('resize', changed);

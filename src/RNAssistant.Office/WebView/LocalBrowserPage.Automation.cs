@@ -16,6 +16,7 @@ namespace RNAssistant.Office.WebView
     {
         internal bool InputAvailable { get; set; }
         private bool _geometryObserver;
+        internal event Action ViewportChanged;
         private sealed class BindingCall { public string name { get; set; } public string payload { get; set; } public int executionContextId { get; set; } }
         private int _world;
         private string _observationRevision, _observationId, _preparationId;
@@ -58,7 +59,7 @@ namespace RNAssistant.Office.WebView
                         if (call == null || call.executionContextId != _world) return;
                         if (call.name == "__rnaVisualEvent") { AcceptVisual(call.payload); return; }
                         if (call.name != "__rnaViewportChanged") return;
-                        State.ViewportRevision++; _observationId = _observationRevision = null; _mediaCapture = null; Publish();
+                        State.ViewportRevision++; _observationId = _observationRevision = null; _mediaCapture = null; ViewportChanged?.Invoke();
                     } catch { }
                 };
                 await Core.CallDevToolsProtocolMethodAsync("Runtime.addBinding", "{\"name\":\"__rnaViewportChanged\",\"executionContextName\":\"RNAssistantLocal\"}");
@@ -90,7 +91,7 @@ namespace RNAssistant.Office.WebView
                 "browser_effect_unknown", false);
             if (!InputAvailable || !Ready || _closed) throw new ResourceRequestException("Browser input is unavailable for the current page. Reopen the exact page before acting.",
                 "browser_execution_unavailable", false);
-            if (!Control.Visible) throw new ResourceRequestException("The Browser page is hidden. Show the exact page before acting.",
+            if (!HasUnobstructedViewport) throw new ResourceRequestException("The Browser page is hidden or covered. Show the exact page before acting.",
                 "browser_page_unavailable", false);
             if (State.ManualControl) throw new ResourceRequestException("The user controls this page. Wait for explicit Resume agent; do not retry browser actions.",
                 "browser_user_control", false);

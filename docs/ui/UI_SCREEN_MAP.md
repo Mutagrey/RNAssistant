@@ -74,9 +74,8 @@ Browser держит back/forward/reload, сжимаемый адрес, реж�
 статус «Открытие страницы…»; он скрывается только принятым `Ready` snapshot.
 
 Меню версий открывается сразу и сначала показывает «Обновление версий…», затем
-актуальные действия и историю. Закрытие любого portalled-меню принудительно
-пересчитывает видимость точного native viewport, поэтому HTML не остаётся скрытым
-после отмены или выбора пункта.
+актуальные действия и историю. Меню «…» и подсказки адреса перекрывают только свою
+область. Остальная страница видна. Escape возвращает полный просмотр.
 
 ## Отмена активного запроса — In Review, 2026-11-18
 
@@ -95,9 +94,10 @@ Terminal diagnostic того же run не дублирует её отдель�
 Material and Browser objects use the same shell: optional left navigation, one header,
 format/provider controls, expandable search and common actions, a full-bleed content
 slot, and a bottom status bar. Ordinary materials show a one-line title; Browser uses
-its address as identity and does not duplicate a title/meta block. In source mode the
-Browser file list lives in the shared left sidebar as a directory tree; the active file
-is selected there and no selector is duplicated above the source. Artifact and Browser
+its address as identity. The same left-side file tree opens from «Страница» and
+«Исходник». The tree starts collapsed. In Preview it highlights the live page, and
+choosing a file shows that file in Source. The heading button opens the project folder
+or the containing folder of the document linked to the material. Artifact and Browser
 versions share one menu: save, history and apply are actions inside it. Download remains
 a visible material action. One `…` owns copy-link/reload, home, project, export,
 compare, screenshot, edit-source and catalog commands; search is not duplicated in that
@@ -342,9 +342,9 @@ read private values. Navigation/source mode/hiding closes the row and clears hig
 
 ## Native element annotations — In Review, 2026-11-13
 
-All local HTML Browser pages expose the shared selection button when bound to a chat:
-document HTML, a separate HTML resource, ordinary Workspace projects and plugins,
-including working and saved pages.
+Local HTML Browser pages use the same selection button for documents, separate HTML
+resources, Workspace projects and plugin working or saved pages. Clicking it in Source
+opens Preview. For an unbound page, choose a chat in the source project to begin selecting.
 Select an element → enter a comment → «Готово» adds an attachment to the source chat's
 existing draft. «На странице» reveals an annotation only in an open exact-source
 Browser with the exact saved entry; equal bytes in another version do not qualify.

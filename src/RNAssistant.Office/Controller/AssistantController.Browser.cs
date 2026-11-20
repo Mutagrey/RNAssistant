@@ -109,9 +109,9 @@ namespace RNAssistant.Office
                     path => snapshot.Files.Single(file => file.Path == path).Content);
             }
             if (!BrowserTargetResolver.IsHtmlResource(artifact)) throw new InvalidOperationException("Источник не является HTML.");
-            var text = new UTF8Encoding(false, true).GetString(_toolExecutor.Payloads.ReadBytes(
-                new PayloadRef(artifact.ContentSha256, artifact.ContentByteLength ?? -1, artifact.MimeType).ToBlobReference()));
-            return BrowserSourceReader.Read(target, request, new[] { "index.html" }, path => text);
+            return BrowserSourceReader.Read(target, request, new[] { "index.html" }, path =>
+                new UTF8Encoding(false, true).GetString(_toolExecutor.Payloads.ReadBytes(
+                    new PayloadRef(artifact.ContentSha256, artifact.ContentByteLength ?? -1, artifact.MimeType).ToBlobReference())));
         }
 
         internal IReadOnlyList<BrowserTargetDescriptor> BrowserTargets(BrowserOwnerScope owner, string suggestionsPrefix = null, int? suggestionsLimit = null)

@@ -67,7 +67,9 @@ namespace RNAssistant.Office.WebView
             if (value.Watches?.Length > 100 || value.Watches?.Any(item => item == null || item.Id == null || item.Id.Length > 128 ||
                 item.Selector == null || item.Selector.Length > 1024 || item.Tag == null || item.Tag.Length > 32 || item.StableUiId?.Length > 128) == true || value.Id?.Length > 128)
                 throw new InvalidOperationException("Выделение превышает допустимые границы.");
-            Content.Validate();
+            await Task.Run(Content.Validate, _cancel.Token);
+            if (!Ready || value.Generation != State.DocumentGeneration)
+                throw new InvalidOperationException("Страница выделения изменилась. Выберите элемент заново.");
             if (value.Operation == BrowserVisualOperation.Activate || value.Operation == BrowserVisualOperation.Find && value.Find.Query.Length > 0) PhysicalInput();
             await Evaluate<bool>("__rnaVisualControl(" + JsonConvert.SerializeObject(value) + ");true");
         }

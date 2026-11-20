@@ -38,7 +38,7 @@
       var target = context.target(); if (!target || target.state !== "Ready") return;
       var caps = target.capabilities, copy = operation(target), items = [];
       if (context.compact && context.compact()) {
-        if (context.annotate && target.capabilities.annotations) items.push({ label: "Аннотировать страницу", icon: "selection", onSelect: context.annotate });
+        if (context.canAnnotate && context.canAnnotate()) items.push({ label: "Аннотировать страницу", icon: "selection", onSelect: function () { context.annotate(more); } });
         if (context.discuss) items.push({ label: "Обсудить в чате рядом", icon: "chat", onSelect: context.discuss });
         if (items.length) items.push({ separator: true });
       }

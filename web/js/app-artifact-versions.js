@@ -199,7 +199,9 @@
       await load(null);
     };
     controls();
-    return { refresh: refresh, reset: function () { epoch++; state = null; chosen = null; pending = null; loadingState = false; loadingRows = false; stateError = ""; if (menu) menu.close(); controls(); },
+    return { refreshOpen: function () { if (menu && menu.isOpen()) return refresh(); },
+      checkSavedSelection: function () { var value = target(); if (value && value.savedVersionId && value.state === "Ready") return refresh(); },
+      reset: function () { epoch++; state = null; chosen = null; pending = null; loadingState = false; loadingRows = false; stateError = ""; if (menu) menu.close(); controls(); },
       deactivate: function () { epoch++; if (menu) menu.close(); }, dispose: function () { disposed = true; epoch++; if (menu) menu.close(); versions.remove(); } };
   }
   window.RNAssistantArtifactVersions = { append: append, mountBrowser: mountBrowser };

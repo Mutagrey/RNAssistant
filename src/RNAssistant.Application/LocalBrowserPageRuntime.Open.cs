@@ -171,7 +171,7 @@ namespace RNAssistant.Application
                         operation.Unknown = current.Status != BrowserPageStatus.Closed;
                         operation.Completion.TrySetException(new InvalidOperationException("Browser closed or changed before attachment."));
                     } else if (request?.Action == BrowserCommandKind.Attach && request.OperationId == entry.Key &&
-                        MatchesAttachment(operation, state) && current.Attached && request.Bounds?.Visible == true &&
+                        MatchesAttachment(operation, state) && current.Attached && request.Bounds?.Unobstructed == true &&
                         (_renderer == null || current.Status == BrowserPageStatus.Ready && request.NativeAttachmentVisible)) {
                         var receipt = Copy(current); receipt.OperationId = entry.Key;
                         operation.Completion.TrySetResult(receipt);

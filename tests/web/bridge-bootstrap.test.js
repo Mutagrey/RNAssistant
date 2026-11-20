@@ -76,7 +76,7 @@ function installRestoredBrowserStartup(fixture) {
       style: {}, textContent: "", hidden: false, isConnected: true,
       setAttribute: noop, append: noop, appendChild: noop, replaceChildren: noop, remove: noop,
       addEventListener: noop, querySelector: () => null, contains: () => false,
-      getBoundingClientRect: () => ({ x: 0, y: 0, width: 800, height: 600 }) };
+      getBoundingClientRect: () => ({ left: 0, top: 0, right: 800, bottom: 600, width: 800, height: 600 }) };
   }
   const shell = element(), pluginStatus = element();
   context.document.body = element();
@@ -92,13 +92,16 @@ function installRestoredBrowserStartup(fixture) {
   context.ResizeObserver = context.MutationObserver = class { observe() {} disconnect() {} };
   context.crypto = { randomUUID: () => "startup-operation" };
   context.innerWidth = 1280; context.innerHeight = 900;
+  context.getComputedStyle = () => ({ visibility: "visible" });
   const lifecycle = () => ({ activate: noop, deactivate: noop, dispose: noop, update: noop,
     refresh: noop, reset: noop, layout: noop, busy: () => false });
   context.RNAssistantViewerRegistry = { mount: lifecycle, unmount: noop };
+  context.RNAssistantIcons = { render: () => "" };
+  context.RNAssistantNavigationTree = { render: noop, unmount: noop };
   context.RNAssistantMaterialSurface = { create: () => {
     const content = element();
     return { element: element(), content, workspace: content, setProviderToolbar: noop, setSearch: noop,
-      setTitle: noop, setStatus: noop, setStatusMeta: noop, setCommonActions: noop, destroy: noop };
+      setTitle: noop, setStatus: noop, setStatusMeta: noop, setCommonActions: noop, setNavigation: noop, setNavigationAvailability: noop, destroy: noop };
   } };
   context.RNAssistantPreviewSurface = { attach: () => ({ actions: element(), discussButton: element(),
     status: noop, waiting: noop, collapse: noop, clear: noop, setDocument: noop,
@@ -107,7 +110,7 @@ function installRestoredBrowserStartup(fixture) {
   context.RNAssistantBrowserFind = { create: lifecycle };
   context.RNAssistantBrowserActions = { mount: lifecycle };
   context.RNAssistantArtifactVersions = { mountBrowser: () => Object.assign(lifecycle(), {
-    refresh: () => { versionRefreshes += 1; }
+    refreshOpen: () => { versionRefreshes += 1; }, checkSavedSelection: noop
   }) };
   context.RNAssistantBrowserTarget = { preferenceLocator: value => value };
   context.RNAssistantDockWorkspace = { registerView(name, descriptor) { if (name === "browser") browserDescriptor = descriptor; },

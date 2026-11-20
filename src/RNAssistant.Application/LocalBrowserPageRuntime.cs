@@ -47,7 +47,10 @@ namespace RNAssistant.Application
         private async Task<BrowserPageStateDto> DeliverAsync(BrowserCommandPayload request, CancellationToken token, BrowserResolveResult opening = null)
         {
             if (request != null) { request.NativeHistoryEntryId = null; request.NativeLocator = null; request.NativeAttachmentVisible = false; }
-            var result = await ExecuteCoreAsync(request, token, opening).ConfigureAwait(false);
+            // Source resolution can wait for a package or journal read. Queue it after
+            // command admission so the caller's UI is free and command order is preserved.
+            var result = opening != null ? ExecuteCore(request, token, opening) :
+                await Task.Run(() => ExecuteCore(request, token, null), token).ConfigureAwait(false);
             if (_renderer != null) {
                 lock (_sync) {
                     Page page;
@@ -71,7 +74,7 @@ namespace RNAssistant.Application
             ObserveAgentOpens(request, result);
             _publish?.Invoke(Copy(result));
             if (request.Action == BrowserCommandKind.Attach)
-                result.VisibleAttachment = result.Attached && request.Bounds?.Visible == true && (_renderer == null || request.NativeAttachmentVisible);
+                result.VisibleAttachment = result.Attached && request.Bounds?.Unobstructed == true && (_renderer == null || request.NativeAttachmentVisible);
             return Copy(result);
         }
         private void NativeChanged(BrowserPageStateDto state)
@@ -84,7 +87,7 @@ namespace RNAssistant.Application
             }
             ObserveAgentOpens(null, value); _publish?.Invoke(Copy(value));
         }
-        private Task<BrowserPageStateDto> ExecuteCoreAsync(BrowserCommandPayload request, CancellationToken token, BrowserResolveResult opening)
+        private BrowserPageStateDto ExecuteCore(BrowserCommandPayload request, CancellationToken token, BrowserResolveResult opening)
         {
             token.ThrowIfCancellationRequested();
             BrowserPageStateDto result;
@@ -106,7 +109,7 @@ namespace RNAssistant.Application
                     if (_operations.TryGetValue(request.OperationId, out page))
                     {
                         if (page.OpenKey != openKey) throw new InvalidOperationException("Операция открытия уже принадлежит другой цели.");
-                        return Task.FromResult(Copy(page.State));
+                        return Copy(page.State);
                     }
                     if (_pages.ContainsKey(request.BrowserTabId)) throw new InvalidOperationException("Вкладка уже открыта; используйте её текущую session.");
                     if (_pages.Count >= 16) throw new InvalidOperationException("Открыто 16 страниц. Закройте одну перед открытием новой.");
@@ -182,7 +185,7 @@ namespace RNAssistant.Application
                             _pages.Remove(request.BrowserTabId); ReleasePage(page); break;
                         case BrowserCommandKind.Layout:
                             if (!ValidBounds(request.Bounds)) throw new InvalidOperationException("Некорректная геометрия Browser.");
-                            if (!SameBounds(page.Bounds, request.Bounds)) { page.State.ViewportRevision++; page.Bounds = request.Bounds; }
+                            if (page.Bounds?.Matches(request.Bounds) != true) { page.State.ViewportRevision++; page.Bounds = request.Bounds; }
                             break;
                         case BrowserCommandKind.Focus: case BrowserCommandKind.Stop: break;
                         case BrowserCommandKind.VisualControl: case BrowserCommandKind.ResumeAgent: if (_renderer == null) throw Unavailable(); break;
@@ -192,7 +195,7 @@ namespace RNAssistant.Application
                 }
                 result = Copy(page.State);
             }
-            return Task.FromResult(result);
+            return result;
         }
         private void Navigate(Page page, BrowserOwnerScope owner, string locator, bool append, BrowserResolveResult resolved = null)
         {
@@ -284,14 +287,15 @@ namespace RNAssistant.Application
         public static bool ValidBounds(BrowserBoundsDto bounds)
         {
             if (bounds == null) return false;
-            if (!bounds.Visible) return true;
+            if (!bounds.Visible) return bounds.Cutouts == null || bounds.Cutouts.Length == 0;
             var values = new[] { bounds.X, bounds.Y, bounds.Width, bounds.Height, bounds.ViewportWidth, bounds.ViewportHeight };
             return values.All(value => !double.IsNaN(value) && !double.IsInfinity(value) && value >= 0 && value <= 32768) &&
                 bounds.Width >= 1 && bounds.Height >= 1 && bounds.ViewportWidth >= 1 && bounds.ViewportHeight >= 1 &&
-                bounds.X + bounds.Width <= bounds.ViewportWidth + 1 && bounds.Y + bounds.Height <= bounds.ViewportHeight + 1;
+                bounds.X + bounds.Width <= bounds.ViewportWidth + 1 && bounds.Y + bounds.Height <= bounds.ViewportHeight + 1 &&
+                (bounds.Cutouts == null || bounds.Cutouts.Length <= 3 && bounds.Cutouts.All(cutout => cutout != null &&
+                    cutout.X >= bounds.X && cutout.Y >= bounds.Y && cutout.Width > 0 && cutout.Height > 0 &&
+                    cutout.X + cutout.Width <= bounds.X + bounds.Width + 1 && cutout.Y + cutout.Height <= bounds.Y + bounds.Height + 1));
         }
-        private static bool SameBounds(BrowserBoundsDto a, BrowserBoundsDto b) => a != null && a.Visible == b.Visible && a.X == b.X && a.Y == b.Y &&
-            a.Width == b.Width && a.Height == b.Height && a.ViewportWidth == b.ViewportWidth && a.ViewportHeight == b.ViewportHeight;
         private static BrowserPageStateDto Copy(BrowserPageStateDto value)
         {
             var copy = Newtonsoft.Json.JsonConvert.DeserializeObject<BrowserPageStateDto>(Newtonsoft.Json.JsonConvert.SerializeObject(value));

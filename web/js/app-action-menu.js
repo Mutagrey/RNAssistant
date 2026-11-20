@@ -82,7 +82,6 @@
     }
     render(items);
     document.body.appendChild(popup); trigger.setAttribute("aria-expanded", "true");
-    overlayChanged();
     function position() {
       var rect = trigger.getBoundingClientRect(), styles = getComputedStyle(menu);
       var scale = menu.getBoundingClientRect().width / menu.offsetWidth || 1;
@@ -98,10 +97,11 @@
       menu.style.top = Math.max(inset, Math.min(top, innerHeight - bounds.height - inset)) / scale + "px";
     }
     position();
+    overlayChanged();
     var first = popup.querySelector("button:not(:disabled)");
     if (first) first.focus({ preventScroll: !!point });
     else if (options.role === "dialog" || point) popup.focus({ preventScroll: !!point });
-    return { update: function (values) { if (popup === menu) { render(values); position(); } },
+    return { update: function (values) { if (popup === menu) { render(values); position(); overlayChanged(); } },
       close: function () { if (popup === menu) closePopup(false); },
       isOpen: function () { return popup === menu; } };
   }
@@ -166,6 +166,7 @@
     } else if (event.key === "Escape") closeAll();
   });
   window.addEventListener("resize", function () { closePopup(false); });
+  window.addEventListener("blur", function () { closePopup(false); });
   window.addEventListener("pagehide", function () { closePopup(false); });
 
   var presets = {

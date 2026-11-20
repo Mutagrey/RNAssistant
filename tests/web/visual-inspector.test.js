@@ -21,6 +21,7 @@ const { chromium } = require('playwright');
     await host.evaluate(()=>{ document.documentElement.style.setProperty('--accent','#3A63F2');document.documentElement.style.setProperty('--accent-ink','#FFFFFF');
       window.inspector=RNAssistantVisualInspector.createHost({frame:document.getElementById('viewport'),button:document.getElementById('toggle'),status:document.getElementById('status'),send:nativeControl,
         onSelectionChanged:value=>window.selected=value,onLocations:values=>window.locations=values,onReveal:value=>window.revealed=value}); });
+    await evaluate('globalThis.viewportEvents=0;globalThis.__rnaViewportChanged=()=>viewportEvents++;true');
     await evaluate(await fs.readFile('src/RNAssistant.Office/WebView/LocalBrowserAutomation.js','utf8'));
     await evaluate(await fs.readFile('web/js/app-visual-inspector.js','utf8'));
     await evaluate('RNAssistantVisualInspector.install(1,value=>__rnaVisualEvent(JSON.stringify(value)));true');
@@ -30,11 +31,26 @@ const { chromium } = require('playwright');
     await content.locator('#card').hover({position:{x:2,y:2}});
     const highlight=await content.locator('[data-rna-visual-highlight]').evaluate(node=>({pointer:getComputedStyle(node).pointerEvents,color:getComputedStyle(node).borderTopColor}));
     assert.deepEqual(highlight,{pointer:'none',color:'rgb(58, 99, 242)'});
+    async function idleFrames() {
+      await content.evaluate(async()=>{for(let i=0;i<8;i++)await new Promise(resolve=>requestAnimationFrame(resolve));});
+    }
+    await idleFrames();
+    const beforeIdle=await evaluate('viewportEvents');
+    await idleFrames();
+    assert.equal(await evaluate('viewportEvents'),beforeIdle,'an idle highlight does not invalidate the viewport every frame');
     await content.locator('#card').click({position:{x:2,y:2}});await host.waitForFunction(()=>selected===true);
     const selection=await host.evaluate(()=>inspector.selectionRecord());
     assert.equal(selection.generation,1);assert.equal(selection.selection.stableUiId,'card');assert.doesNotMatch(JSON.stringify(selection),/private-password|private editable|private descendant/);
     await content.locator('#action').click();await host.waitForFunction(()=>inspector.selection().tag==='button');assert.equal(await content.locator('#count').textContent(),'1','inspection never clicks the application');
     await host.evaluate(()=>inspector.watch([{id:'draft',selector:'#action',tag:'button',stableUiId:''}]));await host.waitForFunction(()=>window.locations?.[0]?.status==='visible');
+    await idleFrames();
+    const locationsBefore=events.filter(event=>event.locations).length;
+    await idleFrames();
+    assert.equal(events.filter(event=>event.locations).length,locationsBefore,'watching an annotation also settles on an idle highlight');
+    const originalX=await host.evaluate(()=>window.locations[0].rect.x);
+    await content.locator('#action').evaluate(node=>{node.style.marginLeft='40px';});
+    await host.waitForFunction(x=>window.locations?.[0]?.rect?.x===x+40,originalX);
+    assert.ok(await evaluate('viewportEvents')>beforeIdle,'authored layout changes still invalidate the viewport');
     await content.evaluate(()=>scrollTo(0,700));await host.waitForFunction(()=>window.locations?.[0]?.status==='outside');
     await host.evaluate(()=>inspector.reveal('draft'));await host.waitForFunction(()=>window.revealed?.found===true && window.locations?.[0]?.status==='visible');
     await content.evaluate(()=>{const p=document.createElement('p');p.textContent='Run again';document.body.appendChild(p);});

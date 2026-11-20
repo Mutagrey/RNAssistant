@@ -683,7 +683,7 @@ namespace RNAssistant.Office.WebView
                         responsePayload = _controller.GetSettings();
                         break;
                     case BridgeOperationId.ResolveLocalLocator:
-                        responsePayload = ResolveBrowserLocator(Payload<BrowserResolveRequest>(payload));
+                        responsePayload = await RunBridgeWorkAsync(() => ResolveBrowserLocator(Payload<BrowserResolveRequest>(payload)), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.QueryNavigationSuggestions:
                         responsePayload = await RunBridgeWorkAsync(() => BrowserSuggestions(Payload<BrowserSuggestionRequest>(payload)), cancellationToken).ConfigureAwait(false);
@@ -707,7 +707,7 @@ namespace RNAssistant.Office.WebView
                         responsePayload = await RunBridgeWorkAsync(() => WriteBrowserVersion(Payload<BrowserVersionCommand>(payload), cancellationToken), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.ReadBrowserSource:
-                        responsePayload = BrowserSource(Payload<BrowserSourceRequest>(payload));
+                        responsePayload = await RunBridgeWorkAsync(() => BrowserSource(Payload<BrowserSourceRequest>(payload)), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.GetCasHealth:
                         responsePayload = await RunBridgeWorkAsync(_controller.GetCasHealth, cancellationToken).ConfigureAwait(false);

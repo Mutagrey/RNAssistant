@@ -80,12 +80,15 @@ While the first exact page is still starting, the Browser content slot exposes t
 snapshot. This is presentation feedback only and does not claim that the native renderer
 has loaded.
 
-Native visibility is driven by the existing exact Browser bounds. `ActionMenu` publishes
-one overlay-change event, and `app-browser` requests a final forced `Layout` after close;
-the MutationObserver is restricted to actual dialogs, menus, completions and annotation
-editors that intersect this Browser viewport. Opening an unrelated menu no longer hides
-the page, and the last accepted placement restores the visible native viewport. No new
-registry, store or navigation authority is introduced.
+`app-browser` includes the intersections of the action menu, address completion and
+compact file tree in the exact `Layout`. The native renderer clips those rectangles
+out of its window region and keeps the WebView2 viewport at the same size. Modal
+dialogs and the annotation editor still hide the native page while open. The shared
+overlay signal covers both dismissal and changes in popup size. A native resize or
+host visibility change advances `layoutRevision` so Shell resends the current bounds.
+
+Viewport-only DOM changes invalidate action and capture evidence in the native page
+owner. The working page requests version state when its menu opens.
 
 ## Markdown document structure and MaterialSurface — In Review, 2026-11-17
 
@@ -345,6 +348,11 @@ Typed isolated-world events carry exact source/page generation; callbacks never 
 the selected/active chat as fallback. The editor no longer owns a second inspector or
 annotation transport. Pending comments survive source changes; stale selection cannot
 stage into another page. Native IDs are ephemeral, not durable draft authority.
+
+The Browser annotation button can enter Preview from Source. An unbound plugin uses
+the existing chat chooser with the source project's workspace. Selection starts after
+the accepted binding and the exact page's inspector readiness. The isolated inspector
+and viewport observer ignore mutations of their highlight and tooltip.
 
 ## Common autonomous HTML export — In Review, 2026-11-13
 

@@ -52,8 +52,9 @@ too when the Browser exposes its existing page-find command there. No provider-s
 row, popup or duplicate menu is introduced.
 
 The version menu may show one shared loading row before exact state arrives. ActionMenu
-emits the common overlay-change signal on open/close, allowing native Browser placement
-to hide only for intersecting overlays and force one final visible layout afterwards.
+emits the common overlay-change signal after positioning, resizing and dismissal.
+Menus, address completions and the compact file tree retain their existing geometry
+above the clipped native page.
 The Browser content slot uses the common typography/color tokens for its temporary
 `Starting` status; once `Ready` arrives the native viewport replaces that status.
 
@@ -80,8 +81,9 @@ PanelToggle styling/icon, NavigationTree, `view-switch`, `resource-editor-titleb
 The content always fills its Dockview area; the provider decides document padding and
 scroll. Markdown is frameless with page inset, while text/source and media stay
 edge-to-edge. Sidebar navigation is shared by MD outline, PDF thumbnails and image/
-collection rails; it also contains the Browser source-file tree, grouped by directory
-and shown only in source mode. Crossing into compact width closes it automatically.
+collection rails; it also contains the Browser file tree, grouped by directory and
+available in Preview and Source. The heading uses the shared compact folder button.
+Crossing into compact width closes the tree automatically.
 After a PDF/image rail moves into the sidebar, its page/canvas still owns the full
 remaining content box. A failed-read retry is an error state, not a permanent refresh
 action beside a successfully opened exact material.

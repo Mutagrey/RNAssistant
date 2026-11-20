@@ -8,6 +8,7 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("ownerScope")] public BrowserOwnerScope OwnerScope { get; set; }
         [JsonProperty("locator")] public string Locator { get; set; }
         [JsonProperty("path")] public string Path { get; set; }
+        [JsonProperty("filesOnly")] public bool FilesOnly { get; set; }
         [JsonProperty("offset")] public int Offset { get; set; }
         [JsonProperty("count")] public int Count { get; set; } = 32000;
         [JsonProperty("expectedRevision")] public string ExpectedRevision { get; set; }

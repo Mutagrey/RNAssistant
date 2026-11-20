@@ -99,6 +99,12 @@
       accent = value.accent; accentInk = value.ink;
       if (hovered) show(hovered);
     }
+    function pageChanged(change) {
+      if (overlay?.contains(change.target) || tooltip?.contains(change.target)) return false;
+      return change.type !== "childList" || [...change.addedNodes, ...change.removedNodes].some(function (node) {
+        return node !== overlay && node !== tooltip;
+      });
+    }
     function show(node) {
       hovered = node && node.isConnected ? node : null;
       if (!hovered) {
@@ -134,7 +140,8 @@
       var safe = attributes(hovered), label = hovered.localName.toLowerCase();
       if (safe.id) label += "#" + safe.id.slice(0, 48);
       else if (safe["data-ui-id"]) label += " [" + safe["data-ui-id"].slice(0, 48) + "]";
-      tooltip.textContent = label + "  " + Math.round(rect.width) + " × " + Math.round(rect.height);
+      label += "  " + Math.round(rect.width) + " × " + Math.round(rect.height);
+      if (tooltip.textContent !== label) tooltip.textContent = label;
       tooltip.style.background = accent; tooltip.style.color = accentInk;
       tooltip.style.display = visible ? "block" : "none";
       tooltip.style.left = Math.max(4, Math.min(rect.left, innerWidth - tooltip.offsetWidth - 4)) + "px";
@@ -196,7 +203,8 @@
       document.documentElement.addEventListener("pointerleave", onLeave);
       document.addEventListener("click", onClick, true);
       document.addEventListener("keydown", onKey, true);
-      observer = new MutationObserver(function () {
+      observer = new MutationObserver(function (changes) {
+        if (!changes.some(pageChanged)) return;
         if (selectedNode && !selectedNode.isConnected) {
           selectedNode = null; show(null); emit("invalidated"); return;
         }
@@ -247,7 +255,7 @@
         if (watchObserver) { watchObserver.disconnect(); watchObserver = null; }
         if (watches.length) {
           watchObserver = new MutationObserver(function (changes) {
-            if (changes.some(function (change) { return change.target !== overlay; })) refresh();
+            if (changes.some(pageChanged)) refresh();
           });
           watchObserver.observe(document.documentElement, { childList: true, subtree: true, attributes: true });
         }
@@ -285,7 +293,7 @@
       if (node) {
         node.scrollIntoView({ block: 'nearest', inline: 'nearest' });
         findObserver = new MutationObserver(function (changes) {
-          if (changes.some(function (change) { return change.target !== overlay && change.target !== tooltip && !overlay?.contains(change.target) && !tooltip?.contains(change.target); })) { foundNode = null; show(null); findObserver.disconnect(); findObserver = null; }
+          if (changes.some(pageChanged)) { foundNode = null; show(null); findObserver.disconnect(); findObserver = null; }
         });
         findObserver.observe(document.body, { childList: true, characterData: true, attributes: true, subtree: true });
       }
@@ -320,12 +328,12 @@
         ready = active = activating = false; selected = null; paint(); changed("unavailable"); status.textContent = error.message; });
     }
     function paint() {
-      button.disabled = !ready || typeof options.enabled === "function" && !options.enabled();
+      button.disabled = options.canRequest ? !options.canRequest(ready) : !canToggle();
       button.setAttribute("aria-pressed", active ? "true" : "false");
       if (button.dataset.browserControl === "true" && window.RNAssistantIcons) {
         button.classList.add("browser-annotate");
         button.innerHTML = window.RNAssistantIcons.render("selection");
-        button.setAttribute("aria-label", active ? "Выключить выбор элемента" : "Аннотировать: выбрать элемент");
+        button.setAttribute("aria-label", active ? "Выключить выбор элемента" : options.requestLabel ? options.requestLabel() : "Аннотировать: выбрать элемент");
         button.title = button.getAttribute("aria-label");
       } else {
         button.classList.remove("browser-annotate");
@@ -394,9 +402,10 @@
         (value.stableUiId ? " · " + value.stableUiId.slice(0, 128) : "") +
         (value.textExcerpt ? " · " + value.textExcerpt.slice(0, 80) : "");
     }
-    function onClick() {
-      if (!ready || button.disabled) return;
-      if (activating) { deactivate(); return; }
+    function canToggle() { return ready && (typeof options.enabled !== "function" || options.enabled()); }
+    function toggle() {
+      if (!canToggle()) return false;
+      if (activating) { deactivate(); return true; }
       if (!active) {
         activating = true; control("activate"); paint();
         status.textContent = "Включаем выбор элемента…";
@@ -407,7 +416,9 @@
           status.textContent = "Наведите и нажмите на элемент. Escape — выход.";
         }, 1500);
       } else deactivate();
+      return true;
     }
+    function onClick() { if (!button.disabled) { if (options.onRequest) options.onRequest(); else toggle(); } }
     function deactivate() {
       if (!active && !activating) return;
       if (activationTimer) { clearTimeout(activationTimer); activationTimer = 0; }
@@ -427,7 +438,7 @@
     themeObserver = new MutationObserver(function () { if (ready && active) control("palette"); });
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-accent", "style"] });
     paint();
-    return { reset: reset, deactivate: deactivate, refresh: paint, generation: function () { return generation; },
+    return { reset: reset, toggle: toggle, deactivate: deactivate, refresh: paint, generation: function () { return generation; },
       bind: function (value) { if (value !== generation) { generation = value; ready = active = activating = false; selected = null; paint(); changed("reset"); } control("probe"); },
       receive: function (message) { onMessage({ data: message }); },
       watch: function (items) { var next = Array.isArray(items) ? items.slice(0, 100) : []; if (JSON.stringify(next) === JSON.stringify(watched)) return; watched = next; if (ready) control("watch"); },

@@ -33,7 +33,7 @@ namespace RNAssistant.Office.WebView
         private sealed class PrivacyView { public bool safe { get; set; } public double width { get; set; } public double height { get; set; } public double scale { get; set; } public long epoch { get; set; } }
         internal async Task<BrowserMediaCapture> ReadMediaAsync(CancellationToken token)
         {
-            if (!Ready || !Control.Visible) throw new InvalidOperationException("Only the visible native page viewport can be captured.");
+            if (!Ready || !HasUnobstructedViewport) throw new InvalidOperationException("Only the unobstructed native page viewport can be captured.");
             Content.Validate(); token.ThrowIfCancellationRequested();
             var handle = Handle; var viewport = State.ViewportRevision; var control = State.ControlRevision; var zoom = Controller.ZoomFactor;
             await Evaluate<bool>("__rnaActionView.hide();if(globalThis.__rnaVisualHide)__rnaVisualHide();true");
@@ -48,7 +48,7 @@ namespace RNAssistant.Office.WebView
             await RequireInspectableTree();
             var after = await Evaluate<PrivacyView>("__rnaLocalBrowser.privacy()");
             if (after?.safe != true || !Handle.Matches(handle) || viewport != State.ViewportRevision || control != State.ControlRevision || zoom != Controller.ZoomFactor ||
-                after.epoch != privacy.epoch || after.width != privacy.width || after.height != privacy.height || after.scale != privacy.scale || !Control.Visible)
+                after.epoch != privacy.epoch || after.width != privacy.width || after.height != privacy.height || after.scale != privacy.scale || !HasUnobstructedViewport)
                 throw new InvalidOperationException("The exact native viewport changed during capture.");
             if (png.Length > 4 * 1024 * 1024) throw new InvalidOperationException("Browser capture exceeds 4 MiB.");
             int width, height;

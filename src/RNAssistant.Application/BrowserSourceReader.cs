@@ -21,6 +21,7 @@ namespace RNAssistant.Application
             if (paths.Length > 512) throw new InvalidOperationException("Источник содержит более 512 уникальных файлов.");
             var requestedPath = request.Path ?? target?.RelativePath ?? target?.EntryPath ?? paths[0];
             var path = paths.FirstOrDefault(item => string.Equals(item, requestedPath, StringComparison.OrdinalIgnoreCase));
+            if (request.FilesOnly) return new BrowserSourcePage { Target = target, Files = paths, Path = path, RequestGeneration = request.RequestGeneration };
             if (path == null) throw new InvalidOperationException("Файл не входит в выбранный источник: " + requestedPath);
             var text = read(path);
             if (text == null || text.Length > 4 * 1024 * 1024) throw new InvalidOperationException("Исходник превышает лимит текстового просмотра.");

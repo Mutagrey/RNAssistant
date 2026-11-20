@@ -7,12 +7,20 @@ const {withPreviewPage}=require('./preview-session');
   await page.waitForFunction(()=>state.activeChatId==='preview-chat'&&!state.initializePromise);
   await page.evaluate(async()=>{
     const original=send;
-    window.pluginBrowser={calls:[],pages:new Map(),bad:true};const p=pluginBrowser;
+    window.pluginBrowser={calls:[],pages:new Map(),bad:true,sequence:0};const p=pluginBrowser;
     const plugins=['alpha','beta'].map(pluginId=>({pluginId,name:pluginId,sourceWorkspaceId:'ws-'+pluginId,entryPath:'index.html'}));
+    function visual(value,type,detail={}) { value.visual={type:'rnassistant-visual-inspector-'+type,generation:value.documentGeneration,sequence:++p.sequence,...detail}; }
+    p.selectElement=()=>{
+      const value=[...p.pages.values()].find(v=>v.target.pluginId==='alpha');
+      visual(value,'selected',{selection:{tag:'button',selector:'#run',attributes:{id:'run'},ancestry:[],textExcerpt:'Run',rect:{x:25,y:25,width:100,height:30},viewport:{width:500,height:300,dpr:1}}});
+      value.revision++;RNAssistantBrowser.apply(structuredClone(value));
+    };
     window.send=(type,payload,...rest)=>{
       if(type==='getPlugins')return Promise.resolve({items:plugins});
-      if(!['browserCommand','readBrowserSource','getBrowserVersionState','getBrowserVersions'].includes(type))return original(type,payload,...rest);
+      if(type==='getProjectChats')return Promise.resolve({projects:plugins.map(v=>({workspaceId:v.sourceWorkspaceId,name:v.name,available:true,chats:[{Id:v.pluginId+'-chat',Title:'Чат '+v.name}]}))});
+      if(!['browserCommand','readBrowserSource','getBrowserVersionState','getBrowserVersions','stageBrowserVisualSelection'].includes(type))return original(type,payload,...rest);
       p.calls.push({type,...structuredClone(payload)});
+      if(type==='stageBrowserVisualSelection')return Promise.resolve({resource:{id:'plugin-annotation',kind:'text',fileName:'selection.json',size:500}});
       if(type==='getBrowserVersions')return Promise.resolve({items:[],stateRevision:'1'});
       if(type==='getBrowserVersionState')return Promise.resolve({target:payload.target,stateRevision:'1',contentRevision:p.bad?null:'repaired',capabilities:{saveVersion:!p.bad,saveReason:p.bad?'InvalidContent':'None'}});
       if(type==='readBrowserSource'){
@@ -27,7 +35,19 @@ const {withPreviewPage}=require('./preview-session');
           target:{kind:'PluginSource',state:'Ready',pluginId,workspaceId:scope.scopeId,ownerScope:scope,displayLocator:payload.locator,
             entryPath:'plugin.json',capabilities:{source:true,versions:true,saveVersion:false,saveReason:'InvalidContent'}}};p.pages.set(payload.browserTabId,value);
       }else if(payload.action==='Close'){value.status='Closed';}
-      else if(payload.action==='Reload'){value.documentGeneration++;value.target.capabilities.saveVersion=!p.bad;}
+      else if(payload.action==='Reload'){
+        value.documentGeneration++;value.target.capabilities.saveVersion=!p.bad;
+        if(!p.bad){value.status='Ready';value.target.capabilities.preview=true;value.target.entryPath='index.html';}
+      }
+      else if(payload.action==='Bind'){
+        value.chatBound=true;value.ownerScope=payload.binding;value.target.ownerScope=payload.binding;
+        value.target.capabilities.annotations=true;value.annotationContext={sourceId:'alpha-exact-release',sourceRevision:1};value.documentGeneration++;
+      }
+      else if(payload.action==='VisualControl'){
+        if(payload.visual.generation!==value.documentGeneration)throw new Error('stale generation');
+        if(payload.visual.operation==='probe')visual(value,'ready');
+        if(payload.visual.operation==='activate')visual(value,'activated');
+      }
       else if(payload.action==='Attach')value.attached=true;
       value.revision++;return Promise.resolve(structuredClone(value));
     };
@@ -43,8 +63,10 @@ const {withPreviewPage}=require('./preview-session');
     await item.waitFor();const enabled=await item.isEnabled();await page.keyboard.press('Escape');return enabled;
   }
   await visible().getByText('{ invalid manifest',{exact:false}).waitFor();
+  assert.equal(await page.evaluate(()=>pluginBrowser.calls.filter(c=>c.type==='getBrowserVersionState').length),0,'opening a plugin does not recheck its package for the version menu');
   assert.equal(await visible().locator('iframe').count(),0);
   assert.equal(await saveEnabled(),false);
+  assert.equal(await page.evaluate(()=>pluginBrowser.calls.filter(c=>c.type==='getBrowserVersionState').length),1,'the version menu reads fresh state on demand');
   const first=await visible().getAttribute('data-browser-tab-id');
   await page.evaluate(()=>RNAssistantPlugins.select('beta'));
   await visible().getByText('{ invalid manifest',{exact:false}).waitFor();
@@ -55,7 +77,25 @@ const {withPreviewPage}=require('./preview-session');
   await page.evaluate(()=>{pluginBrowser.bad=false;});
   await visible().getByRole('button',{name:'Обновить предпросмотр',exact:true}).click();
   await visible().getByText('{"name":"repaired"}',{exact:false}).waitFor();
+  assert.equal(await page.evaluate(()=>pluginBrowser.calls.filter(c=>c.type==='getBrowserVersionState').length),1,'switching plugins, returning to a retained tab and reloading need no version capture');
   assert.equal(await saveEnabled(),true);
+  assert.equal(await page.evaluate(()=>pluginBrowser.calls.filter(c=>c.action==='Bind').length),0,'opening the rail never binds a different chat');
+  await visible().getByRole('button',{name:'Аннотировать: выбрать чат',exact:true}).click();
+  await page.getByRole('menu',{name:'Выбрать чат для аннотации'}).getByRole('menuitem',{name:'Чат alpha',exact:true}).click();
+  await visible().getByRole('button',{name:'Выключить выбор элемента',exact:true}).waitFor();
+  assert.equal(await visible().locator('.browser-native-viewport').isVisible(),true,'selection starts in Preview after explicit binding from Source');
+  assert.deepEqual(await page.evaluate(()=>pluginBrowser.calls.find(c=>c.action==='Bind').binding),{kind:'Workspace',scopeId:'ws-alpha',chatId:'alpha-chat'});
+  await page.evaluate(()=>pluginBrowser.selectElement());
+  const annotation=page.getByRole('dialog',{name:'Аннотация 1',exact:true});
+  await annotation.getByRole('textbox').fill('Изменить кнопку');
+  await annotation.getByRole('button',{name:'Готово',exact:true}).click();
+  await annotation.waitFor({state:'detached'});
+  assert.equal(await page.evaluate(()=>RNAssistantChatDrafts.readWorkspace({workspaceId:'ws-alpha',sessionId:'alpha-chat'}).attachments[0].visualAnnotation.comment),'Изменить кнопку');
+  assert.equal(await page.evaluate(()=>pluginBrowser.calls.find(c=>c.type==='stageBrowserVisualSelection').sourceId),'alpha-exact-release');
+  await visible().getByRole('button',{name:'Исходник',exact:true}).click();
+  await visible().getByRole('button',{name:'Аннотировать: выбрать элемент',exact:true}).click();
+  await visible().getByRole('button',{name:'Выключить выбор элемента',exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>pluginBrowser.calls.filter(c=>c.action==='Bind').length),1,'existing binding enters selection directly from Source');
   await page.setViewportSize({width:420,height:760});
   assert.ok(await visible().getByRole('button',{name:'Версии проекта',exact:true}).isVisible());
   await page.evaluate(id=>RNAssistantDockWorkspace.close('browser:'+id),first);

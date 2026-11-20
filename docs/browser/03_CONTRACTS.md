@@ -1,5 +1,18 @@
 # Universal Browser: предлагаемые контракты
 
+## Размещение и дерево файлов — 2026-11-20
+
+`Attach` и `Layout` принимают до трёх `cutouts` в координатах CSS viewport Shell.
+Подсказки адреса, меню действий и раскрытое компактное дерево задают пересечения с
+точной страницей. WinForms применяет их к `Region` дочерней панели. Open receipt,
+скриншот и агентский ввод требуют целиком видимой страницы. Нативный владелец
+инвалидирует медиа и подготовку при изменении viewport, а изменение размещения
+передаёт в Shell через `layoutRevision`.
+
+`readBrowserSource` с `filesOnly` использует те же source/scope проверки и отдаёт
+до 512 имён и выбранный путь. Текст запрашивается при открытии файла. Кнопка папки
+передаёт ID точного проекта или чата документа в существующий `openFolder`.
+
 ## Потеря подтверждения действия — 2026-11-20
 
 Office и Workspace регистрируют мутации Browser у владельца ресурса страницы. После потери подтверждения эффект остаётся `Unknown`, автоматический повтор того же действия заблокирован. Если исход может проверить только пользователь, агент может завершить работу как `partial` или `unable_to_complete` с обычной проверкой evidence. Движение указателя без нажатия сохраняет текущий режим управления. Команда возврата управления проверяет поколение страницы.
@@ -84,9 +97,9 @@ retained file owner without refreshing live bytes. No second annotation store.
 The descriptor also retains the exact `SavedVersionId`. Working and saved entries,
 including v1/v3 with equal bytes, have distinct identities; cross-version reveal
 requires reopening the exact source. No latest/content-only fallback.
-A page without a bound chat requires an explicit chat context; never use active chat
-as fallback. Provider-specific staging DTOs/commands, the old iframe transport and
-editor-owned annotation path are removed.
+A page without a bound chat uses the explicit chooser for the source project.
+Starting from Source brings up the live page after the user chooses the chat.
+The UI waits for the bound generation's inspector before activating selection.
 
 ## Native input admission — F2c3, 2026-11-13
 

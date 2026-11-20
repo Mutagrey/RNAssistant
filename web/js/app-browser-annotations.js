@@ -1,13 +1,13 @@
 (function () {
   "use strict";
   function create(options) {
-    var current = null, bound = 0, sequence = 0, busy = false, disposed = false, annotations;
+    var current = null, bound = 0, sequence = 0, busy = false, disposed = false, annotations, startOn = null;
     var button = document.createElement("button"), status = document.createElement("span");
     button.type = "button"; button.dataset.browserControl = "true"; button.disabled = true;
     status.className = "preview-surface-status"; status.setAttribute("role", "status");
     options.surface.setAnnotation(button); options.root.appendChild(status);
     function address() {
-      var owner = current && current.ownerScope;
+      var owner = current && current.chatBound && current.ownerScope;
       return owner && owner.chatId ? owner.kind === "Document" ? { source: "office", sessionId: owner.chatId } :
         { source: "workspace", workspaceId: owner.scopeId, sessionId: owner.chatId } : null;
     }
@@ -22,10 +22,34 @@
     }
     function updated() { var view = panel(); if (view) view.controls(); if (annotations) annotations.sync(); options.layout(); }
     function notify(message) { if (!disposed) status.textContent = message; }
-    function enabled() { var view = panel(); return !disposed && options.isCurrent() && current && current.status === "Ready" &&
-      current.target.capabilities.annotations && !!address() && !(view && view.snapshot().chatReadOnly); }
+    function readyPage() { return !disposed && options.isCurrent() && current?.status === "Ready" && current.target?.state === "Ready"; }
+    function canSelect() {
+      if (!readyPage() || !current.target.capabilities.annotations || !source() || !address()) return false;
+      var view = panel(); return !(view && view.snapshot().chatReadOnly);
+    }
+    function enabled() { return options.isPreview() && canSelect(); }
+    function canBind() { return readyPage() && !current.chatBound && current.target.capabilities.preview &&
+      ["Workspace", "Document"].includes(current.target.ownerScope?.kind); }
+    function startBound() {
+      var page = startOn; if (!page) return;
+      startOn = null;
+      if (enabled() && page.sessionId === current.sessionId && page.documentGeneration === current.documentGeneration && !inspector.toggle()) startOn = page;
+    }
+    function request(anchor) {
+      if (button.disabled) return;
+      if (!current.chatBound) {
+        options.chooseChat(anchor || button, function (page) {
+          if (!options.isCurrent() || current?.sessionId !== page.sessionId || current.documentGeneration !== page.documentGeneration) return;
+          options.preview(); startOn = page; startBound();
+        });
+        return;
+      }
+      options.preview(); inspector.toggle();
+    }
     var inspector = RNAssistantVisualInspector.createHost({ frame: options.viewport, button: button, status: status,
-      enabled: enabled, send: function (message) { return options.command("VisualControl", { visual: message }); },
+      enabled: enabled, canRequest: function (ready) { return canBind() || ready && canSelect(); }, onRequest: request,
+      requestLabel: function () { return canBind() ? "Аннотировать: выбрать чат" : "Аннотировать: выбрать элемент"; },
+      send: function (message) { return options.command("VisualControl", { visual: message }); },
       onSelectionChanged: function (selected, reason) { if (annotations) annotations.onSelection(selected ? inspector.selectionRecord() : null, reason); options.layout(); },
       onLocations: function (locations) { if (annotations) annotations.onLocations(locations); },
       onReveal: function (result) { if (annotations) annotations.onReveal(result); }
@@ -66,15 +90,16 @@
       reserve: function () { var target = address(); return target.source === "office" ? RNAssistantChatDrafts.reserveOfficeAnnotationNumber(target.sessionId) : RNAssistantChatDrafts.reserveWorkspaceAnnotationNumber(target); },
       openSource: function () { options.focus(); return enabled(); }
     } });
-    return { annotations: annotations, address: address, busy: function () { return busy; },
+    return { annotations: annotations, address: address, busy: function () { return busy; }, request: request,
+      available: function () { return !button.disabled; },
       update: function (value) {
         current = value;
-        if (!enabled()) { inspector.deactivate(); inspector.refresh(); return; }
+        if (!canSelect()) { startOn = null; inspector.deactivate(); inspector.refresh(); return; }
         if (bound !== value.documentGeneration) { bound = value.documentGeneration; sequence = 0; inspector.bind(bound); }
         if (value.visual && value.visual.generation === bound && value.visual.sequence > sequence) { sequence = value.visual.sequence; inspector.receive(value.visual); }
-        inspector.refresh(); annotations.sync();
+        inspector.refresh(); startBound(); if (options.isPreview()) annotations.sync();
       },
-      deactivate: function () { inspector.deactivate(); annotations.collapseEditor(); },
+      deactivate: function () { startOn = null; inspector.deactivate(); annotations.collapseEditor(); },
       dispose: function () { disposed = true; annotations.dispose(); inspector.dispose(); status.remove(); }
     };
   }

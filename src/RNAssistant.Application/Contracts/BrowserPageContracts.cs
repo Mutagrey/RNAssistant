@@ -23,6 +23,29 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("height")] public double Height { get; set; }
         [JsonProperty("viewportWidth")] public double ViewportWidth { get; set; }
         [JsonProperty("viewportHeight")] public double ViewportHeight { get; set; }
+        [JsonProperty("cutouts")] public BrowserCutoutDto[] Cutouts { get; set; }
+        [JsonIgnore] public bool Unobstructed => Visible && (Cutouts == null || Cutouts.Length == 0);
+
+        public bool Matches(BrowserBoundsDto other)
+        {
+            if (other == null || Visible != other.Visible || X != other.X || Y != other.Y || Width != other.Width || Height != other.Height ||
+                ViewportWidth != other.ViewportWidth || ViewportHeight != other.ViewportHeight) return false;
+            var count = Cutouts?.Length ?? 0;
+            if (count != (other.Cutouts?.Length ?? 0)) return false;
+            for (var i = 0; i < count; i++) {
+                var cutout = Cutouts[i]; var next = other.Cutouts[i];
+                if (cutout.X != next.X || cutout.Y != next.Y || cutout.Width != next.Width || cutout.Height != next.Height) return false;
+            }
+            return true;
+        }
+    }
+
+    public sealed class BrowserCutoutDto
+    {
+        [JsonProperty("x")] public double X { get; set; }
+        [JsonProperty("y")] public double Y { get; set; }
+        [JsonProperty("width")] public double Width { get; set; }
+        [JsonProperty("height")] public double Height { get; set; }
     }
 
     public sealed class BrowserCommandPayload

@@ -126,14 +126,14 @@
       navigationAvailable = !!(navigationAdapter && navigationAdapter.element &&
         (typeof navigationAdapter.available === "function" ? navigationAdapter.available() : navigationAdapter.available !== false));
       if (navigationAdapter && typeof navigationAdapter.attach === "function") navigationAdapter.attach(sidebarBody);
-      setNavigationOpen(navigationAvailable && !(compactLayout && compactAutoCollapsed));
+      setNavigationOpen(navigationAvailable && navigationAdapter.initiallyOpen !== false && !(compactLayout && compactAutoCollapsed));
     }
 
     function setNavigationAvailability(available) {
       var wasAvailable = navigationAvailable;
       navigationAvailable = !!available && !!(navigationAdapter && navigationAdapter.element);
       if (!navigationAvailable) navigationOpen = false;
-      else if (!wasAvailable && compactLayout !== true) navigationOpen = true;
+      else if (!wasAvailable && compactLayout !== true && navigationAdapter.initiallyOpen !== false) navigationOpen = true;
       sidebar.hidden = !navigationOpen;
       root.classList.toggle("has-material-sidebar", navigationOpen);
       syncMaterialNavigationSplitter();

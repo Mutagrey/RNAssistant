@@ -65,9 +65,12 @@ namespace RNAssistant.Office.WebView
         private volatile BrowserPageHandle[] _handles = new BrowserPageHandle[0];
         private void RefreshHandles()
         {
-            var pages = _pages.Values.Where(page => page.Ready).ToArray();
-            _handles = pages.Where(page => page.State.ChatBound).Select(page => page.Handle).ToArray();
-            _captures = pages.Where(page => page.Control.Visible).Select(page => new BrowserMediaCapture { Page = page.Handle,
+            _handles = _pages.Values.Where(page => page.Ready && page.State.ChatBound).Select(page => page.Handle).ToArray();
+            RefreshCaptures();
+        }
+        private void RefreshCaptures()
+        {
+            _captures = _pages.Values.Where(page => page.Ready && page.HasUnobstructedViewport).Select(page => new BrowserMediaCapture { Page = page.Handle,
                 ViewportRevision = page.State.ViewportRevision, ControlRevision = page.State.ControlRevision, Zoom = page.Controller.ZoomFactor }).ToArray();
         }
     }

@@ -12,10 +12,10 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('nod
     RNAssistantVisualAnnotations:{create:options=>{contexts.push(options);return {sync(){},onSelection(){},dispose(){},collapseEditor(){}}}}
   };context.window=context;vm.createContext(context);vm.runInContext(fs.readFileSync('web/js/app-browser-annotations.js','utf8'),context);
   let response=async()=>({resource:{id:'plugin-draft'}});
-  function host(){return context.RNAssistantBrowserAnnotations.create({root:{appendChild(){}},viewport:{},surface:{setAnnotation(){}},layout(){},focus(){},command:async()=>{},isCurrent:()=>true,
+  function host(){return context.RNAssistantBrowserAnnotations.create({root:{appendChild(){}},viewport:{},surface:{setAnnotation(){}},layout(){},focus(){},command:async()=>{},isCurrent:()=>true,isPreview:()=>true,
     send:async(type,payload)=>{calls.push({type,payload});return type==='discardChatResourceDraft'?{}:response();}});}
   const target={source:'workspace',workspaceId:'project',sessionId:'plugin-chat'};drafts.set(key(target),{text:'Existing composer text',attachments:[{id:'file'}]});
-  const page={browserTabId:'tab',sessionId:'native',documentGeneration:4,status:'Ready',ownerScope:{kind:'Workspace',scopeId:'project',chatId:'plugin-chat'},target:{capabilities:{annotations:true}},annotationContext:{sourceId:'release',sourceRevision:1}};
+  const page={browserTabId:'tab',sessionId:'native',documentGeneration:4,status:'Ready',chatBound:true,ownerScope:{kind:'Workspace',scopeId:'project',chatId:'plugin-chat'},target:{state:'Ready',capabilities:{annotations:true}},annotationContext:{sourceId:'release',sourceRevision:1}};
   const first=host();first.update(page);
   await contexts[0].stage({generation:4,pageSession:'native',sourceId:'release',sourceRevision:1,selection:{tag:'button'}},'Change',1,null);
   assert.equal(calls[0].type,'stageBrowserVisualSelection');assert.equal(calls[0].payload.browserTabId,'tab');assert.equal(calls[0].payload.sessionId,'native');assert.equal(calls[0].payload.sourceId,'release');
@@ -31,11 +31,11 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('nod
   assert.equal(drafts.get('office-chat').text,'Office text');
   // Plain HTML and generic projects use precisely the same transport and draft owner.
   response=async()=>({resource:{id:'raw-html-draft'}});
-  second.update({...page,ownerScope:{kind:'Document',scopeId:'doc',chatId:'office-chat'},target:{kind:'HtmlResource',capabilities:{annotations:true}},annotationContext:{sourceId:'raw-page',sourceRevision:1}});
+  second.update({...page,ownerScope:{kind:'Document',scopeId:'doc',chatId:'office-chat'},target:{kind:'HtmlResource',state:'Ready',capabilities:{annotations:true}},annotationContext:{sourceId:'raw-page',sourceRevision:1}});
   await contexts[1].stage({generation:4,pageSession:'native',sourceId:'raw-page',sourceRevision:1,selection:{tag:'button'}},'Raw HTML',3,null);
   assert.equal(calls.at(-1).type,'stageBrowserVisualSelection');assert.equal(calls.at(-1).payload.sourceId,'raw-page');
   response=async()=>({resource:{id:'project-draft'}});
-  first.update({...page,documentGeneration:6,target:{kind:'WorkspaceHtmlProject',capabilities:{annotations:true}},annotationContext:{sourceId:'project-page',sourceRevision:1}});
+  first.update({...page,documentGeneration:6,target:{kind:'WorkspaceHtmlProject',state:'Ready',capabilities:{annotations:true}},annotationContext:{sourceId:'project-page',sourceRevision:1}});
   await contexts[0].stage({generation:6,pageSession:'native',sourceId:'project-page',sourceRevision:1,selection:{tag:'button'}},'Project',4,null);
   assert.equal(calls.at(-1).type,'stageBrowserVisualSelection');assert.equal(calls.at(-1).payload.sourceId,'project-page');
   assert.equal(drafts.get(key(target)).attachments.at(-1).id,'project-draft');

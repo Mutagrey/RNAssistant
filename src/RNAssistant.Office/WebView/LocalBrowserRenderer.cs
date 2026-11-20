@@ -37,7 +37,7 @@ namespace RNAssistant.Office.WebView
             try { _physical = new LocalBrowserPhysicalInput((x, y, keyboard) => {
                 foreach (var page in _pages.Values) if (page.Ready && page.Control.Visible &&
                     LocalBrowserPhysicalInput.GetAncestor(page.Control.Handle, 2) == LocalBrowserPhysicalInput.GetForegroundWindow() &&
-                    (keyboard ? page.NativeFocused : page.Control.RectangleToScreen(page.Control.ClientRectangle).Contains(x, y))) { _captures = new BrowserMediaCapture[0]; page.PhysicalInput(); }
+                    (keyboard ? page.NativeFocused : HitPage(page.Control, x, y))) { _captures = new BrowserMediaCapture[0]; page.PhysicalInput(); }
             }); } catch (InvalidOperationException) { /* Manual page execution remains available; agent input requires physical attribution. */ }
             _parent = parent; _shell = shell; _environment = environment; _plugins = plugins; _assets = assets; _content = content;
             _ui = SynchronizationContext.Current ?? throw new InvalidOperationException("Browser UI dispatcher is required.");
@@ -63,11 +63,11 @@ namespace RNAssistant.Office.WebView
                         throw new InvalidOperationException("Browser changed before native delivery.");
                     state = page.State;
                 }
-                if (page != null && page.State.SessionId == state.SessionId &&
-                    (command.Action == BrowserCommandKind.Layout || command.Action == BrowserCommandKind.Focus || command.Action == BrowserCommandKind.Stop ||
-                     command.Action == BrowserCommandKind.VisualControl || command.Action == BrowserCommandKind.ResumeAgent)) {
-                    page.State.ViewportRevision = Math.Max(page.State.ViewportRevision, state.ViewportRevision);
-                    state = page.State;
+                if (page != null && page.State.SessionId == state.SessionId) {
+                    state.ViewportRevision = page.State.ViewportRevision = Math.Max(page.State.ViewportRevision, state.ViewportRevision);
+                    state.LayoutRevision = page.State.LayoutRevision = Math.Max(page.State.LayoutRevision, state.LayoutRevision);
+                    if (command.Action == BrowserCommandKind.Layout || command.Action == BrowserCommandKind.Focus || command.Action == BrowserCommandKind.Stop ||
+                        command.Action == BrowserCommandKind.VisualControl || command.Action == BrowserCommandKind.ResumeAgent) state = page.State;
                 }
                 if (command.NativeHistoryEntryId.HasValue || command.NativeLocator != null) {
                     if (page == null || page.State.SessionId != state.SessionId) throw new InvalidOperationException("Native history is unavailable.");
@@ -90,7 +90,7 @@ namespace RNAssistant.Office.WebView
                     LocalBrowserPage.ManualOwner manual;
                     if (!_manual.TryGetValue(state.SessionId, out manual)) _manual.Add(state.SessionId, manual = new LocalBrowserPage.ManualOwner());
                     page.Manual = manual;
-                    _pages.Add(state.BrowserTabId, page); page.Changed += Publish;
+                    _pages.Add(state.BrowserTabId, page); page.Changed += Publish; page.ViewportChanged += RefreshCaptures;
                     page.FindRequested += () => { if (!_closed && _shell.Visible) _shell.Focus(); };
                     var source = page;
                     page.NewTabRequested += locator => OpenTab?.Invoke(new BrowserDockOpenRequest {
@@ -109,7 +109,7 @@ namespace RNAssistant.Office.WebView
                     if (command.Action == BrowserCommandKind.ResumeAgent) page.ResumeAgent(command.ControlRevision);
                     if (command.Action == BrowserCommandKind.VisualControl) await page.VisualControlAsync(command.Visual);
                     if (command.Bounds != null) Place(page, command.Bounds);
-                    if (command.Action == BrowserCommandKind.Attach) command.NativeAttachmentVisible = page.Control.Visible;
+                    if (command.Action == BrowserCommandKind.Attach) command.NativeAttachmentVisible = page.HasUnobstructedViewport;
                     if (page.HasLoaded) state.Status = BrowserPageStatus.Ready; state.Reason = BrowserRefusalCode.None; state.Message = _physical == null ? "Страница работает. Ввод агента недоступен: не установлен контроль физического ввода." : null;
                     state.Target.Capabilities.Preview = true; state.Target.Capabilities.Interact = _physical != null && page.HasLoaded;
                     state.Target.Capabilities.Media = page.HasLoaded; state.Target.Capabilities.PreviewReason = BrowserRefusalCode.None;
@@ -124,23 +124,49 @@ namespace RNAssistant.Office.WebView
         }
         private void Place(LocalBrowserPage page, BrowserBoundsDto bounds)
         {
-            var previous = page.Bounds;
-            if (previous != null && previous.Visible == bounds.Visible && previous.X == bounds.X && previous.Y == bounds.Y && previous.Width == bounds.Width && previous.Height == bounds.Height &&
-                previous.ViewportWidth == bounds.ViewportWidth && previous.ViewportHeight == bounds.ViewportHeight && page.Control.Visible == bounds.Visible) return;
+            if (page.Bounds?.Matches(bounds) == true && page.Control.Visible == bounds.Visible) return;
             page.Bounds = bounds; page.State.ViewportRevision++;
-            page.Control.Visible = false; page.HideAction();
-            if (!bounds.Visible || !_parent.Visible || !_shell.Visible || bounds.ViewportWidth <= 0 || bounds.ViewportHeight <= 0) return;
+            page.HideAction();
+            if (!bounds.Visible || !_parent.Visible || !_shell.Visible || bounds.ViewportWidth <= 0 || bounds.ViewportHeight <= 0) {
+                page.Control.Visible = false; return;
+            }
             var scale = _shell.ClientSize.Width / bounds.ViewportWidth;
             var vertical = _shell.ClientSize.Height / bounds.ViewportHeight;
-            if (scale <= 0 || Math.Abs(scale - vertical) > 0.05) return;
+            if (scale <= 0 || Math.Abs(scale - vertical) > 0.05) { page.Control.Visible = false; return; }
             var rectangle = Rectangle.FromLTRB(_shell.Left + (int)Math.Ceiling(bounds.X * scale), _shell.Top + (int)Math.Ceiling(bounds.Y * scale),
                 _shell.Left + (int)Math.Floor((bounds.X + bounds.Width) * scale), _shell.Top + (int)Math.Floor((bounds.Y + bounds.Height) * scale));
-            if (rectangle.Width < 1 || rectangle.Height < 1 || !_shell.Bounds.Contains(rectangle)) return;
-            page.Control.Bounds = rectangle; page.Controller.Bounds = new Rectangle(Point.Empty, rectangle.Size);
-            page.Controller.ZoomFactor = _shell.ZoomFactor; page.Control.BringToFront(); page.Control.Visible = true;
+            if (rectangle.Width < 1 || rectangle.Height < 1 || !_shell.Bounds.Contains(rectangle)) { page.Control.Visible = false; return; }
+            if (page.Control.Bounds != rectangle) page.Control.Bounds = rectangle;
+            var viewport = new Rectangle(Point.Empty, rectangle.Size);
+            if (page.Controller.Bounds != viewport) page.Controller.Bounds = viewport;
+            if (page.Controller.ZoomFactor != _shell.ZoomFactor) page.Controller.ZoomFactor = _shell.ZoomFactor;
+            page.Control.Region = VisibleRegion(viewport, rectangle.X - _shell.Left, rectangle.Y - _shell.Top, scale, bounds.Cutouts);
+            if (!page.Control.Visible) { page.Control.BringToFront(); page.Control.Visible = true; }
+        }
+        private static Region VisibleRegion(Rectangle viewport, int offsetX, int offsetY, double scale, BrowserCutoutDto[] cutouts)
+        {
+            if (cutouts == null || cutouts.Length == 0) return null;
+            var region = new Region(viewport);
+            foreach (var cutout in cutouts) {
+                // Round exclusions outwards so no native pixels cover the Shell control.
+                var excluded = Rectangle.FromLTRB((int)Math.Floor(cutout.X * scale) - offsetX, (int)Math.Floor(cutout.Y * scale) - offsetY,
+                    (int)Math.Ceiling((cutout.X + cutout.Width) * scale) - offsetX, (int)Math.Ceiling((cutout.Y + cutout.Height) * scale) - offsetY);
+                region.Exclude(excluded);
+            }
+            return region;
+        }
+        private static bool HitPage(Control control, int x, int y)
+        {
+            var point = control.PointToClient(new Point(x, y));
+            return control.ClientRectangle.Contains(point) && (control.Region?.IsVisible(point) ?? true);
         }
         private void InvalidatePlacement(object sender, EventArgs args)
-        { foreach (var page in _pages.Values) { page.Control.Visible = false; page.State.ViewportRevision++; Publish(page.State); } }
+        {
+            foreach (var page in _pages.Values) {
+                page.Control.Visible = false; page.State.ViewportRevision++; page.State.LayoutRevision++;
+                Publish(page.State);
+            }
+        }
         internal void ResourceChanged(RNAssistant.Office.Contracts.ResourceChangedMessage change)
         { _ui.Post(ignored => { if (!_closed) foreach (var page in _pages.Values) page.ResourceChanged(change); }, null); }
         private void Publish(BrowserPageStateDto state) { RefreshHandles(); if (!_closed) Changed?.Invoke(state); }

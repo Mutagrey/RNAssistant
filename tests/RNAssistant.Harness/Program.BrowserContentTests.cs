@@ -39,17 +39,35 @@ namespace RNAssistant.Harness
         private static void BrowserNativeDeliveryLifecycle()
         {
             var renderer = new BrowserRendererFixture(); var owner = new BrowserOwnerScope { Kind = BrowserOwnerKind.Workspace, ScopeId = "project", ChatId = "chat" };
-            using (var runtime = new LocalBrowserPageRuntime(request => new BrowserResolveResult { Locator = request.Locator,
-                Target = new BrowserTargetDescriptor { Kind = BrowserTargetKind.WorkspaceHtmlProject, State = BrowserTargetState.Ready,
-                    OwnerScope = request.OwnerScope, DisplayLocator = request.Locator, Capabilities = new BrowserTargetCapabilities { Source = true } } }, null, renderer: renderer)) {
+            var caller = Thread.CurrentThread.ManagedThreadId;
+            using (var runtime = new LocalBrowserPageRuntime(request => {
+                AssertTrue(Thread.CurrentThread.ManagedThreadId != caller, "source resolution leaves the UI caller");
+                return new BrowserResolveResult { Locator = request.Locator,
+                    Target = new BrowserTargetDescriptor { Kind = BrowserTargetKind.WorkspaceHtmlProject, State = BrowserTargetState.Ready,
+                        OwnerScope = request.OwnerScope, DisplayLocator = request.Locator, Capabilities = new BrowserTargetCapabilities { Source = true } } };
+            }, null, renderer: renderer)) {
                 var opened = runtime.ExecuteAsync(new BrowserCommandPayload { Action = BrowserCommandKind.Open, BrowserTabId = "tab", OperationId = "open", OwnerScope = owner, Locator = "/projects/project/source/index.html" }, CancellationToken.None).GetAwaiter().GetResult();
                 AssertEqual(BrowserPageStatus.Starting, opened.Status, "metadata does not claim native readiness");
                 var attached = runtime.ExecuteAsync(new BrowserCommandPayload { Action = BrowserCommandKind.Attach, BrowserTabId = "tab", SessionId = opened.SessionId, OperationId = "open",
                     Bounds = new BrowserBoundsDto { Visible = true, X = 0, Y = 20, Width = 100, Height = 100, ViewportWidth = 300, ViewportHeight = 300 } }, CancellationToken.None);
+                var clipped = new BrowserBoundsDto { Visible = true, Y = 20, Width = 100, Height = 100, ViewportWidth = 300, ViewportHeight = 300,
+                    Cutouts = new[] { new BrowserCutoutDto { X = double.NaN, Y = 20, Width = 70, Height = 35 } } };
+                AssertTrue(!LocalBrowserPageRuntime.ValidBounds(clipped), "nonfinite popup geometry is refused");
+                clipped.Cutouts[0].X = 40;
+                AssertTrue(!LocalBrowserPageRuntime.ValidBounds(clipped), "cutouts must be inside the visible pane");
+                clipped.Cutouts[0].X = 15;
+                AssertTrue(LocalBrowserPageRuntime.ValidBounds(clipped) && !clipped.Unobstructed, "valid cutout keeps the page visible without certifying an unobstructed viewport");
+                var layout = new BrowserCommandPayload { Action = BrowserCommandKind.Layout, BrowserTabId = "tab", SessionId = opened.SessionId, Bounds = clipped };
+                var firstLayout = runtime.ExecuteAsync(layout, CancellationToken.None);
+                var sameLayout = runtime.ExecuteAsync(layout, CancellationToken.None);
                 var closed = runtime.ExecuteAsync(new BrowserCommandPayload { Action = BrowserCommandKind.Close, BrowserTabId = "tab", SessionId = opened.SessionId }, CancellationToken.None);
                 AssertTrue(!closed.IsCompleted, "commands serialize across native initialization");
                 renderer.Ready.TrySetResult(true);
-                AssertEqual(BrowserPageStatus.Ready, attached.GetAwaiter().GetResult().Status, "attached native renderer promotes readiness");
+                var ready = attached.GetAwaiter().GetResult();
+                AssertEqual(BrowserPageStatus.Ready, ready.Status, "attached native renderer promotes readiness");
+                var cut = firstLayout.GetAwaiter().GetResult();
+                AssertEqual(ready.ViewportRevision + 1, cut.ViewportRevision, "a popup invalidates current placement evidence");
+                AssertEqual(cut.ViewportRevision, sameLayout.GetAwaiter().GetResult().ViewportRevision, "identical cutouts do not invalidate again");
                 AssertEqual(BrowserPageStatus.Closed, closed.GetAwaiter().GetResult().Status, "close follows native attachment without an orphan");
                 renderer.Notify(opened);
                 RuntimeThrows<InvalidOperationException>(() => runtime.CaptureAnnotationAsync(new BrowserAnnotationRequest {
@@ -200,6 +218,10 @@ namespace RNAssistant.Harness
         private static void BrowserExactLocalContent()
         {
             var document = new BrowserTargetDescriptor { DisplayLocator = "/resources/document~1" };
+            var fileList = BrowserSourceReader.Read(document, new BrowserSourceRequest { FilesOnly = true, RequestGeneration = 4 },
+                new[] { "pages/start.html", "other.html" }, path => throw new InvalidOperationException("Listing opened the body."));
+            AssertTrue(fileList.Files.SequenceEqual(new[] { "pages/start.html", "other.html" }) && fileList.Text == null && fileList.RequestGeneration == 4,
+                "file navigation reads exact member metadata without the selected source body");
             using (var content = new BrowserContentSession(document, new[] { "pages/start.html", "other.html" },
                 "pages/start.html", (path, token) => Stream.Null, () => { })) {
                 var displayed = new BrowserPageStateDto { Target = new BrowserTargetDescriptor() };

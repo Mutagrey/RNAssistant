@@ -39,6 +39,7 @@ namespace RNAssistant.Office.WebView
         internal BrowserContentSession Content { get; private set; }
         internal BrowserPageStateDto State { get; set; }
         internal BrowserBoundsDto Bounds { get; set; }
+        internal bool HasUnobstructedViewport => Control.Visible && Control.Region == null;
         internal bool Ready => HasLoaded && !_closed && Controller != null && State.Status == BrowserPageStatus.Ready && State.Attached;
         internal BrowserPageHandle Handle => new BrowserPageHandle(State.OwnerScope.ChatId, State.SessionId, State.DocumentGeneration,
             State.Title + " · " + State.Target.RelativePath, true,
